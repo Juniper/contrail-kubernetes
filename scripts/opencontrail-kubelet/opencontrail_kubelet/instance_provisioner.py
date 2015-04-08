@@ -1,6 +1,8 @@
 """
 """
 
+import logging
+
 from vnc_api.vnc_api import *
 
 
@@ -37,17 +39,18 @@ class Provisioner(object):
     def virtual_machine_delete(self, vm_instance):
         self._client.virtual_machine_delete(id=vm_instance.uuid)
 
-    def vmi_locate(self, vm_instance, network, name, advertise_default=True):
-        fq_name = vm_instance.fq_name[:]
-        fq_name.append(name)
+    def vmi_locate(self, vm_instance, project, network, name,
+                   advertise_default=True):
+        ifname = '%s.%s' % (vm_instance.name, name)
+        fq_name = project.get_fq_name() + [ifname]
         create = False
         try:
             vmi = self._client.virtual_machine_interface_read(fq_name=fq_name)
         except NoIdError:
-            vmi = VirtualMachineInterface(parent_type='virtual-machine',
-                                          fq_name=fq_name)
+            vmi = VirtualMachineInterface(name=ifname, parent_obj=project)
             create = True
 
+        vmi.set_virtual_machine(vm_instance)
         vmi.set_virtual_network(network)
         if create:
             self._client.virtual_machine_interface_create(vmi)
@@ -59,14 +62,14 @@ class Provisioner(object):
         if ips and len(ips):
             uuid = ips[0]['uuid']
         else:
-            ip = InstanceIp(vm_instance.name + '.' + name)
+            ip = InstanceIp(ifname)
             ip.set_virtual_machine_interface(vmi)
             ip.set_virtual_network(network)
             uuid = self._client.instance_ip_create(ip)
 
         ip = self._client.instance_ip_read(id=uuid)
 
-        # print "IP address: %s" % ip.get_instance_ip_address()
+        logging.debug("IP address: %s" % ip.get_instance_ip_address())
         return vmi
 
     def vmi_delete(self, uuid):
@@ -76,7 +79,7 @@ class Provisioner(object):
             return
 
         ips = vmi.get_instance_ip_back_refs()
-        for ref in ips:
+        for ref in ips or []:
             self._client.instance_ip_delete(id=ref['uuid'])
 
         self._client.virtual_machine_interface_delete(id=vmi.uuid)
