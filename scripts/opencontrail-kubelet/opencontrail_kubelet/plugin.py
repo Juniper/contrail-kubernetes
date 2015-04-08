@@ -137,18 +137,6 @@ class ContrailClient(object):
 
         return network
 
-    def GetIpAddress(self, network, vmi):
-        iip_refs = vmi.get_instance_ip_back_refs()
-        if not iip_refs:
-            return None
-        obj = self._client.instance_ip_read(id=iip_refs[0]['uuid'])
-
-        ipam_refs = network.get_network_ipam_refs()
-        if not ipam_refs:
-            return None
-        subnet = ipam_refs[0]['attr'].get_ipam_subnets()
-        return (obj.instance_ip_address, subnet[0].subnet.get_ip_prefix_len())
-
 # end class ContrailClient
 
 
@@ -192,10 +180,10 @@ def setup(pod_namespace, pod_name, docker_id):
     manager = LxcManager()
     provisioner = Provisioner(api_server=client._server)
     vm = provisioner.virtual_machine_locate(short_id)
-    vmi = provisioner.vmi_locate(vm, network, 'veth0')
+    vmi = provisioner.vmi_locate(vm, project, network, 'veth0')
     ifname = manager.create_interface(short_id, 'veth0', vmi)
     interface_register(vm, vmi, ifname)
-    (ipaddr, plen) = client.GetIpAddress(network, vmi)
+    (ipaddr, plen) = provisioner.get_interface_ip_prefix(vmi)
     subprocess.check_output(
         'ip netns exec %s ip addr add %s/%d dev veth0' %
         (short_id, ipaddr, plen),
@@ -203,6 +191,30 @@ def setup(pod_namespace, pod_name, docker_id):
     subprocess.check_output(
         'ip netns exec %s ip link set veth0 up' % short_id,
         shell=True)
+
+
+def teardown(pod_namespace, pod_name, docker_id):
+    client = ContrailClient()
+    provisioner = Provisioner(api_server=client._server)
+    manager = LxcManager()
+    short_id = docker_id[0:11]
+
+    vm = provisioner.virtual_machine_lookup(short_id)
+    if vm is not None:
+        vmi_list = vm.get_virtual_machine_interface_back_refs()
+        for ref in vmi_list or []:
+            uuid = ref['uuid']
+            interface_unregister(uuid)
+
+        manager.clear_interfaces(short_id)
+
+        for ref in vmi_list:
+            provisioner.vmi_delete(ref['uuid'])
+
+        provisioner.virtual_machine_delete(vm)
+
+    subprocess.check_output(
+        'ip netns delete %s' % short_id, shell=True)
 
 
 def main():
@@ -226,7 +238,7 @@ def main():
     elif args.action == 'setup':
         setup(args.pod_namespace, args.pod_name, args.docker_id)
     elif args.action == 'teardown':
-        pass
+        teardown(args.pod_namespace, args.pod_name, args.docker_id)
 
 if __name__ == '__main__':
     logging.basicConfig(filename='/var/log/contrail/kubelet-driver.log',
