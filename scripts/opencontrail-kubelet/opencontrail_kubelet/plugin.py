@@ -218,6 +218,9 @@ def teardown(pod_namespace, pod_name, docker_id):
 
 
 def main():
+    logging.basicConfig(filename='/var/log/contrail/kubelet-driver.log',
+                        level=logging.DEBUG)
+    logging.debug(' '.join(sys.argv))
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(title="action", dest='action')
 
@@ -241,7 +244,4 @@ def main():
         teardown(args.pod_namespace, args.pod_name, args.docker_id)
 
 if __name__ == '__main__':
-    logging.basicConfig(filename='/var/log/contrail/kubelet-driver.log',
-                        level=logging.DEBUG)
-    logging.debug(' '.join(sys.argv))
     main()
