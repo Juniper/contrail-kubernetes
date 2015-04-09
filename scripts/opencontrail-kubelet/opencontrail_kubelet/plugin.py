@@ -22,7 +22,7 @@ from shell import Shell
 class ContrailClient(object):
     def __init__(self):
         self._server = None
-        self._net_mode = "none"
+        self._net_mode = "bridge"
         self._readconfig()
         self._client = opencontrail.VncApi(api_server_host=self._server)
 
@@ -186,7 +186,7 @@ def setup(pod_namespace, pod_name, docker_id):
 
     vmi = provisioner.vmi_locate(vm, project, network, instance_ifname)
     if client._net_mode == 'none':
-        ifname = manager.create_interface(short_id, pid, instance_ifname, vmi)
+        ifname = manager.create_interface(short_id, instance_ifname, vmi)
     else:
         ifname = manager.move_interface(short_id, pid, instance_ifname, vmi)
 

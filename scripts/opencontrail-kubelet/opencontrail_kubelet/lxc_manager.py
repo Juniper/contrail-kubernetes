@@ -49,9 +49,7 @@ class LxcManager(object):
             member_index = bridge_members_ifindex.index('%s\n' % \
                 (int(ns_ifindex) - 1))
         except:
-            logging.info('did not find member %s' \
-                         % bridge_members[member_index])
-            logging.error('Cannot find peer interface name')
+            logging.error('Cannot find find member for %s' % nsname)
             raise
         logging.info('Peer interface found: %s' % bridge_members[member_index])
         return bridge_members[member_index]
