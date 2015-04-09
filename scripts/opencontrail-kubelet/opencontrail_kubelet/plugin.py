@@ -194,7 +194,8 @@ def setup(pod_namespace, pod_name, docker_id):
     (ipaddr, plen) = provisioner.get_interface_ip_prefix(vmi)
     Shell.run('ip netns exec %s ip addr add %s/%d dev %s' % \
               (short_id, ipaddr, plen, instance_ifname))
-    Shell.run('ip netns exec %s ip link set %s up' % short_id, instance_ifname)
+    Shell.run('ip netns exec %s ip link set %s up' %
+              (short_id, instance_ifname))
 
 
 def teardown(pod_namespace, pod_name, docker_id):
