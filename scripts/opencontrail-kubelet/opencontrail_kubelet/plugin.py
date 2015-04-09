@@ -19,6 +19,12 @@ from lxc_manager import LxcManager
 from vrouter_control import interface_register, interface_unregister
 
 
+def shell_command(str):
+    cmd = subprocess.check_output(str, shell=True)
+    logging.debug('Ran shell command: %s' % str)
+    logging.debug('output: %s' % cmd.rstrip())
+    return cmd
+
 class ContrailClient(object):
     def __init__(self):
         self._server = None
@@ -35,8 +41,7 @@ class ContrailClient(object):
         self._server = config['DEFAULTS']['api_server']
 
     def local_address(self):
-        cmd = ['ip', 'addr', 'show', 'vhost0']
-        output = subprocess.check_output(cmd)
+        output = shell_command('ip addr show vhost0')
         expr = re.compile(r'inet ((([0-9]{1,3})\.){3}([0-9]{1,3}))/(\d+)')
         m = expr.search(output)
         if not m:
@@ -147,8 +152,8 @@ def plugin_init():
 
 
 def docker_get_pid(docker_id):
-    pid_str = subprocess.check_output(
-        'docker inspect -f \'{{.State.Pid}}\' %s' % docker_id, shell=True)
+    pid_str = shell_command(
+        'docker inspect -f \'{{.State.Pid}}\' %s' % docker_id)
     return int(pid_str)
 
 
@@ -173,9 +178,7 @@ def setup(pod_namespace, pod_name, docker_id):
     if not os.path.exists('/var/run/netns'):
         os.mkdir('/var/run/netns')
 
-    subprocess.check_output(
-        'ln -sf /proc/%d/ns/net /var/run/netns/%s' %
-        (pid, short_id), shell=True)
+    shell_command('ln -sf /proc/%d/ns/net /var/run/netns/%s' % (pid, short_id))
 
     manager = LxcManager()
     provisioner = Provisioner(api_server=client._server)
@@ -185,13 +188,10 @@ def setup(pod_namespace, pod_name, docker_id):
 
     interface_register(vm, vmi, ifname)
     (ipaddr, plen) = provisioner.get_interface_ip_prefix(vmi)
-    subprocess.check_output(
+    shell_command(
         'ip netns exec %s ip addr add %s/%d dev eth0' %
-        (short_id, ipaddr, plen),
-        shell=True)
-    subprocess.check_output(
-        'ip netns exec %s ip link set eth0 up' % short_id,
-        shell=True)
+        (short_id, ipaddr, plen))
+    shell_command('ip netns exec %s ip link set eth0 up' % short_id)
 
 
 def teardown(pod_namespace, pod_name, docker_id):
@@ -214,8 +214,7 @@ def teardown(pod_namespace, pod_name, docker_id):
 
         provisioner.virtual_machine_delete(vm)
 
-    subprocess.check_output(
-        'ip netns delete %s' % short_id, shell=True)
+    shell_command('ip netns delete %s' % short_id)
 
 
 def main():
