@@ -5,8 +5,8 @@ import sys
 
 
 def shell_command(str):
-    cmd = subprocess.check_output(str, shell=True)
     logging.debug('Ran shell command: %s' % str)
+    cmd = subprocess.check_output(str, shell=True)
     logging.debug('output: %s' % cmd.rstrip())
     return cmd
 
