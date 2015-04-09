@@ -58,7 +58,7 @@ class LxcManager(object):
     # Remove the interface out of the docker bridge
     def move_interface(self, nsname, pid, ifname_instance, vmi):
         ifname_master = self.interface_find_peer_name(ifname_instance, pid)
-        shell_command('brctl delif docker0 %s' % ifname_master)
+        # shell_command('brctl delif docker0 %s' % ifname_master)
         if vmi:
             mac = vmi.virtual_machine_interface_mac_addresses.mac_address[0]
             shell_command('ip netns exec %s hw ether %s' % (nsname, mac))
