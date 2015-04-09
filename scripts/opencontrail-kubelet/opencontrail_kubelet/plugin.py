@@ -17,17 +17,12 @@ import vnc_api.vnc_api as opencontrail
 from instance_provisioner import Provisioner
 from lxc_manager import LxcManager
 from vrouter_control import interface_register, interface_unregister
-
-
-def shell_command(str):
-    logging.debug('Ran shell command: %s' % str)
-    cmd = subprocess.check_output(str, shell=True)
-    logging.debug('output: %s' % cmd.rstrip())
-    return cmd
+from shell import Shell
 
 class ContrailClient(object):
     def __init__(self):
         self._server = None
+        self._net_mode = "none"
         self._readconfig()
         self._client = opencontrail.VncApi(api_server_host=self._server)
 
@@ -39,9 +34,10 @@ class ContrailClient(object):
         filename = os.path.join(os.path.dirname(path), 'config')
         config = iniparse.INIConfig(open(filename))
         self._server = config['DEFAULTS']['api_server']
+        self._net_mode = config['DEFAULTS']['net_mode']
 
     def local_address(self):
-        output = shell_command('ip addr show vhost0')
+        output = Shell.run('ip addr show vhost0')
         expr = re.compile(r'inet ((([0-9]{1,3})\.){3}([0-9]{1,3}))/(\d+)')
         m = expr.search(output)
         if not m:
@@ -152,8 +148,7 @@ def plugin_init():
 
 
 def docker_get_pid(docker_id):
-    pid_str = shell_command(
-        'docker inspect -f \'{{.State.Pid}}\' %s' % docker_id)
+    pid_str = Shell.run('docker inspect -f \'{{.State.Pid}}\' %s' % docker_id)
     return int(pid_str)
 
 
@@ -178,20 +173,28 @@ def setup(pod_namespace, pod_name, docker_id):
     if not os.path.exists('/var/run/netns'):
         os.mkdir('/var/run/netns')
 
-    shell_command('ln -sf /proc/%d/ns/net /var/run/netns/%s' % (pid, short_id))
+    Shell.run('ln -sf /proc/%d/ns/net /var/run/netns/%s' % (pid, short_id))
 
     manager = LxcManager()
     provisioner = Provisioner(api_server=client._server)
     vm = provisioner.virtual_machine_locate(short_id)
-    vmi = provisioner.vmi_locate(vm, project, network, 'eth0')
-    ifname = manager.move_interface(short_id, pid, 'eth0', vmi)
+
+    if client._net_mode == 'none':
+        instance_ifname = 'veth0'
+    else:
+        instance_ifname = 'eth0'
+
+    vmi = provisioner.vmi_locate(vm, project, network, instance_ifname)
+    if client._net_mode == 'none':
+        ifname = manager.create_interface(short_id, pid, instance_ifname, vmi)
+    else:
+        ifname = manager.move_interface(short_id, pid, instance_ifname, vmi)
 
     interface_register(vm, vmi, ifname)
     (ipaddr, plen) = provisioner.get_interface_ip_prefix(vmi)
-    shell_command(
-        'ip netns exec %s ip addr add %s/%d dev eth0' %
-        (short_id, ipaddr, plen))
-    shell_command('ip netns exec %s ip link set eth0 up' % short_id)
+    Shell.run('ip netns exec %s ip addr add %s/%d dev %s' % \
+              (short_id, ipaddr, plen, instance_ifname))
+    Shell.run('ip netns exec %s ip link set %s up' % short_id, instance_ifname)
 
 
 def teardown(pod_namespace, pod_name, docker_id):
@@ -214,7 +217,7 @@ def teardown(pod_namespace, pod_name, docker_id):
 
         provisioner.virtual_machine_delete(vm)
 
-    shell_command('ip netns delete %s' % short_id)
+    Shell.run('ip netns delete %s' % short_id)
 
 
 def main():

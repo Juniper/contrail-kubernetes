@@ -2,21 +2,14 @@ import logging
 import re
 import subprocess
 import sys
-
-
-def shell_command(str):
-    logging.debug('Ran shell command: %s' % str)
-    cmd = subprocess.check_output(str, shell=True)
-    logging.debug('output: %s' % cmd.rstrip())
-    return cmd
-
+from shell import Shell
 
 class LxcManager(object):
     def __init__(self):
         pass
 
     def _interface_generate_unique_name(self):
-        output = shell_command('ip link list')
+        output = Shell.run('ip link list')
         ids = {}
 
         for line in output.split('\n'):
@@ -30,53 +23,65 @@ class LxcManager(object):
             return 'instance%d' % i
         return None
 
-    # Find the correct interface for this nsname
+    # Find the peer interface (in the host) for a given nsname
+    # The two ends of the interface link peerings have adjacent ifindex
     def interface_find_peer_name(self, ifname_instance, nsname):
-        ns_ifindex = shell_command("ip netns exec %s ethtool -S %s | grep peer_ifindex | awk '{print $2}'" % (nsname, ifname_instance))
+        # Get ifindex of ifname_instance
+        ns_ifindex = Shell.run('ip netns exec %s ethtool -S %s | '
+                               'grep peer_ifindex | awk "{print $2}"' \
+                               % (nsname, ifname_instance))
 
-        # Now look through all interfaces in the bridge and find the one whose
-        # ifindex is 1 less than ns_ifindex
-        bridge_members = [ i[i.find("veth"):] for i in \
-                  shell_command("brctl show docker0 | grep veth").split("\n") \
+        # Get the list of docker0 bridge member interface names.
+        bridge_members = [ member_if[member_if.find("veth"):] for member_if in \
+            Shell.run("brctl show docker0 | grep veth").split("\n") \
         ]
 
         # Remove the trailing empty string, which comes as a result of split.
         bridge_members.pop()
-        bridge_members_ifindex = [ shell_command( \
+
+        # Get all member interfaces' ifindex
+        bridge_members_ifindex = [ Shell.run( \
             "ethtool -S %s | grep peer_ifindex | awk '{print $2}'" % i) \
                 for i in bridge_members ]
+
+        # Peer interface ifindex is one less than that of container intf's index
         try:
             member_index = bridge_members_ifindex.index('%s\n' % \
                 (int(ns_ifindex) - 1))
         except:
-            logging.info('did not find member %s' % bridge_members[member_index])
-            logging.error("Cannot find matching veth interface among brige members")
+            logging.info('did not find member %s' \
+                         % bridge_members[member_index])
+            logging.error('Cannot find peer interface name')
             raise
-        logging.info('found member %s' % bridge_members[member_index])
+        logging.info('Peer interface found: %s' % bridge_members[member_index])
         return bridge_members[member_index]
 
-    # Remove the interface out of the docker bridge
+    # Move the interface out of the docker0 bridge and attach it to contrail
+    # Return the moved interface name
     def move_interface(self, nsname, pid, ifname_instance, vmi):
         ifname_master = self.interface_find_peer_name(ifname_instance, nsname)
-        shell_command('brctl delif docker0 %s' % ifname_master)
+
+        # Remove the interface from the bridge
+        Shell.run('brctl delif docker0 %s' % ifname_master)
         if vmi:
+            # Set interface mac and remove any IP address already assigned
             mac = vmi.virtual_machine_interface_mac_addresses.mac_address[0]
-            shell_command('ip netns exec %s ifconfig eth0 hw ether %s' \
-                          % (nsname, mac))
-            shell_command('ip netns exec %s ip addr flush dev %s'
-                          % (nsname, ifname_instance))
+            Shell.run('ip netns exec %s ifconfig eth0 hw ether %s' %
+                      (nsname, mac))
+            Shell.run('ip netns exec %s ip addr flush dev %s' %
+                      (nsname, ifname_instance))
         return ifname_master
 
     def create_interface(self, nsname, ifname_instance, vmi=None):
         ifname_master = self._interface_generate_unique_name()
-        shell_command('ip link add %s type veth peer name %s' %
-                      (ifname_instance, ifname_master))
+        Shell.run('ip link add %s type veth peer name %s' %
+                  (ifname_instance, ifname_master))
         if vmi:
             mac = vmi.virtual_machine_interface_mac_addresses.mac_address[0]
-            shell_command('ifconfig %s hw ether %s' % (ifname_instance,mac))
+            Shell.run('ifconfig %s hw ether %s' % (ifname_instance, mac))
 
-        shell_command('ip link set %s netns %s' % (ifname_instance, nsname))
-        shell_command('ip link set %s up' % ifname_master)
+        Shell.run('ip link set %s netns %s' % (ifname_instance, nsname))
+        Shell.run('ip link set %s up' % ifname_master)
         return ifname_master
 
     def _interface_list_contains(self, output, iface):
@@ -87,11 +92,11 @@ class LxcManager(object):
         return False
 
     def _get_master_ifname(self, daemon, ifname_instance):
-        output = shell_command('ip netns exec ns-%s ethtool -S %s' %
-                               (daemon, ifname_instance))
+        output = Shell.run('ip netns exec ns-%s ethtool -S %s' %
+                           (daemon, ifname_instance))
         m = re.search(r'peer_ifindex: (\d+)', output)
         ifindex = m.group(1)
-        output = shell_command('ip link list')
+        output = Shell.run('ip link list')
         expr = '^' + ifindex + ': (\w+): '
         regex = re.compile(expr, re.MULTILINE)
         m = regex.search(output)
@@ -102,15 +107,15 @@ class LxcManager(object):
         1. Make sure that the interface exists in the name space.
         2. Update the mac address.
         """
-        output = shell_command('ip netns exec ns-%s ip link list' % daemon)
+        output = Shell.run('ip netns exec ns-%s ip link list' % daemon)
         if not self._interface_list_contains(output, ifname_instance):
             ifname_master = self.create_interface('ns-%s' % daemon, ifname_instance)
         else:
             ifname_master = self._get_master_ifname(daemon, ifname_instance)
 
         mac = vmi.virtual_machine_interface_mac_addresses.mac_address[0]
-        shell_command('ip netns exec ns-%s ifconfig %s hw ether %s' %
-                      (daemon, ifname_instance, mac))
+        Shell.run('ip netns exec ns-%s ifconfig %s hw ether %s' %
+                  (daemon, ifname_instance, mac))
         return ifname_master
 
     def interface_config(self, daemon, ifname_guest, advertise_default=True,
@@ -120,37 +125,37 @@ class LxcManager(object):
         For a bi-directional interface we use dhclient.
         """
         if advertise_default:
-            shell_command('ip netns exec ns-%s dhclient %s' %
-                          (daemon, ifname_guest))
+            Shell.run('ip netns exec ns-%s dhclient %s' %
+                      (daemon, ifname_guest))
         else:
-            shell_command('ip netns exec ns-%s ip addr add %s/%d dev %s' %
-                          (daemon, ip_prefix[0], ip_prefix[1], ifname_guest))
-            shell_command('ip netns exec ns-%s ip link set %s up' %
-                          (daemon, ifname_guest))
+            Shell.run('ip netns exec ns-%s ip addr add %s/%d dev %s' %
+                      (daemon, ip_prefix[0], ip_prefix[1], ifname_guest))
+            Shell.run('ip netns exec ns-%s ip link set %s up' %
+                      (daemon, ifname_guest))
             # disable reverse path filtering
-            shell_command('ip netns exec ns-%s sh -c ' +
-                          '"echo 2 >/proc/sys/net/ipv4/conf/%s/rp_filter"' %
-                          (daemon, ifname_guest))
+            Shell.run('ip netns exec ns-%s sh -c ' +
+                      '"echo 2 >/proc/sys/net/ipv4/conf/%s/rp_filter"' %
+                      (daemon, ifname_guest))
 
     def clear_interfaces(self, nsname):
-        shell_command('ip netns exec %s dhclient -r' % nsname)
-        output = shell_command('ip netns exec %s ip link list' % nsname)
+        Shell.run('ip netns exec %s dhclient -r' % nsname)
+        output = Shell.run('ip netns exec %s ip link list' % nsname)
         for line in output.split('\n'):
             m = re.match(r'^[\d]+: ([\w]+):', line)
             if m:
                 ifname = m.group(1)
                 if ifname == 'lo':
                     continue
-                shell_command('ip netns exec %s ip link delete %s' %
-                              (nsname, ifname))
+                Shell.run('ip netns exec %s ip link delete %s' %
+                          (nsname, ifname))
 
     def namespace_init(self, daemon):
-        output = shell_command('ip netns list')
+        output = Shell.run('ip netns list')
         for line in output.split():
             if line == 'ns-' + daemon:
                 return False
-        shell_command('ip netns add ns-%s' % daemon)
+        Shell.run('ip netns add ns-%s' % daemon)
         return True
 
     def namespace_delete(self, daemon):
-        shell_command('ip netns delete ns-%s' % daemon)
+        Shell.run('ip netns delete ns-%s' % daemon)
