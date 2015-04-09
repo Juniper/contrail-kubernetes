@@ -6,9 +6,8 @@ import sys
 
 def shell_command(str):
     cmd = subprocess.check_output(str, shell=True)
-    with open("/var/log/contrail/k.log", "a") as fp:
-        fp.write('Ran shell command: %s\n' % str)
-        fp.write('output: %s\n' % cmd.rstrip())
+    logging.debug('Ran shell command: %s' % str)
+    logging.debug('output: %s' % cmd.rstrip())
     return cmd
 
 
@@ -51,7 +50,7 @@ class LxcManager(object):
                 (int(ns_ifindex) - 1))
         except:
             logging.info('did not find member %s' % bridge_members[member_index])
-            logging.error "Cannot find matching veth interface among brige members")
+            logging.error("Cannot find matching veth interface among brige members")
             raise
         logging.info('found member %s' % bridge_members[member_index])
         return bridge_members[member_index]
