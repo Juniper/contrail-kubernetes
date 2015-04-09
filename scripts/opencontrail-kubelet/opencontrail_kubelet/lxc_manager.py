@@ -1,3 +1,4 @@
+import logging
 import re
 import subprocess
 import sys
@@ -5,6 +6,8 @@ import sys
 
 def shell_command(str):
     cmd = subprocess.check_output(str, shell=True)
+    logging.debug('Ran shell command: %s' % str)
+    logging.debug('output: %s' % cmd.rstrip())
     return cmd
 
 
