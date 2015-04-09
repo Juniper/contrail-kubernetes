@@ -6,8 +6,9 @@ import sys
 
 def shell_command(str):
     cmd = subprocess.check_output(str, shell=True)
-    logging.debug('Ran shell command: %s' % str)
-    logging.debug('output: %s' % cmd.rstrip())
+    with open("/var/log/contrail/k.log", "a") as fp:
+        fp.write('Ran shell command: %s\n' % str)
+        fp.write('output: %s\n' % cmd.rstrip())
     return cmd
 
 
