@@ -46,9 +46,10 @@ class LxcManager(object):
             "ethtool -S %s | grep peer_ifindex | awk '{print $2}'" % i) \
                 for i in bridge_members ]
         try:
-            member_index = bridge_members_ifindex.index('%s\n' % (ns_ifindex-1))
+            member_index = bridge_members_ifindex.index('%s\n' % \
+                (int(ns_ifindex) - 1))
         except:
-            print "Cannot find matching veth interface among brige members"
+            logging.error "Cannot find matching veth interface among brige members")
             raise
         return bridge_members[member_index]
 
