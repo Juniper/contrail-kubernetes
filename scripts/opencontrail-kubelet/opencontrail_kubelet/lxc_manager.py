@@ -31,8 +31,8 @@ class LxcManager(object):
         return None
 
     # Find the correct interface for this nsname
-    def interface_find_peer_name(self, ifname_instance, pid):
-        ns_ifindex = shell_command("echo ethtool -S %s | sudo nsenter -n -t %s sh | grep peer_ifindex | awk '{print $2}'" % (ifname_instance, pid))
+    def interface_find_peer_name(self, ifname_instance, nsname):
+        ns_ifindex = shell_command("ip netns exec %s ethtool -S %s | grep peer_ifindex | awk '{print $2}'" % (nsname, ifname_instance))
 
         # Now look through all interfaces in the bridge and find the one whose
         # ifindex is 1 less than ns_ifindex
@@ -57,11 +57,12 @@ class LxcManager(object):
 
     # Remove the interface out of the docker bridge
     def move_interface(self, nsname, pid, ifname_instance, vmi):
-        ifname_master = self.interface_find_peer_name(ifname_instance, pid)
+        ifname_master = self.interface_find_peer_name(ifname_instance, nsname)
         shell_command('brctl delif docker0 %s' % ifname_master)
         if vmi:
             mac = vmi.virtual_machine_interface_mac_addresses.mac_address[0]
-            shell_command('ip netns exec %s hw ether %s' % (nsname, mac))
+            shell_command('ip netns exec %s ifconfig eth0 hw ether %s' \
+                          % (nsname, mac))
         return ifname_master
 
     def create_interface(self, nsname, ifname_instance, vmi=None):
