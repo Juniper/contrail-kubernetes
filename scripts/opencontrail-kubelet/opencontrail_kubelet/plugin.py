@@ -180,16 +180,17 @@ def setup(pod_namespace, pod_name, docker_id):
     manager = LxcManager()
     provisioner = Provisioner(api_server=client._server)
     vm = provisioner.virtual_machine_locate(short_id)
-    vmi = provisioner.vmi_locate(vm, project, network, 'veth0')
-    ifname = manager.create_interface(short_id, 'veth0', vmi)
+    vmi = provisioner.vmi_locate(vm, project, network, 'eth0')
+    ifname = manager.move_interface(short_id, pid, 'eth0', vmi)
+
     interface_register(vm, vmi, ifname)
     (ipaddr, plen) = provisioner.get_interface_ip_prefix(vmi)
     subprocess.check_output(
-        'ip netns exec %s ip addr add %s/%d dev veth0' %
+        'ip netns exec %s ip addr add %s/%d dev eth0' %
         (short_id, ipaddr, plen),
         shell=True)
     subprocess.check_output(
-        'ip netns exec %s ip link set veth0 up' % short_id,
+        'ip netns exec %s ip link set eth0 up' % short_id,
         shell=True)
 
 

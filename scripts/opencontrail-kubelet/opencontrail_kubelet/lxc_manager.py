@@ -27,13 +27,45 @@ class LxcManager(object):
             return 'instance%d' % i
         return None
 
+    # Find the correct interface for this nsname
+    def interface_find_peer_name(self, ifname_instance, pid):
+        ns_ifindex = shell_command("echo ethtool -S %s | sudo nsenter -n -t %s sh | grep peer_ifindex | awk '{print $2}'" % (ifname_instance, pid))
+
+        # Now look through all interfaces in the bridge and find the one whose
+        # ifindex is 1 less than ns_ifindex
+        bridge_members = [ i[i.find("veth"):] for i in \
+                  subprocess.check_output("brctl show docker0 | grep veth", \
+                                          shell = True).split("\n") \
+        ]
+
+        # Remove the trailing empty string, which comes as a result of split.
+        bridge_members.pop()
+        bridge_members_ifindex = [ subprocess.check_output( \
+            "ethtool -S %s | grep peer_ifindex | awk '{print $2}'" % i, \
+            shell = True) for i in bridge_members ]
+        try:
+            member_index = bridge_members_ifindex.index('%s\n' % (ns_ifindex-1))
+        except:
+            print "Cannot find matching veth interface among brige members"
+            raise
+        return bridge_members[member_index]
+
+    # Remove the interface out of the docker bridge
+    def move_interface(self, nsname, pid, ifname_instance, vmi):
+        ifname_master = self.interface_find_peer_name(ifname_instance, pid)
+        shell_command.('brctl delif docker0 %s' % ifname_master)
+        if vmi:
+            mac = vmi.virtual_machine_interface_mac_addresses.mac_address[0]
+            shell_command('ip netns exec %s hw ether %s' % (nsname, mac))
+        return ifname_master
+
     def create_interface(self, nsname, ifname_instance, vmi=None):
         ifname_master = self._interface_generate_unique_name()
         shell_command('ip link add %s type veth peer name %s' %
                       (ifname_instance, ifname_master))
         if vmi:
             mac = vmi.virtual_machine_interface_mac_addresses.mac_address[0]
-            shell_command('ifconfig %s hw ether %s' % (ifname_instance, mac))
+            shell_command('ifconfig %s hw ether %s' % (ifname_instance,mac))
 
         shell_command('ip link set %s netns %s' % (ifname_instance, nsname))
         shell_command('ip link set %s up' % ifname_master)
