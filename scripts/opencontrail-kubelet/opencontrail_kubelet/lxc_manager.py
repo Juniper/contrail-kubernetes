@@ -63,6 +63,8 @@ class LxcManager(object):
             mac = vmi.virtual_machine_interface_mac_addresses.mac_address[0]
             shell_command('ip netns exec %s ifconfig eth0 hw ether %s' \
                           % (nsname, mac))
+            shell_command('ip netns exec %s ip addr flush dev %s'
+                          % (nsname, ifname_instance))
         return ifname_master
 
     def create_interface(self, nsname, ifname_instance, vmi=None):
