@@ -28,7 +28,7 @@ class LxcManager(object):
     def interface_find_peer_name(self, ifname_instance, nsname):
         # Get ifindex of ifname_instance
         ns_ifindex = Shell.run('ip netns exec %s ethtool -S %s | '
-                               'grep peer_ifindex | awk "{print $2}"' \
+                               'grep peer_ifindex | awk \'{print $2}\'' \
                                % (nsname, ifname_instance))
 
         # Get the list of docker0 bridge member interface names.
