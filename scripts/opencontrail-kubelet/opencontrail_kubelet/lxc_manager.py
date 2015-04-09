@@ -49,8 +49,10 @@ class LxcManager(object):
             member_index = bridge_members_ifindex.index('%s\n' % \
                 (int(ns_ifindex) - 1))
         except:
+            logging.info('did not find member %s' % bridge_members[member_index])
             logging.error "Cannot find matching veth interface among brige members")
             raise
+        logging.info('found member %s' % bridge_members[member_index])
         return bridge_members[member_index]
 
     # Remove the interface out of the docker bridge
