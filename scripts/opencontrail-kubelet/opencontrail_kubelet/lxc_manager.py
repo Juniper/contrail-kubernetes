@@ -37,15 +37,14 @@ class LxcManager(object):
         # Now look through all interfaces in the bridge and find the one whose
         # ifindex is 1 less than ns_ifindex
         bridge_members = [ i[i.find("veth"):] for i in \
-                  shell_command("brctl show docker0 | grep veth", \
-                                shell = True).split("\n") \
+                  shell_command("brctl show docker0 | grep veth").split("\n") \
         ]
 
         # Remove the trailing empty string, which comes as a result of split.
         bridge_members.pop()
         bridge_members_ifindex = [ shell_command( \
-            "ethtool -S %s | grep peer_ifindex | awk '{print $2}'" % i, \
-            shell = True) for i in bridge_members ]
+            "ethtool -S %s | grep peer_ifindex | awk '{print $2}'" % i) \
+                for i in bridge_members ]
         try:
             member_index = bridge_members_ifindex.index('%s\n' % (ns_ifindex-1))
         except:
