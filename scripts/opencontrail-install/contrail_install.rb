@@ -7,9 +7,12 @@ raise 'Must run as root' unless Process.uid == 0
 require 'socket'
 require 'ipaddr'
 
-@ws="#{ENV['HOME']}/contrail"
+@ws="#{File.dirname($0)}/../.."
 @intf = "eth1"
 @controller_host = "kubernetes-master"
+@branch = "3.0" # master
+@tag = "4100"
+@pkg_tag = "#{@branch}-#{@tag}"
 
 def sh(cmd, ignore_exit_code = false)
     puts cmd
@@ -49,8 +52,6 @@ def initial_setup
     @contrail_controller = IPSocket.getaddress(@controller_host)
     error "Cannot resolve contrail-controller host" \
         if @contrail_controller.empty?
-    sh("rm -rf #{@ws}")
-    sh("mkdir -p #{@ws}")
     Dir.chdir("#{@ws}")
 end
 
@@ -63,9 +64,9 @@ end
 # Install third-party software from /cs-shared/builder/cache/centoslinux70/juno
 def install_thirdparty_software_controller
     sh("yum -y remove java-1.8.0-openjdk java-1.8.0-openjdk-headless")
- 
+
     init_common
-    sh("yum -y install supervisor supervisord python-supervisor rabbitmq-server python-kazoo python-ncclient")
+    sh("yum -y install supervisor supervisord python-supervisor rabbitmq-server python-kazoo python-ncclient", true)
 
     third_party_rpms = [
     "#{@ws}/thirdparty/authbind-2.1.1-0.x86_64.rpm",
@@ -97,37 +98,37 @@ def install_thirdparty_software_controller
     # "#{@ws}/thirdparty/python-psutil-0.6.1-3.el7.x86_64.rpm",
     # "#{@ws}/thirdparty/python-keystone-2014.2.1-1.el7.centos.noarch.rpm",
     ]
-    sh("yum -y install #{third_party_rpms.join(" ")}")
+    sh("yum -y install #{third_party_rpms.join(" ")}", true)
 end
 
 # Install contrail controller software
 def install_contrail_software_controller
     contrail_rpms = [
-    "#{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-database-3.0-4100.fc21.noarch.rpm",
-    "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/python-contrail-3.0-4100.fc21.x86_64.rpm",
-    "#{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-config-3.0-4100.fc21.noarch.rpm",
-    "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-lib-3.0-4100.fc21.x86_64.rpm",
-    "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-control-3.0-4100.fc21.x86_64.rpm",
-    "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-analytics-3.0-4100.fc21.x86_64.rpm",
-    "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-web-controller-3.0-4100.x86_64.rpm",
-    "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-web-core-3.0-4100.x86_64.rpm",
-    "#{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-setup-3.0-4100.fc21.noarch.rpm",
-    "#{@ws}/controller/build/package-build/RPMS/x86_64/contrail-nodemgr-3.0-4100.fc21.x86_64.rpm",
-    "#{@ws}/controller/build/package-build/RPMS/x86_64/contrail-utils-3.0-4100.fc21.x86_64.rpm",
-    "#{@ws}/controller/build/package-build/RPMS/x86_64/contrail-dns-3.0-4100.fc21.x86_64.rpm",
-    "#{@ws}/controller/build/package-build/RPMS/noarch/contrail-openstack-control-3.0-4100.fc21.noarch.rpm",
-    "#{@ws}/controller/build/package-build/RPMS/noarch/contrail-openstack-database-3.0-4100.fc21.noarch.rpm",
-    "#{@ws}/controller/build/package-build/RPMS/noarch/contrail-openstack-webui-3.0-4100.fc21.noarch.rpm",
+    "#{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-database-#{@pkg_tag}.fc21.noarch.rpm",
+    "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/python-contrail-#{@pkg_tag}.fc21.x86_64.rpm",
+    "#{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-config-#{@pkg_tag}.fc21.noarch.rpm",
+    "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-lib-#{@pkg_tag}0.fc21.x86_64.rpm",
+    "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-control-#{@pkg_tag}.fc21.x86_64.rpm",
+    "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-analytics-#{@pkg_tag}.fc21.x86_64.rpm",
+    "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-web-controller-#{@pkg_tag}.x86_64.rpm",
+    "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-web-core-#{@pkg_tag}.x86_64.rpm",
+    "#{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-setup-#{@pkg_tag}.fc21.noarch.rpm",
+    "#{@ws}/controller/build/package-build/RPMS/x86_64/contrail-nodemgr-#{@pkg_tag}4100.fc21.x86_64.rpm",
+    "#{@ws}/controller/build/package-build/RPMS/x86_64/contrail-utils-#{@pkg_tag}.fc21.x86_64.rpm",
+    "#{@ws}/controller/build/package-build/RPMS/x86_64/contrail-dns-#{@pkg_tag}.fc21.x86_64.rpm",
+    "#{@ws}/controller/build/package-build/RPMS/noarch/contrail-openstack-control-#{@pkg_tag}.fc21.noarch.rpm",
+    "#{@ws}/controller/build/package-build/RPMS/noarch/contrail-openstack-database-#{@pkg_tag}.fc21.noarch.rpm",
+    "#{@ws}/controller/build/package-build/RPMS/noarch/contrail-openstack-webui-#{@pkg_tag}.fc21.noarch.rpm",
     ]
-    sh("yum -y install #{contrail_rpms.join(" ")}")
+    sh("yum -y install #{contrail_rpms.join(" ")}", true)
 
-    sh("rpm2cpio #{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-openstack-database-3.0-4100.fc21.noarch.rpm | cpio -idmv")
+    sh("rpm2cpio #{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-openstack-database-#{@pkg_tag}.fc21.noarch.rpm | cpio -idmv")
     sh("cp etc/rc.d/init.d/zookeeper /etc/rc.d/init.d/")
-    sh("rpm2cpio #{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-openstack-config-3.0-4100.fc21.noarch.rpm | cpio -idmv")
+    sh("rpm2cpio #{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-openstack-config-#{@pkg_tag}.fc21.noarch.rpm | cpio -idmv")
     sh("cp etc/rc.d/init.d/rabbitmq-server.initd.supervisord /etc/rc.d/init.d/")
     sh("cp -a etc/contrail/supervisord_support_service_files/ /etc/contrail/")
 
-    sh("rpm2cpio #{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-openstack-control-3.0-4100.fc21.noarch.rpm | cpio -idmv")
+    sh("rpm2cpio #{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-openstack-control-#{@pkg_tag}.fc21.noarch.rpm | cpio -idmv")
     sh("cp -a etc/contrail/supervisord_support_service_files/ /etc/contrail/")
     sh("cp -a etc/contrail/supervisord_control_files/ /etc/contrail/")
     sh("cp etc/contrail/supervisord_config_files/* /etc/contrail/supervisord_config_files/")
@@ -172,12 +173,12 @@ def provision_contrail_controller
     sh("service supervisor-analytics start")
 
     sleep 30
-    sh("netstat -anp | \grep LISTEN | \grep 5672") # RabbitMQ
-    sh("netstat -anp | \grep LISTEN | \grep 2181") # ZooKeeper
+    sh("netstat -anp | \grep LISTEN | \grep -w 5672") # RabbitMQ
+    sh("netstat -anp | \grep LISTEN | \grep -w 2181") # ZooKeeper
     sh("netstat -anp | \grep LISTEN | \grep -w 9160") # Cassandra
     sh("netstat -anp | \grep LISTEN | \grep -w 8083") # Control-Node
     sh("netstat -anp | \grep LISTEN | \grep -w 5998") # discovery
-    sh("netstat -anp | \grep LISTEN | \grep 8443") # IFMAP-Server
+    sh("netstat -anp | \grep LISTEN | \grep -w 8443") # IFMAP-Server
     sh("netstat -anp | \grep LISTEN | \grep -w 8082") # API-Server
     sh("netstat -anp | \grep LISTEN | \grep -w 8086") # Collector
     sh("netstat -anp | \grep LISTEN | \grep -w 8081") # OpServer
@@ -186,8 +187,8 @@ def provision_contrail_controller
 end
 
 def init_common
-    sh("yum -y install sshpass createrepo docker vim git vim zsh strace " +
-       "tcpdump unzip")
+    sh("yum -y install sshpass createrepo docker vim git zsh strace " +
+       "tcpdump unzip", true)
 end
 
 # Install third-party software
@@ -199,29 +200,29 @@ def install_thirdparty_software_compute
     "#{@ws}/thirdparty/python-pycassa-1.10.0-0contrail.el7.noarch.rpm ",
     ]
 
-    sh("yum -y install #{third_party_rpms.join(" ")}")
-    sh("service docker start")
+    sh("yum -y install #{third_party_rpms.join(" ")}", true)
+    sh("systemctl restart docker")
 #   sh("docker pull ubuntu")
 end
 
 # Install contrail compute software
 def install_contrail_software_compute
     contrail_rpms = [
-        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/python-contrail-3.0-4100.fc21.x86_64.rpm",
-        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/python-contrail-vrouter-api-3.0-4100.fc21.x86_64.rpm",
-        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-vrouter-utils-3.0-4100.fc21.x86_64.rpm",
-        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-vrouter-init-3.0-4100.fc21.x86_64.rpm",
-        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-lib-3.0-4100.fc21.x86_64.rpm",
-        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-vrouter-3.0-4100.fc21.x86_64.rpm",
-        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-vrouter-agent-3.0-4100.fc21.x86_64.rpm",
-        "#{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-setup-3.0-4100.fc21.noarch.rpm",
-        "#{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-vrouter-common-3.0-4100.fc21.noarch.rpm",
-        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-vrouter-init-3.0-4100.fc21.x86_64.rpm",
-        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-utils-3.0-4100.fc21.x86_64.rpm",
-        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-nodemgr-3.0-4100.fc21.x86_64.rpm",
-        "#{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-vrouter-common-3.0-4100.fc21.noarch.rpm",
+        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/python-contrail-#{@pkg_tag}.fc21.x86_64.rpm",
+        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/python-contrail-vrouter-api-#{@pkg_tag}.fc21.x86_64.rpm",
+        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-vrouter-utils-#{@pkg_tag}.fc21.x86_64.rpm",
+        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-vrouter-init-#{@pkg_tag}.fc21.x86_64.rpm",
+        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-lib-#{@pkg_tag}.fc21.x86_64.rpm",
+        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-vrouter-#{@pkg_tag}.fc21.x86_64.rpm",
+        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-vrouter-agent-#{@pkg_tag}.fc21.x86_64.rpm",
+        "#{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-setup-#{@pkg_tag}.fc21.noarch.rpm",
+        "#{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-vrouter-common-#{@pkg_tag}.fc21.noarch.rpm",
+        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-vrouter-init-#{@pkg_tag}.fc21.x86_64.rpm",
+        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-utils-#{@pkg_tag}.fc21.x86_64.rpm",
+        "#{@ws}/contrail/controller/build/package-build/RPMS/x86_64/contrail-nodemgr-#{@pkg_tag}.fc21.x86_64.rpm",
+        "#{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-vrouter-common-#{@pkg_tag}.fc21.noarch.rpm",
     ]
-    sh("yum -y install #{contrail_rpms.join(" ")}")
+    sh("yum -y install #{contrail_rpms.join(" ")}", true)
 end
 
 # Return interface IP address, mask and gateway information
@@ -230,7 +231,7 @@ def get_intf_ip(intf = @intf)
                 "\grep -v dynamic | awk '{print $2}'")
     error("Cannot retrieve #{@intf}'s IP address") if prefix !~ /(.*)\/(\d+)$/
     ip = $1
-    mask = IPAddr.new(prefix).inspect.split("/")[1].chomp.chomp(">")        
+    mask = IPAddr.new(prefix).inspect.split("/")[1].chomp.chomp(">")
     gw = sh(%{netstat -rn |\grep "^0.0.0.0" | awk '{print $2}'})
 
     return ip, mask, gw
@@ -261,14 +262,17 @@ EOF
 
     sh("sed 's/__DEVICE__/#{@intf}/' /etc/contrail/agent_param.tmpl > /etc/contrail/agent_param")
     sh("sed -i 's/# type=kvm/type=kvm/' /etc/contrail/contrail-vrouter-agent.conf")
-    sh("/sbin/ifconfig eth1 |\grep ether | awk '{print $2}' | xargs echo > /etc/contrail/default_pmac")
+    sh("touch /etc/contrail/default_pmac")
     sh("sed -i 's/# name=vhost0/name=vhost0/' /etc/contrail/contrail-vrouter-agent.conf")
     sh("sed -i 's/# physical_interface=vnet0/physical_interface=#{@intf}/' /etc/contrail/contrail-vrouter-agent.conf")
     sh("sed -i 's/# server=10.204.217.52/server=#{@contrail_controller}/' /etc/contrail/contrail-vrouter-agent.conf")
     sh("sshpass -p vagrant ssh vagrant@#{@controller_host} sudo python /opt/contrail/utils/provision_vrouter.py --host_name #{sh('hostname')} --host_ip #{ip} --api_server_ip #{@contrail_controller} --oper add")
     sh("service supervisor-vrouter restart")
     sh("service contrail-vrouter-agent restart")
+
+    # Remove ip address from the interface as that is taken over by vhost0
     sh("ifdown #{@intf}; ifup #{@intf}")
+    sh("ip addr flush dev #{@intf}")
 
     # Restore DNS resolver
     @resolvers.each { |r|
@@ -282,9 +286,7 @@ EOF
 end
 
 def provision_contrail_compute_kubernetes
-    sh("git clone https://github.com/juniper/contrail-kubernetes.git " +
-       "#{@ws}/kubernetes")
-    Dir.chdir("#{@ws}/kubernetes/scripts/opencontrail-kubelet")
+    Dir.chdir("#{@ws}/scripts/opencontrail-kubelet")
     sh("python setup.py install")
     plugin = "opencontrail"
     sh("mkdir -p /usr/libexec/kubernetes/kubelet-plugins/net/exec/#{plugin}")
@@ -302,7 +304,7 @@ EOF
     }
 
     sh(%{sed -i 's/DAEMON_ARGS=" /DAEMON_ARGS=" --network_plugin=#{plugin} /' /etc/sysconfig/kubelet})
-    sh("service kubelet restart")
+    sh("systemctl restart kubelet")
 end
 
 def sh_container(container_id, cmd, ignore = false)
