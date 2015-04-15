@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+which ruby >& /dev/null
+
+if [ $? != 0 ]; then
+    sudo yum -y install ruby
+fi
+
+set -e
+
+sudo wget -qO /usr/bin/contrail_install.rb https://raw.githubusercontent.com/rombie/contrail-kubernetes/scripts/opencontrail-install/contrail_install.rb 
+sudo chmod +x /usr/bin/contrail_install.rb
+sudo ruby /usr/bin/contrail_install.rb compute
