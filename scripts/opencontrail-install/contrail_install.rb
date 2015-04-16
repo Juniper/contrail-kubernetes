@@ -2,7 +2,7 @@
 
 # Use this script to install and provision contrail nodes.
 
-raise 'Must run as root' unless Process.uid == 0
+raise 'Must run with superuser privilages' unless Process.uid == 0
 
 require 'socket'
 require 'ipaddr'
