@@ -21,7 +21,19 @@ import (
 )
 
 type NetworkController interface {
+	AddNamespace(obj *api.Namespace)
+	UpdateNamespace(oldObj, newObj *api.Namespace)
+	DeleteNamespace(obj *api.Namespace)
+
 	AddPod(obj *api.Pod)
 	UpdatePod(oldObj, newObj *api.Pod)
 	DeletePod(obj *api.Pod)
+
+	AddReplicationController(obj *api.ReplicationController)
+	UpdateReplicationController(oldObj, newObj *api.ReplicationController)
+	DeleteReplicationController(obj *api.ReplicationController)
+
+	AddService(obj *api.Service)
+	UpdateService(oldObj, newObj *api.Service)
+	DeleteService(obj *api.Service)
 }
