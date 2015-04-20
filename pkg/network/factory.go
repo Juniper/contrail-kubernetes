@@ -17,18 +17,22 @@ limitations under the License.
 package network
 
 import (
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/client"
 	"github.com/Juniper/contrail-kubernetes/pkg/network/opencontrail"
 )
 
 // Placeholder class that constructs a NetworkController
 type NetworkFactory struct {
+	Client *client.Client
 }
 
-func NewNetworkFactory() *NetworkFactory {
-	return new(NetworkFactory)
+func NewNetworkFactory(client *client.Client) *NetworkFactory {
+	factory := new(NetworkFactory)
+	factory.Client = client
+	return factory
 }
 
 func (f *NetworkFactory) Create() NetworkController {
 	// TODO(prm): read configuration in order to select plugin.
-	return opencontrail.NewController()
+	return opencontrail.NewController(f.Client)
 }

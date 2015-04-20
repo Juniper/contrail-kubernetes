@@ -19,8 +19,9 @@ package opencontrail
 import (
 	"strings"
 
-	"github.com/golang/glog"	
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
+	kubeclient "github.com/GoogleCloudPlatform/kubernetes/pkg/client"
+	"github.com/golang/glog"
 
 	"github.com/Juniper/contrail-go-api"
 	"github.com/Juniper/contrail-go-api/config"
@@ -34,23 +35,25 @@ import (
 // - Services allocate floating-ip addresses and/or LBaaS.
 
 type Controller struct {
+	Kube   *kubeclient.Client
 	Client *contrail.Client
 }
 
 // TODO(prm): use configuration file to modify parameters
 const (
-	ApiAddress = "localhost"
-	ApiPort = 8082
+	ApiAddress     = "localhost"
+	ApiPort        = 8082
 	DefaultProject = "default-domain:default-project"
-	PublicNetwork = "default-domain:default-project:Public"
-	PublicSubnet =  "192.168.254.0/24"
-	PrivateSubnet = "10.0.0.0/8"
-	
+	PublicNetwork  = "default-domain:default-project:Public"
+	PublicSubnet   = "192.168.254.0/24"
+	PrivateSubnet  = "10.0.0.0/8"
+
 	AddressAllocationNetwork = "default-domain:default-project:addr-alloc"
 )
 
-func NewController() *Controller {
+func NewController(kube *kubeclient.Client) *Controller {
 	controller := new(Controller)
+	controller.Kube = kube
 	controller.Client = contrail.NewClient(ApiAddress, ApiPort)
 	controller.initializeNetworks()
 	return controller
@@ -60,13 +63,13 @@ func (c *Controller) initializePublicNetwork() {
 	_, err := c.Client.FindByName("virtual-network", PublicNetwork)
 	if err != nil {
 		fqn := strings.Split(PublicNetwork, ":")
-		parent := strings.Join(fqn[0:len(fqn) - 1], ":")
+		parent := strings.Join(fqn[0:len(fqn)-1], ":")
 		projectId, err := c.Client.UuidByName("project", parent)
 		if err != nil {
 			glog.Fatalf("%s: %v", parent, err)
 		}
 		_, err = config.CreateNetworkWithSubnet(
-			c.Client, projectId, fqn[len(fqn) - 1], PublicSubnet)
+			c.Client, projectId, fqn[len(fqn)-1], PublicSubnet)
 		if err != nil {
 			glog.Fatalf("%s: %v", parent, err)
 		}
@@ -82,13 +85,13 @@ func (c *Controller) initializeAddrAllocNetwork() {
 		AddressAllocationNetwork)
 	if err != nil {
 		fqn := strings.Split(AddressAllocationNetwork, ":")
-		parent := strings.Join(fqn[0:len(fqn) - 1], ":")
+		parent := strings.Join(fqn[0:len(fqn)-1], ":")
 		projectId, err := c.Client.UuidByName("project", parent)
 		if err != nil {
 			glog.Fatalf("%s: %v", parent, err)
 		}
 		_, err = config.CreateNetworkWithSubnet(
-			c.Client, projectId, fqn[len(fqn) - 1], PrivateSubnet)
+			c.Client, projectId, fqn[len(fqn)-1], PrivateSubnet)
 		if err != nil {
 			glog.Fatalf("%s: %v", parent, err)
 		}
@@ -108,7 +111,7 @@ func (c *Controller) allocateIpAddress(uid string) string {
 	if err != nil {
 		glog.Fatalf("GET %s: %v", AddressAllocationNetwork, err)
 	}
- 	ipObj := new(types.InstanceIp)
+	ipObj := new(types.InstanceIp)
 	ipObj.SetName(uid)
 	ipObj.AddVirtualNetwork(network.(*types.VirtualNetwork))
 	err = c.Client.Create(ipObj)
@@ -159,8 +162,7 @@ func (c *Controller) getPodNetwork(pod *api.Pod) *types.VirtualNetwork {
 	return network.(*types.VirtualNetwork)
 }
 
-func (c *Controller) locateInstance(pod *api.Pod, project *types.Project) (
-	*types.VirtualMachine) {
+func (c *Controller) locateInstance(pod *api.Pod, project *types.Project) *types.VirtualMachine {
 	obj, err := c.Client.FindByUuid(
 		"virtual-machine", string(pod.ObjectMeta.UID))
 	if err == nil {
@@ -180,8 +182,7 @@ func (c *Controller) locateInstance(pod *api.Pod, project *types.Project) (
 }
 
 func (c *Controller) locateInterface(
-	pod *api.Pod, project *types.Project, network *types.VirtualNetwork) (
-		*types.VirtualMachineInterface) {
+	pod *api.Pod, project *types.Project, network *types.VirtualNetwork) *types.VirtualMachineInterface {
 	fqn := append(project.GetFQName(), pod.ObjectMeta.Name)
 	obj, err := c.Client.FindByName(
 		"virtual-machine-interface", strings.Join(fqn, ":"))
@@ -191,7 +192,7 @@ func (c *Controller) locateInterface(
 		// TODO(prm): ensure network is as expected, else update.
 		return nic
 	}
-	
+
 	nic := new(types.VirtualMachineInterface)
 	nic.SetName(pod.ObjectMeta.Name)
 	nic.SetParent(project)
@@ -218,7 +219,7 @@ func (c *Controller) locateInstanceIp(
 
 	address := c.allocateIpAddress(string(pod.ObjectMeta.UID))
 	// Create InstanceIp
- 	ipObj := new(types.InstanceIp)
+	ipObj := new(types.InstanceIp)
 	ipObj.SetName(pod.ObjectMeta.Name)
 	ipObj.AddVirtualNetwork(network)
 	ipObj.AddVirtualMachineInterface(nic)
@@ -238,7 +239,7 @@ func (c *Controller) locateInstanceIp(
 //
 // a) RC to Pod map.
 // b) metadata.generateName
-// 
+//
 func (c *Controller) AddPod(pod *api.Pod) {
 	// TODO(prm): use namespace for project
 	obj, err := c.Client.FindByName("project", DefaultProject)
@@ -251,14 +252,29 @@ func (c *Controller) AddPod(pod *api.Pod) {
 	network := c.getPodNetwork(pod)
 	nic := c.locateInterface(pod, project, network)
 
+	// Modify the POD object such that its Annotations['vmi'] is updated with
+	// the UUID of the nic
+	pod.Annotations["vmi"] = nic.GetUuid()
+	c.Kube.Pods(pod.Namespace).Update(pod)
+
 	if network != nil {
 		c.locateInstanceIp(pod, network, nic)
+	}
+
+	// If the Pod has been created by a ReplicationController (GenerateName
+	// is set) then defer the handling of the "uses" tag to the controller.
+	if pod.GenerateName == "" {
+		policyTag, ok := pod.Labels["uses"]
+		if ok {
+			c.networkAccess(network, policyTag)
+		}
 	}
 }
 
 func (c *Controller) UpdatePod(oldObj, newObj *api.Pod) {
 }
 
+// DeletePod
 func (c *Controller) DeletePod(pod *api.Pod) {
 	// TODO(prm): use namespace for project
 	obj, err := c.Client.FindByName("project", DefaultProject)
@@ -276,7 +292,7 @@ func (c *Controller) DeletePod(pod *api.Pod) {
 			glog.Warningf("Delete instance-ip: %v", err)
 		}
 	}
-	
+
 	c.releaseIpAddress(string(pod.ObjectMeta.UID))
 
 	uid, err = c.Client.UuidByName(
@@ -293,6 +309,9 @@ func (c *Controller) DeletePod(pod *api.Pod) {
 	if err != nil {
 		glog.Warningf("Delete instance: %v", err)
 	}
+
+	// TODO(prm): cleanup the network if there are no more interfaces
+	// associated with it.
 }
 
 func (c *Controller) AddNamespace(obj *api.Namespace) {
@@ -304,7 +323,15 @@ func (c *Controller) UpdateNamespace(oldObj, newObj *api.Namespace) {
 func (c *Controller) DeleteNamespace(obj *api.Namespace) {
 }
 
-func (c *Controller) AddReplicationController(obj *api.ReplicationController) {
+func (c *Controller) networkAccess(
+	network *types.VirtualNetwork, policyTag string) {
+}
+
+func (c *Controller) AddReplicationController(rc *api.ReplicationController) {
+	// policyTag, ok := rc.Labels["uses"]
+	// if ok {
+	// 	c.networkAccess(network, policyTag)
+	// }
 }
 
 func (c *Controller) UpdateReplicationController(
@@ -312,14 +339,18 @@ func (c *Controller) UpdateReplicationController(
 }
 
 func (c *Controller) DeleteReplicationController(
-	obj *api.ReplicationController) {
+	rc *api.ReplicationController) {
+	// TODO: delete policies.
 }
 
-func (c *Controller) AddService(obj *api.Service) {
+// Services can specify "publicIPs", these are mapped to floating-ip
+// addresses. By default a service implies a mapping from a service address
+// to the backends.
+func (c *Controller) AddService(service *api.Service) {
 }
 
 func (c *Controller) UpdateService(oldObj, newObj *api.Service) {
 }
 
-func (c *Controller) DeleteService(obj *api.Service) {
+func (c *Controller) DeleteService(service *api.Service) {
 }

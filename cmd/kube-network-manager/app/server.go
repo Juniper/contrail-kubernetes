@@ -30,29 +30,29 @@ import (
 )
 
 type NetworkManager struct {
-	Client *client.Client
+	Client     *client.Client
 	Controller network.NetworkController
 
 	ResyncPeriod time.Duration
 
-	PodStore cache.Store
+	PodStore    cache.Store
 	PodInformer *framework.Controller
 
-	NamespaceStore cache.Store
+	NamespaceStore    cache.Store
 	NamespaceInformer *framework.Controller
-	
-	RCStore cache.Store
+
+	RCStore    cache.Store
 	RCInformer *framework.Controller
 
-	ServiceStore cache.Store
+	ServiceStore    cache.Store
 	ServiceInformer *framework.Controller
 
-	Shutdown chan struct {}
+	Shutdown chan struct{}
 }
 
 func NewNetworkManager() *NetworkManager {
 	config := &client.Config{
-		Host:	"http://localhost:8080",
+		Host: "http://localhost:8080",
 	}
 	manager := new(NetworkManager)
 	var err error
@@ -61,8 +61,8 @@ func NewNetworkManager() *NetworkManager {
 		glog.Fatalf("Invalid API configuratin: %v", err)
 	}
 
-	manager.Controller = network.NewNetworkFactory().Create()
-	manager.Shutdown = make(chan struct {})
+	manager.Controller = network.NewNetworkFactory(manager.Client).Create()
+	manager.Shutdown = make(chan struct{})
 	manager.ResyncPeriod = time.Minute
 
 	manager.PodStore, manager.PodInformer = framework.NewInformer(
@@ -90,30 +90,30 @@ func NewNetworkManager() *NetworkManager {
 
 	manager.NamespaceStore, manager.NamespaceInformer =
 		framework.NewInformer(
-		cache.NewListWatchFromClient(
-			manager.Client,
-			"namespaces",
-			api.NamespaceAll,
-			fields.Everything(),
-		),
-		&api.Namespace{},
-		manager.ResyncPeriod,
-		framework.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-				manager.Controller.AddNamespace(
-					obj.(*api.Namespace))
+			cache.NewListWatchFromClient(
+				manager.Client,
+				"namespaces",
+				api.NamespaceAll,
+				fields.Everything(),
+			),
+			&api.Namespace{},
+			manager.ResyncPeriod,
+			framework.ResourceEventHandlerFuncs{
+				AddFunc: func(obj interface{}) {
+					manager.Controller.AddNamespace(
+						obj.(*api.Namespace))
+				},
+				UpdateFunc: func(oldObj, newObj interface{}) {
+					manager.Controller.UpdateNamespace(
+						oldObj.(*api.Namespace),
+						newObj.(*api.Namespace))
+				},
+				DeleteFunc: func(obj interface{}) {
+					manager.Controller.DeleteNamespace(
+						obj.(*api.Namespace))
+				},
 			},
-			UpdateFunc: func(oldObj, newObj interface{}) {
-				manager.Controller.UpdateNamespace(
-					oldObj.(*api.Namespace),
-					newObj.(*api.Namespace))
-			},
-			DeleteFunc: func(obj interface{}) {
-				manager.Controller.DeleteNamespace(
-					obj.(*api.Namespace))
-			},
-		},
-	)
+		)
 
 	manager.RCStore, manager.RCInformer = framework.NewInformer(
 		cache.NewListWatchFromClient(
@@ -166,7 +166,7 @@ func NewNetworkManager() *NetworkManager {
 			},
 		},
 	)
-	
+
 	return manager
 }
 
