@@ -181,7 +181,7 @@ def main
         install_thirdparty_software_compute
         install_contrail_software_compute
         provision_contrail_compute
-        # provision_contrail_compute_kubernetes
+        provision_contrail_compute_kubernetes if @controller_host =~ /kubernetes/
     end
 end
 
