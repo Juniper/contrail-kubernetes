@@ -601,10 +601,19 @@ func (c *Controller) locateFloatingIp(name, address string) *types.FloatingIp {
 		return nil
 	}
 	pool := obj.(*types.FloatingIpPool)
+
+	obj, err = c.Client.FindByName("project", DefaultProject)
+	if err != nil {
+		glog.Errorf("Get project %s: %v", DefaultProject, err)
+		return nil
+	}
+	project := obj.(*types.Project)
+
 	fip := new(types.FloatingIp)
 	fip.SetParent(pool)
 	fip.SetName(name)
 	fip.SetFloatingIpAddress(address)
+	fip.AddProject(project)
 	err = c.Client.Create(fip)
 	if err != nil {
 		glog.Errorf("Create floating-ip %s: %v", name, err)
