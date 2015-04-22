@@ -54,8 +54,8 @@ const (
 	ApiPort        = 8082
 	DefaultProject = "default-domain:default-project"
 	PublicNetwork  = "default-domain:default-project:Public"
-	PublicSubnet   = "192.168.254.0/24"
-	PrivateSubnet  = "10.0.0.0/8"
+	PublicSubnet   = "10.1.0.0/16"
+	PrivateSubnet  = "10.0.0.0/16"
 	// TODO: read from kubernetes configuration file.
 	ServiceSubnet = "10.254.0.0/16"
 
@@ -346,7 +346,7 @@ func (c *Controller) locateServiceIp(
 		return ipObj
 	}
 	ipObj = new(types.InstanceIp)
-	ipObj.SetName(serviceName)
+	ipObj.SetName(name)
 	ipObj.SetInstanceIpAddress(address)
 	ipObj.AddVirtualNetwork(network)
 	err = c.Client.Create(ipObj)
@@ -389,13 +389,15 @@ func (c *Controller) AddPod(pod *api.Pod) {
 		c.locateInstanceIp(pod, network, nic)
 	}
 
-	// If the Pod has been created by a ReplicationController (GenerateName
-	// is set) then defer the handling of the "uses" tag to the controller.
-	if pod.GenerateName == "" {
-		policyTag, ok := pod.Labels["uses"]
-		if ok {
-			c.networkAccess(network, pod.Name, policyTag)
+	policyTag, ok := pod.Labels["uses"]
+	if ok {
+		var policyName string
+		if pod.GenerateName == "" {
+			policyName = pod.Name
+		} else {
+			policyName = strings.TrimRight(pod.GenerateName, "-")
 		}
+		c.networkAccess(network, policyName, policyTag)
 	}
 }
 
@@ -474,6 +476,7 @@ func (c *Controller) locatePolicyRule(policy *types.NetworkPolicy, lhs, rhs *typ
 	rule.ActionList.SimpleAction = "pass"
 
 	entries.AddPolicyRule(rule)
+	policy.SetNetworkPolicyEntries(&entries)
 	err := c.Client.Update(policy)
 	if err != nil {
 		glog.Errorf("policy-rule: %v", err)
@@ -511,6 +514,10 @@ func (c *Controller) networkAccess(
 		policy = new(types.NetworkPolicy)
 		policy.SetFQName("project", fqn)
 		err = c.Client.Create(policy)
+		if err != nil {
+			glog.Errorf("Create policy %s: %v", policyName, err)
+			return
+		}
 	} else {
 		policy = obj.(*types.NetworkPolicy)
 	}
@@ -528,15 +535,6 @@ func (c *Controller) networkAccess(
 }
 
 func (c *Controller) AddReplicationController(rc *api.ReplicationController) {
-	networkName, ok := rc.Labels["name"]
-	if !ok {
-		networkName = "default-network"
-	}
-	policyTag, ok := rc.Labels["uses"]
-	if ok {
-		network := c.lookupNetwork(DefaultProject, networkName)
-		c.networkAccess(network, rc.Name, policyTag)
-	}
 }
 
 func (c *Controller) UpdateReplicationController(
@@ -580,8 +578,16 @@ func (c *Controller) attachServiceIp(
 }
 
 func (c *Controller) locateFloatingIp(name, address string) *types.FloatingIp {
-	fqname := fmt.Sprintf("%s:%s", DefaultProject, name)
-	obj, err := c.Client.FindByName("floating-ip", fqname)
+	poolName := fmt.Sprintf("%s:%s", DefaultProject, "Public")
+	obj, err := c.Client.FindByName("floating-ip-pool", poolName)
+	if err != nil {
+		glog.Errorf("Get floating-ip-pool %s: %v", poolName, err)
+		return nil
+	}
+	pool := obj.(*types.FloatingIpPool)
+
+	fqn := append(pool.GetFQName(), name)
+	obj, err = c.Client.FindByName("floating-ip", strings.Join(fqn, ":"))
 	if err == nil {
 		fip := obj.(*types.FloatingIp)
 		if fip.GetFloatingIpAddress() != address {
@@ -594,13 +600,6 @@ func (c *Controller) locateFloatingIp(name, address string) *types.FloatingIp {
 		}
 		return fip
 	}
-	poolName := fmt.Sprintf("%s:%s", DefaultProject, "Public")
-	obj, err = c.Client.FindByName("floating-ip-pool", poolName)
-	if err != nil {
-		glog.Errorf("Get floating-ip-pool %s: %v", poolName, err)
-		return nil
-	}
-	pool := obj.(*types.FloatingIpPool)
 
 	obj, err = c.Client.FindByName("project", DefaultProject)
 	if err != nil {
@@ -697,6 +696,16 @@ func (c *Controller) AddService(service *api.Service) {
 		}
 	}
 
+	// There may be a policy implied in the service definition.
+	networkName, ok := service.Labels["name"]
+	if !ok {
+		networkName = "default-network"
+	}
+	policyTag, ok := service.Labels["uses"]
+	if ok {
+		network := c.lookupNetwork(DefaultProject, networkName)
+		c.networkAccess(network, service.Name, policyTag)
+	}
 }
 
 func (c *Controller) UpdateService(oldObj, newObj *api.Service) {
