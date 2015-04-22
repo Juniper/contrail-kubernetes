@@ -346,6 +346,7 @@ func (c *Controller) locateServiceIp(
 		return ipObj
 	}
 	ipObj = new(types.InstanceIp)
+	ipObj.SetName(serviceName)
 	ipObj.SetInstanceIpAddress(address)
 	ipObj.AddVirtualNetwork(network)
 	err = c.Client.Create(ipObj)
