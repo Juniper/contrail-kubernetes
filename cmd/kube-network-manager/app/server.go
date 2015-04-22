@@ -87,7 +87,7 @@ func NewNetworkManager() *NetworkManager {
 			},
 		},
 	)
-	manager.Controller.SetPodStore(manager.PodStore)
+	manager.Controller.SetPodStore(&manager.PodStore)
 
 	manager.NamespaceStore, manager.NamespaceInformer =
 		framework.NewInformer(
@@ -115,7 +115,7 @@ func NewNetworkManager() *NetworkManager {
 				},
 			},
 		)
-	manager.Controller.SetNamespaceStore(manager.NamespaceStore)
+	manager.Controller.SetNamespaceStore(&manager.NamespaceStore)
 
 	manager.RCStore, manager.RCInformer = framework.NewInformer(
 		cache.NewListWatchFromClient(
@@ -142,7 +142,7 @@ func NewNetworkManager() *NetworkManager {
 			},
 		},
 	)
-	manager.Controller.SetReplicationControllerStore(manager.RCStore)
+	manager.Controller.SetReplicationControllerStore(&manager.RCStore)
 
 	manager.ServiceStore, manager.ServiceInformer = framework.NewInformer(
 		cache.NewListWatchFromClient(
@@ -169,7 +169,7 @@ func NewNetworkManager() *NetworkManager {
 			},
 		},
 	)
-	manager.Controller.SetServiceStore(manager.ServiceStore)
+	manager.Controller.SetServiceStore(&manager.ServiceStore)
 
 	return manager
 }

@@ -376,8 +376,11 @@ func (c *Controller) AddPod(pod *api.Pod) {
 	network := c.getPodNetwork(pod)
 	nic := c.locateInterface(pod, project, network)
 
-	// Modify the POD object such that its Annotations['vmi'] is updated with
-	// the UUID of the nic
+	// Modify the POD object such that its Annotations['vmi'] is
+	// updated with the UUID of the nic
+	if pod.Annotations == nil {
+		pod.Annotations = make(map[string]string)
+	}
 	pod.Annotations["vmi"] = nic.GetUuid()
 	c.Kube.Pods(pod.Namespace).Update(pod)
 

@@ -175,6 +175,13 @@ def setup(pod_namespace, pod_name, docker_id):
 
     Shell.run('ln -sf /proc/%d/ns/net /var/run/netns/%s' % (pid, short_id))
 
+    # Name
+    # See: pkg/kubelet/docker/tools/docker.go:ParseDockerName
+    # name_namespace_uid
+
+    # list curl -k https://127.0.0.1:10250/pods
+    # find pod by uid.
+    
     manager = LxcManager()
     provisioner = Provisioner(api_server=client._server)
     vm = provisioner.virtual_machine_locate(short_id)
