@@ -84,20 +84,21 @@ class Provisioner(object):
 
         self._client.virtual_machine_interface_delete(id=vmi.uuid)
 
-    def _get_vmi_prefixlen(self, vmi):
+    def _get_vmi_subnet_info(self, vmi):
         refs = vmi.get_virtual_network_refs()
         if len(refs) == 0:
             sys.exit(1)
 
         vnet = self._client.virtual_network_read(id=refs[0]['uuid'])
         ipam_r = vnet.get_network_ipam_refs()
-        return ipam_r[0]['attr'].ipam_subnets[0].subnet.ip_prefix_len
+        subnet = ipam_r[0]['attr'].ipam_subnets[0]
+        return (subnet.subnet.ip_prefix_len, subnet.default_gateway)
 
-    def get_interface_ip_prefix(self, vmi):
+    def get_interface_ip_info(self, vmi):
         ips = vmi.get_instance_ip_back_refs()
         if len(ips) == 0:
             return None
         ip_obj = self._client.instance_ip_read(id=ips[0]['uuid'])
         ip_addr = ip_obj.get_instance_ip_address()
-        ip_prefixlen = self._get_vmi_prefixlen(vmi)
-        return (ip_addr, ip_prefixlen)
+        (ip_prefixlen, gw) = self._get_vmi_subnet_info(vmi)
+        return (ip_addr, ip_prefixlen, gw)
