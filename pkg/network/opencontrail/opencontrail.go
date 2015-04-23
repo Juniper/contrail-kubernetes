@@ -355,6 +355,14 @@ func (c *Controller) locateInstanceIp(
 	return ipObj
 }
 
+// Configure the services subnet on this network in order to ensure that
+// we can allocate an ip address on that subnet.
+func (c *Controller) enableServiceNetwork(network *types.VirtualNetwork) {
+	c.createLock.Lock()
+	defer c.createLock.Unlock()
+
+}
+
 func (c *Controller) locateServiceIp(
 	serviceName string, network *types.VirtualNetwork, address string) *types.InstanceIp {
 	var ipObj *types.InstanceIp = nil
@@ -744,6 +752,7 @@ func (c *Controller) AddService(service *api.Service) {
 	if service.Spec.PortalIP != "" {
 		podNetwork = c.getPodNetwork(&pods.Items[0])
 		if podNetwork != nil {
+			c.enableServiceNetwork(podNetwork)
 			serviceIp = c.locateServiceIp(service.Name, podNetwork, service.Spec.PortalIP)
 		}
 	}
