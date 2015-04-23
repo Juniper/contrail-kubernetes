@@ -73,6 +73,12 @@ func NewController(kube *kubeclient.Client) *Controller {
 	return controller
 }
 
+func AppendConst(slice []string, element string) []string {
+	newSlice := make([]string, len(slice), len(slice) + 1)
+	copy(newSlice, slice)
+	return append(newSlice, element)
+}
+
 func PrefixToAddressLen(subnet string) (string, int) {
 	prefix := strings.Split(subnet, "/")
 	address := prefix[0]
@@ -99,7 +105,7 @@ func (c *Controller) SetServiceStore(store *cache.Store) {
 func (c *Controller) locateFloatingIpPool(
 	network *types.VirtualNetwork, name, subnet string) *types.FloatingIpPool {
 	fqn := network.GetFQName()
-	fqn = append(fqn[0:len(fqn)-1], name)
+	fqn = AppendConst(fqn[0:len(fqn)-1], name)
 	obj, err := c.Client.FindByName(
 		"floating-ip-pool", strings.Join(fqn, ":"))
 	if err == nil {
@@ -192,6 +198,11 @@ func (c *Controller) allocateIpAddress(uid string) string {
 	if err != nil {
 		glog.Fatalf("Create InstanceIp %s: %v", uid, err)
 	}
+	obj, err := c.Client.FindByUuid("instance-ip", ipObj.GetUuid())
+	if err != nil {
+		glog.Infof("Get InstanceIp %s: %v", uid, err)
+	}
+	ipObj = obj.(*types.InstanceIp)
 	return ipObj.GetInstanceIpAddress()
 }
 
@@ -207,7 +218,7 @@ func (c *Controller) releaseIpAddress(uid string) {
 
 func (c *Controller) lookupNetwork(projectName, networkName string) *types.VirtualNetwork {
 	fqn := strings.Split(projectName, ":")
-	fqn = append(fqn, networkName)
+	fqn = AppendConst(fqn, networkName)
 	obj, err := c.Client.FindByName("virtual-network", strings.Join(fqn, ":"))
 	if err != nil {
 		glog.Errorf("GET virtual-network %s: %v", networkName, err)
@@ -303,7 +314,7 @@ func (c *Controller) lookupInterface(project, podName string) *types.VirtualMach
 func (c *Controller) locateInterface(
 	pod *api.Pod, project *types.Project, network *types.VirtualNetwork,
 	instance *types.VirtualMachine) *types.VirtualMachineInterface {
-	fqn := append(project.GetFQName(), pod.Name)
+	fqn := AppendConst(project.GetFQName(), pod.Name)
 
 	c.createLock.Lock()
 	defer c.createLock.Unlock()
@@ -346,6 +357,8 @@ func (c *Controller) locateInstanceIp(
 	}
 
 	address := c.allocateIpAddress(string(pod.ObjectMeta.UID))
+	glog.Infof("%s IP address: %s", pod.Name, address)
+
 	// Create InstanceIp
 	ipObj := new(types.InstanceIp)
 	ipObj.SetName(pod.ObjectMeta.Name)
@@ -384,7 +397,10 @@ func (c *Controller) enableServiceNetwork(network *types.VirtualNetwork) {
 	}
 
 	address, prefixlen := PrefixToAddressLen(ServiceSubnet)
-	attr.AddIpamSubnets(&types.IpamSubnetType{Subnet: types.SubnetType{address, prefixlen}})
+	attr.AddIpamSubnets(
+		&types.IpamSubnetType{
+			Subnet: types.SubnetType{address, prefixlen},
+		})
 	network.ClearNetworkIpam()
 	obj, err := c.Client.FindByUuid("network-ipam", ref.Uuid)
 	if err != nil {
@@ -523,7 +539,7 @@ func (c *Controller) DeletePod(pod *api.Pod) {
 	}
 	project := obj.(*types.Project)
 
-	fqn := append(project.GetFQName(), pod.ObjectMeta.Name)
+	fqn := AppendConst(project.GetFQName(), pod.Name)
 	fqname := strings.Join(fqn, ":")
 	uid, err := c.Client.UuidByName("instance-ip", fqname)
 	if err != nil {
@@ -566,6 +582,7 @@ func (c *Controller) DeleteNamespace(obj *api.Namespace) {
 func (c *Controller) locatePolicyRule(policy *types.NetworkPolicy, lhs, rhs *types.VirtualNetwork) {
 	lhsName := strings.Join(lhs.GetFQName(), ":")
 	rhsName := strings.Join(rhs.GetFQName(), ":")
+
 	entries := policy.GetNetworkPolicyEntries()
 	for _, rule := range entries.PolicyRule {
 		if rule.SrcAddresses[0].VirtualNetwork == lhsName &&
@@ -574,6 +591,7 @@ func (c *Controller) locatePolicyRule(policy *types.NetworkPolicy, lhs, rhs *typ
 		}
 	}
 	rule := new(types.PolicyRuleType)
+	rule.Protocol = "any"
 	rule.Direction = "<>"
 	rule.SrcAddresses = []types.AddressType{types.AddressType{
 		VirtualNetwork: lhsName,
@@ -581,8 +599,8 @@ func (c *Controller) locatePolicyRule(policy *types.NetworkPolicy, lhs, rhs *typ
 	rule.DstAddresses = []types.AddressType{types.AddressType{
 		VirtualNetwork: rhsName,
 	}}
-	rule.SrcPorts = []types.PortType{types.PortType{0, 0xffff}}
-	rule.DstPorts = []types.PortType{types.PortType{0, 0xffff}}
+	rule.SrcPorts = []types.PortType{types.PortType{-1, -1}}
+	rule.DstPorts = []types.PortType{types.PortType{-1, -1}}
 	rule.ActionList.SimpleAction = "pass"
 
 	entries.AddPolicyRule(rule)
@@ -604,7 +622,10 @@ func (c *Controller) attachPolicy(network *types.VirtualNetwork, policy *types.N
 			return
 		}
 	}
-	network.AddNetworkPolicy(policy, types.VirtualNetworkPolicyType{})
+	network.AddNetworkPolicy(policy,
+		types.VirtualNetworkPolicyType{
+			Sequence: types.SequenceType{10, 0},
+		})
 	err = c.Client.Update(network)
 	if err != nil {
 		glog.Errorf("Update network %s policies: %v", network.GetName(), err)
@@ -614,8 +635,9 @@ func (c *Controller) attachPolicy(network *types.VirtualNetwork, policy *types.N
 // create a policy that connects two networks.
 func (c *Controller) networkAccess(
 	network *types.VirtualNetwork, policyName, policyTag string) {
+	glog.Infof("policy %s: %s <=> %s", policyName, network.GetName(), policyTag)
 	networkFQN := network.GetFQName()
-	fqn := append(networkFQN[0:len(networkFQN)-1], policyName)
+	fqn := AppendConst(networkFQN[0:len(networkFQN)-1], policyName)
 
 	c.createLock.Lock()
 	defer c.createLock.Unlock()
@@ -635,7 +657,7 @@ func (c *Controller) networkAccess(
 		policy = obj.(*types.NetworkPolicy)
 	}
 
-	rhsName := append(networkFQN[0:len(networkFQN)-1], policyTag)
+	rhsName := AppendConst(networkFQN[0:len(networkFQN)-1], policyTag)
 	obj, err = c.Client.FindByName("virtual-network", strings.Join(rhsName, ":"))
 	if err != nil {
 		glog.Errorf("GET virtual-network %s: %v", policyTag, err)
@@ -665,7 +687,7 @@ func (c *Controller) DeleteReplicationController(
 func (c *Controller) attachServiceIp(
 	pod *api.Pod, network *types.VirtualNetwork, serviceIp *types.InstanceIp) {
 	networkFQN := network.GetFQName()
-	fqn := append(networkFQN[0:len(networkFQN)-1], pod.Name)
+	fqn := AppendConst(networkFQN[0:len(networkFQN)-1], pod.Name)
 	obj, err := c.Client.FindByName(
 		"virtual-machine-interface", strings.Join(fqn, ":"))
 	if err != nil {
@@ -702,7 +724,7 @@ func (c *Controller) locateFloatingIp(name, address string) *types.FloatingIp {
 	}
 	pool := obj.(*types.FloatingIpPool)
 
-	fqn := append(pool.GetFQName(), name)
+	fqn := AppendConst(pool.GetFQName(), name)
 	obj, err = c.Client.FindByName("floating-ip", strings.Join(fqn, ":"))
 	if err == nil {
 		fip := obj.(*types.FloatingIp)
@@ -740,7 +762,7 @@ func (c *Controller) locateFloatingIp(name, address string) *types.FloatingIp {
 func (c *Controller) attachFloatingIp(
 	pod *api.Pod, network *types.VirtualNetwork, floatingIp *types.FloatingIp) {
 	networkFQN := network.GetFQName()
-	fqn := append(networkFQN[0:len(networkFQN)-1], pod.Name)
+	fqn := AppendConst(networkFQN[0:len(networkFQN)-1], pod.Name)
 	obj, err := c.Client.FindByName(
 		"virtual-machine-interface", strings.Join(fqn, ":"))
 	if err != nil {
