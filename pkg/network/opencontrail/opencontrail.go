@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
 	kubeclient "github.com/GoogleCloudPlatform/kubernetes/pkg/client"
@@ -42,6 +43,7 @@ import (
 type Controller struct {
 	Kube           *kubeclient.Client
 	Client         *contrail.Client
+	createLock     *sync.Mutex
 	NamespaceStore *cache.Store
 	PodStore       *cache.Store
 	RCStore        *cache.Store
@@ -66,6 +68,7 @@ func NewController(kube *kubeclient.Client) *Controller {
 	controller := new(Controller)
 	controller.Kube = kube
 	controller.Client = contrail.NewClient(ApiAddress, ApiPort)
+	controller.createLock = new(sync.Mutex)
 	controller.initializeNetworks()
 	return controller
 }
@@ -209,10 +212,13 @@ func (c *Controller) lookupNetwork(projectName, networkName string) *types.Virtu
 }
 
 func (c *Controller) locateNetwork(project, name, subnet string) *types.VirtualNetwork {
-	fqn := strings.Split(project, ":")
-	fqn = append(fqn, name)
-	network, err := c.Client.FindByName(
-		"virtual-network", strings.Join(fqn, ":"))
+	fqn := append(strings.Split(project, ":"), name)
+	fqname := strings.Join(fqn, ":")
+
+	c.createLock.Lock()
+	defer c.createLock.Unlock()
+
+	network, err := c.Client.FindByName("virtual-network", fqname)
 	if err != nil {
 		projectId, err := c.Client.UuidByName("project", project)
 		if err != nil {
@@ -230,10 +236,9 @@ func (c *Controller) locateNetwork(project, name, subnet string) *types.VirtualN
 			glog.Infof("GET %s: %v", name, err)
 			return nil
 		}
-
+		glog.Infof("Create network %s", fqname)
 	}
 	return network.(*types.VirtualNetwork)
-
 }
 
 // assume that labels["name"] names the network
@@ -258,6 +263,9 @@ func (c *Controller) getServiceNetwork(service *api.Service) *types.VirtualNetwo
 }
 
 func (c *Controller) locateInstance(pod *api.Pod, project *types.Project) *types.VirtualMachine {
+	c.createLock.Lock()
+	defer c.createLock.Unlock()
+
 	obj, err := c.Client.FindByUuid(
 		"virtual-machine", string(pod.ObjectMeta.UID))
 	if err == nil {
@@ -279,6 +287,10 @@ func (c *Controller) locateInstance(pod *api.Pod, project *types.Project) *types
 func (c *Controller) locateInterface(
 	pod *api.Pod, project *types.Project, network *types.VirtualNetwork) *types.VirtualMachineInterface {
 	fqn := append(project.GetFQName(), pod.Name)
+
+	c.createLock.Lock()
+	defer c.createLock.Unlock()
+
 	obj, err := c.Client.FindByName(
 		"virtual-machine-interface", strings.Join(fqn, ":"))
 
@@ -306,6 +318,9 @@ func (c *Controller) locateInstanceIp(
 	pod *api.Pod, network *types.VirtualNetwork,
 	nic *types.VirtualMachineInterface) *types.InstanceIp {
 
+	c.createLock.Lock()
+	defer c.createLock.Unlock()
+
 	obj, err := c.Client.FindByName("instance-ip", pod.ObjectMeta.Name)
 	if err == nil {
 		// TODO(prm): ensure that attributes are as expected
@@ -332,6 +347,10 @@ func (c *Controller) locateServiceIp(
 	var ipObj *types.InstanceIp = nil
 
 	name := fmt.Sprintf("service-%s", serviceName)
+	
+	c.createLock.Lock()
+	defer c.createLock.Unlock()
+
 	obj, err := c.Client.FindByName("instance-ip", name)
 	if err == nil {
 		ipObj = obj.(*types.InstanceIp)
@@ -357,6 +376,24 @@ func (c *Controller) locateServiceIp(
 	return ipObj
 }
 
+func (c *Controller) updatePodInterface(pod *api.Pod, project *types.Project, network *types.VirtualNetwork) {
+	nic := c.locateInterface(pod, project, network)
+	c.locateInstanceIp(pod, network, nic)
+
+	// Modify the POD object such that its Annotations['vmi'] is
+	// updated with the UUID of the nic
+	if pod.Annotations == nil {
+		pod.Annotations = make(map[string]string)
+	}
+	pod.Annotations["vmi"] = nic.GetUuid()
+	_, err := c.Kube.Pods(pod.Namespace).Update(pod)
+	if err != nil {
+		glog.Errorf("Pod Update %s: %v", pod.Name, err)
+		return
+	}
+	glog.Infof("Set annotation on pod %s 'vmi'=%s", pod.Name, nic.GetUuid())
+}
+
 // virtual-machine object (metadata.uid)
 // virtual-machine-interface
 //	- allocate IP address
@@ -366,6 +403,8 @@ func (c *Controller) locateServiceIp(
 // b) metadata.generateName
 //
 func (c *Controller) AddPod(pod *api.Pod) {
+	glog.Infof("Add Pod %s", pod.Name)
+
 	// TODO(prm): use namespace for project
 	obj, err := c.Client.FindByName("project", DefaultProject)
 	if err != nil {
@@ -374,20 +413,13 @@ func (c *Controller) AddPod(pod *api.Pod) {
 
 	project := obj.(*types.Project)
 	c.locateInstance(pod, project)
+
 	network := c.getPodNetwork(pod)
-	nic := c.locateInterface(pod, project, network)
-
-	// Modify the POD object such that its Annotations['vmi'] is
-	// updated with the UUID of the nic
-	if pod.Annotations == nil {
-		pod.Annotations = make(map[string]string)
+	if network == nil {
+		return
 	}
-	pod.Annotations["vmi"] = nic.GetUuid()
-	c.Kube.Pods(pod.Namespace).Update(pod)
 
-	if network != nil {
-		c.locateInstanceIp(pod, network, nic)
-	}
+	c.updatePodInterface(pod, project, network)
 
 	policyTag, ok := pod.Labels["uses"]
 	if ok {
@@ -401,11 +433,37 @@ func (c *Controller) AddPod(pod *api.Pod) {
 	}
 }
 
-func (c *Controller) UpdatePod(oldObj, newObj *api.Pod) {
+func (c *Controller) UpdatePod(oldPod, newPod *api.Pod) {
+	glog.Infof("Update Pod %s", newPod.Name)
+	var update bool = false
+	if newPod.Annotations == nil {
+		update = true
+	} else {
+		_, ok := newPod.Annotations["vmi"]
+		if !ok {
+			update = true
+		}
+	}
+
+	if update {
+		// TODO(prm): use namespace for project
+		obj, err := c.Client.FindByName("project", DefaultProject)
+		if err != nil {
+			glog.Fatalf("%s: %v", DefaultProject, err)
+		}
+
+		project := obj.(*types.Project)
+		network := c.getPodNetwork(newPod)
+		if network != nil {
+			c.updatePodInterface(newPod, project, network)
+		}
+	}
 }
 
 // DeletePod
 func (c *Controller) DeletePod(pod *api.Pod) {
+	glog.Infof("Delete Pod %s", pod.Name)
+
 	// TODO(prm): use namespace for project
 	obj, err := c.Client.FindByName("project", DefaultProject)
 	if err != nil {
@@ -535,15 +593,18 @@ func (c *Controller) networkAccess(
 }
 
 func (c *Controller) AddReplicationController(rc *api.ReplicationController) {
+	glog.Infof("Add RC %s", rc.Name)
 }
 
 func (c *Controller) UpdateReplicationController(
 	oldObj, newObj *api.ReplicationController) {
+	glog.Infof("Update RC %s", newObj.Name)
 }
 
 func (c *Controller) DeleteReplicationController(
 	rc *api.ReplicationController) {
 	// TODO: delete policies.
+	glog.Infof("Delete RC %s", rc.Name)
 }
 
 func (c *Controller) attachServiceIp(
@@ -656,6 +717,7 @@ func (c *Controller) attachFloatingIp(
 // addresses. By default a service implies a mapping from a service address
 // to the backends.
 func (c *Controller) AddService(service *api.Service) {
+	glog.Infof("Add Service %s", service.Name)
 
 	pods, err := c.Kube.Pods(service.Namespace).List(
 		labels.Set(service.Spec.Selector).AsSelector())
@@ -673,7 +735,9 @@ func (c *Controller) AddService(service *api.Service) {
 	// Allocate this IP address on the private pod network.
 	if service.Spec.PortalIP != "" {
 		podNetwork = c.getPodNetwork(&pods.Items[0])
-		serviceIp = c.locateServiceIp(service.Name, podNetwork, service.Spec.PortalIP)
+		if podNetwork != nil {
+			serviceIp = c.locateServiceIp(service.Name, podNetwork, service.Spec.PortalIP)
+		}
 	}
 
 	var publicIp *types.FloatingIp = nil
@@ -684,6 +748,13 @@ func (c *Controller) AddService(service *api.Service) {
 
 	if serviceIp == nil && publicIp == nil {
 		return
+	}
+
+	if podNetwork == nil {
+		podNetwork = c.getPodNetwork(&pods.Items[0])
+		if podNetwork == nil {
+			return
+		}
 	}
 
 	for _, pod := range pods.Items {
@@ -709,7 +780,9 @@ func (c *Controller) AddService(service *api.Service) {
 }
 
 func (c *Controller) UpdateService(oldObj, newObj *api.Service) {
+	glog.Infof("Update Service %s", newObj.Name)
 }
 
 func (c *Controller) DeleteService(service *api.Service) {
+	glog.Infof("Delete Service %s", service.Name)	
 }
