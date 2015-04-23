@@ -73,6 +73,13 @@ func NewController(kube *kubeclient.Client) *Controller {
 	return controller
 }
 
+func PrefixToAddressLen(subnet string) (string, int) {
+	prefix := strings.Split(subnet, "/")
+	address := prefix[0]
+	prefixlen, _ := strconv.Atoi(prefix[1])
+	return address, prefixlen
+}
+
 func (c *Controller) SetNamespaceStore(store *cache.Store) {
 	c.NamespaceStore = store
 }
@@ -100,9 +107,7 @@ func (c *Controller) locateFloatingIpPool(
 	}
 
 	// TODO: Use an utility function
-	prefix := strings.Split(subnet, "/")
-	address := prefix[0]
-	prefixlen, _ := strconv.Atoi(prefix[1])
+	address, prefixlen := PrefixToAddressLen(subnet)
 
 	pool := new(types.FloatingIpPool)
 	pool.SetName(name)
@@ -361,6 +366,37 @@ func (c *Controller) enableServiceNetwork(network *types.VirtualNetwork) {
 	c.createLock.Lock()
 	defer c.createLock.Unlock()
 
+	refs, err := network.GetNetworkIpamRefs()
+	if err != nil {
+		glog.Errorf("Get network ipam refs: %v", err)
+		return
+	}
+
+	ref := refs[0]
+	attr := ref.Attr.(types.VnSubnetsType)
+	for _, ipamSubnet := range attr.IpamSubnets {
+		prefix := fmt.Sprintf("%s/%d",
+			ipamSubnet.Subnet.IpPrefix,
+			ipamSubnet.Subnet.IpPrefixLen)
+		if prefix == ServiceSubnet {
+			return
+		}
+	}
+
+	address, prefixlen := PrefixToAddressLen(ServiceSubnet)
+	attr.AddIpamSubnets(&types.IpamSubnetType{Subnet: types.SubnetType{address, prefixlen}})
+	network.ClearNetworkIpam()
+	obj, err := c.Client.FindByUuid("network-ipam", ref.Uuid)
+	if err != nil {
+		glog.Errorf("Get network-ipam: %v", err)
+		return
+	}
+	ipam := obj.(*types.NetworkIpam)
+	network.AddNetworkIpam(ipam, attr)
+	err = c.Client.Update(network)
+	if err != nil {
+		glog.Errorf("Update network %s: %v", network.GetName(), err)
+	}
 }
 
 func (c *Controller) locateServiceIp(
@@ -368,7 +404,7 @@ func (c *Controller) locateServiceIp(
 	var ipObj *types.InstanceIp = nil
 
 	name := fmt.Sprintf("service-%s", serviceName)
-	
+
 	c.createLock.Lock()
 	defer c.createLock.Unlock()
 
@@ -440,7 +476,7 @@ func (c *Controller) AddPod(pod *api.Pod) {
 
 	nic := c.locateInterface(pod, project, network, instance)
 	c.locateInstanceIp(pod, network, nic)
-	
+
 	c.updatePodInterface(pod, nic)
 
 	policyTag, ok := pod.Labels["uses"]
@@ -580,6 +616,9 @@ func (c *Controller) networkAccess(
 	network *types.VirtualNetwork, policyName, policyTag string) {
 	networkFQN := network.GetFQName()
 	fqn := append(networkFQN[0:len(networkFQN)-1], policyName)
+
+	c.createLock.Lock()
+	defer c.createLock.Unlock()
 
 	var policy *types.NetworkPolicy = nil
 	obj, err := c.Client.FindByName("network-policy", strings.Join(fqn, ":"))
@@ -801,5 +840,5 @@ func (c *Controller) UpdateService(oldObj, newObj *api.Service) {
 }
 
 func (c *Controller) DeleteService(service *api.Service) {
-	glog.Infof("Delete Service %s", service.Name)	
+	glog.Infof("Delete Service %s", service.Name)
 }
