@@ -284,8 +284,20 @@ func (c *Controller) locateInstance(pod *api.Pod, project *types.Project) *types
 	return instance
 }
 
+func (c *Controller) lookupInterface(project, podName string) *types.VirtualMachineInterface {
+	fqn := append(strings.Split(project, ":"), podName)
+	obj, err := c.Client.FindByName(
+		"virtual-machine-interface", strings.Join(fqn, ":"))
+	if err != nil {
+		glog.Infof("Get vmi %s: %v", podName, err)
+		return nil
+	}
+	return obj.(*types.VirtualMachineInterface)
+}
+
 func (c *Controller) locateInterface(
-	pod *api.Pod, project *types.Project, network *types.VirtualNetwork) *types.VirtualMachineInterface {
+	pod *api.Pod, project *types.Project, network *types.VirtualNetwork,
+	instance *types.VirtualMachine) *types.VirtualMachineInterface {
 	fqn := append(project.GetFQName(), pod.Name)
 
 	c.createLock.Lock()
@@ -303,6 +315,7 @@ func (c *Controller) locateInterface(
 	nic := new(types.VirtualMachineInterface)
 	nic.SetName(pod.Name)
 	nic.SetParent(project)
+	nic.AddVirtualMachine(instance)
 	if network != nil {
 		nic.AddVirtualNetwork(network)
 	}
@@ -376,9 +389,7 @@ func (c *Controller) locateServiceIp(
 	return ipObj
 }
 
-func (c *Controller) updatePodInterface(pod *api.Pod, project *types.Project, network *types.VirtualNetwork) {
-	nic := c.locateInterface(pod, project, network)
-	c.locateInstanceIp(pod, network, nic)
+func (c *Controller) updatePodInterface(pod *api.Pod, nic *types.VirtualMachineInterface) {
 
 	// Modify the POD object such that its Annotations['vmi'] is
 	// updated with the UUID of the nic
@@ -412,14 +423,17 @@ func (c *Controller) AddPod(pod *api.Pod) {
 	}
 
 	project := obj.(*types.Project)
-	c.locateInstance(pod, project)
+	instance := c.locateInstance(pod, project)
 
 	network := c.getPodNetwork(pod)
 	if network == nil {
 		return
 	}
 
-	c.updatePodInterface(pod, project, network)
+	nic := c.locateInterface(pod, project, network, instance)
+	c.locateInstanceIp(pod, network, nic)
+	
+	c.updatePodInterface(pod, nic)
 
 	policyTag, ok := pod.Labels["uses"]
 	if ok {
@@ -447,15 +461,9 @@ func (c *Controller) UpdatePod(oldPod, newPod *api.Pod) {
 
 	if update {
 		// TODO(prm): use namespace for project
-		obj, err := c.Client.FindByName("project", DefaultProject)
-		if err != nil {
-			glog.Fatalf("%s: %v", DefaultProject, err)
-		}
-
-		project := obj.(*types.Project)
-		network := c.getPodNetwork(newPod)
-		if network != nil {
-			c.updatePodInterface(newPod, project, network)
+		nic := c.lookupInterface(DefaultProject, newPod.Name)
+		if nic != nil {
+			c.updatePodInterface(newPod, nic)
 		}
 	}
 }
