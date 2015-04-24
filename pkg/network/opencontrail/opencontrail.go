@@ -74,7 +74,7 @@ func NewController(kube *kubeclient.Client) *Controller {
 }
 
 func AppendConst(slice []string, element string) []string {
-	newSlice := make([]string, len(slice), len(slice) + 1)
+	newSlice := make([]string, len(slice), len(slice)+1)
 	copy(newSlice, slice)
 	return append(newSlice, element)
 }
@@ -266,15 +266,15 @@ func (c *Controller) getPodNetwork(pod *api.Pod) *types.VirtualNetwork {
 	return c.locateNetwork(DefaultProject, name, PrivateSubnet)
 }
 
-// UNUSED
-func (c *Controller) getServiceNetwork(service *api.Service) *types.VirtualNetwork {
-	name, ok := service.Labels["name"]
+func (c *Controller) getServiceNetwork(pod *api.Pod) *types.VirtualNetwork {
+	name, ok := pod.Labels["name"]
 	if !ok {
 		name = "services"
 	} else {
 		name = fmt.Sprintf("service-%s", name)
 	}
 	network := c.locateNetwork(DefaultProject, name, ServiceSubnet)
+	c.locateFloatingIpPool(network, name, ServiceSubnet)
 	return network
 }
 
@@ -373,82 +373,6 @@ func (c *Controller) locateInstanceIp(
 	return ipObj
 }
 
-// Configure the services subnet on this network in order to ensure that
-// we can allocate an ip address on that subnet.
-func (c *Controller) enableServiceNetwork(network *types.VirtualNetwork) {
-	c.createLock.Lock()
-	defer c.createLock.Unlock()
-
-	refs, err := network.GetNetworkIpamRefs()
-	if err != nil {
-		glog.Errorf("Get network ipam refs: %v", err)
-		return
-	}
-
-	ref := refs[0]
-	attr := ref.Attr.(types.VnSubnetsType)
-	for _, ipamSubnet := range attr.IpamSubnets {
-		prefix := fmt.Sprintf("%s/%d",
-			ipamSubnet.Subnet.IpPrefix,
-			ipamSubnet.Subnet.IpPrefixLen)
-		if prefix == ServiceSubnet {
-			return
-		}
-	}
-
-	address, prefixlen := PrefixToAddressLen(ServiceSubnet)
-	attr.AddIpamSubnets(
-		&types.IpamSubnetType{
-			Subnet: &types.SubnetType{address, prefixlen},
-		})
-	network.ClearNetworkIpam()
-	obj, err := c.Client.FindByUuid("network-ipam", ref.Uuid)
-	if err != nil {
-		glog.Errorf("Get network-ipam: %v", err)
-		return
-	}
-	ipam := obj.(*types.NetworkIpam)
-	network.AddNetworkIpam(ipam, attr)
-	err = c.Client.Update(network)
-	if err != nil {
-		glog.Errorf("Update network %s: %v", network.GetName(), err)
-	}
-}
-
-func (c *Controller) locateServiceIp(
-	serviceName string, network *types.VirtualNetwork, address string) *types.InstanceIp {
-	var ipObj *types.InstanceIp = nil
-
-	name := fmt.Sprintf("service-%s", serviceName)
-
-	c.createLock.Lock()
-	defer c.createLock.Unlock()
-
-	obj, err := c.Client.FindByName("instance-ip", name)
-	if err == nil {
-		ipObj = obj.(*types.InstanceIp)
-		if ipObj.GetInstanceIpAddress() != address {
-			ipObj.SetInstanceIpAddress(address)
-			err = c.Client.Update(ipObj)
-			if err != nil {
-				glog.Errorf("Update instance-ip %s: %v", name, err)
-				return nil
-			}
-		}
-		return ipObj
-	}
-	ipObj = new(types.InstanceIp)
-	ipObj.SetName(name)
-	ipObj.SetInstanceIpAddress(address)
-	ipObj.AddVirtualNetwork(network)
-	err = c.Client.Create(ipObj)
-	if err != nil {
-		glog.Errorf("Create instance-ip %s: %v", name, err)
-		return nil
-	}
-	return ipObj
-}
-
 func (c *Controller) updatePodInterface(pod *api.Pod, nic *types.VirtualMachineInterface) {
 
 	// Modify the POD object such that its Annotations['vmi'] is
@@ -503,7 +427,8 @@ func (c *Controller) AddPod(pod *api.Pod) {
 		} else {
 			policyName = strings.TrimRight(pod.GenerateName, "-")
 		}
-		c.networkAccess(network, policyName, policyTag)
+		serviceName := fmt.Sprintf("service-%s", policyTag)
+		c.networkAccess(network, policyName, serviceName)
 	}
 }
 
@@ -717,8 +642,8 @@ func (c *Controller) attachServiceIp(
 	}
 }
 
-func (c *Controller) locateFloatingIp(name, address string) *types.FloatingIp {
-	poolName := fmt.Sprintf("%s:%s", DefaultProject, "Public")
+func (c *Controller) locateFloatingIp(networkName, resourceName, address string) *types.FloatingIp {
+	poolName := fmt.Sprintf("%s:%s", DefaultProject, networkName)
 	obj, err := c.Client.FindByName("floating-ip-pool", poolName)
 	if err != nil {
 		glog.Errorf("Get floating-ip-pool %s: %v", poolName, err)
@@ -726,7 +651,7 @@ func (c *Controller) locateFloatingIp(name, address string) *types.FloatingIp {
 	}
 	pool := obj.(*types.FloatingIpPool)
 
-	fqn := AppendConst(pool.GetFQName(), name)
+	fqn := AppendConst(pool.GetFQName(), resourceName)
 	obj, err = c.Client.FindByName("floating-ip", strings.Join(fqn, ":"))
 	if err == nil {
 		fip := obj.(*types.FloatingIp)
@@ -734,7 +659,7 @@ func (c *Controller) locateFloatingIp(name, address string) *types.FloatingIp {
 			fip.SetFloatingIpAddress(address)
 			err = c.Client.Update(fip)
 			if err != nil {
-				glog.Errorf("Update floating-ip %s: %v", name, err)
+				glog.Errorf("Update floating-ip %s: %v", resourceName, err)
 				return nil
 			}
 		}
@@ -750,21 +675,21 @@ func (c *Controller) locateFloatingIp(name, address string) *types.FloatingIp {
 
 	fip := new(types.FloatingIp)
 	fip.SetParent(pool)
-	fip.SetName(name)
+	fip.SetName(resourceName)
 	fip.SetFloatingIpAddress(address)
 	fip.AddProject(project)
 	err = c.Client.Create(fip)
 	if err != nil {
-		glog.Errorf("Create floating-ip %s: %v", name, err)
+		glog.Errorf("Create floating-ip %s: %v", resourceName, err)
 		return nil
 	}
 	return fip
 }
 
 func (c *Controller) attachFloatingIp(
-	pod *api.Pod, network *types.VirtualNetwork, floatingIp *types.FloatingIp) {
-	networkFQN := network.GetFQName()
-	fqn := AppendConst(networkFQN[0:len(networkFQN)-1], pod.Name)
+	pod *api.Pod, projectName string, floatingIp *types.FloatingIp) {
+
+	fqn := AppendConst(strings.Split(projectName, ":"), pod.Name)
 	obj, err := c.Client.FindByName(
 		"virtual-machine-interface", strings.Join(fqn, ":"))
 	if err != nil {
@@ -809,54 +734,46 @@ func (c *Controller) AddService(service *api.Service) {
 		return
 	}
 
-	var serviceIp *types.InstanceIp = nil
-	var podNetwork *types.VirtualNetwork = nil
-	// Allocate this IP address on the private pod network.
+	var serviceIp *types.FloatingIp = nil
+	var serviceNetwork *types.VirtualNetwork = nil
+	// Allocate this IP address on the service network.
 	if service.Spec.PortalIP != "" {
-		podNetwork = c.getPodNetwork(&pods.Items[0])
-		if podNetwork != nil {
-			c.enableServiceNetwork(podNetwork)
-			serviceIp = c.locateServiceIp(service.Name, podNetwork, service.Spec.PortalIP)
+		serviceNetwork = c.getServiceNetwork(&pods.Items[0])
+		if serviceNetwork != nil {
+			serviceIp = c.locateFloatingIp(serviceNetwork.GetName(), service.Name, service.Spec.PortalIP)
 		}
 	}
 
 	var publicIp *types.FloatingIp = nil
 	if service.Spec.PublicIPs != nil {
 		// Allocate a floating-ip from the public pool.
-		publicIp = c.locateFloatingIp(service.Name, service.Spec.PublicIPs[0])
+		publicIp = c.locateFloatingIp("Public", service.Name, service.Spec.PublicIPs[0])
 	}
 
 	if serviceIp == nil && publicIp == nil {
 		return
 	}
 
-	if podNetwork == nil {
-		podNetwork = c.getPodNetwork(&pods.Items[0])
-		if podNetwork == nil {
-			return
-		}
-	}
-
 	for _, pod := range pods.Items {
 		if serviceIp != nil {
 			// Connect serviceIp to VMI.
-			c.attachServiceIp(&pod, podNetwork, serviceIp)
+			c.attachFloatingIp(&pod, DefaultProject, serviceIp)
 		}
 		if publicIp != nil {
-			c.attachFloatingIp(&pod, podNetwork, publicIp)
+			c.attachFloatingIp(&pod, DefaultProject, publicIp)
 		}
 	}
 
 	// There may be a policy implied in the service definition.
-	networkName, ok := service.Labels["name"]
-	if !ok {
-		networkName = "default-network"
-	}
-	policyTag, ok := service.Labels["uses"]
-	if ok {
-		network := c.lookupNetwork(DefaultProject, networkName)
-		c.networkAccess(network, service.Name, policyTag)
-	}
+	// networkName, ok := service.Labels["name"]
+	// if !ok {
+	// 	networkName = "default-network"
+	// }
+	// policyTag, ok := service.Labels["uses"]
+	// if ok {
+	// 	network := c.lookupNetwork(DefaultProject, networkName)
+	// 	c.networkAccess(network, service.Name, policyTag)
+	// }
 }
 
 func (c *Controller) UpdateService(oldObj, newObj *api.Service) {
