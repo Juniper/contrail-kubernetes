@@ -88,7 +88,24 @@ def kubelet_get_api():
         if m:
             return m.group(1)
     return None
-        
+
+def getPodInfo(docker_id):
+    name = Shell.run('docker inspect -f \'{{.Name}}\' %s' % docker_id)
+    
+    # Name
+    # See: pkg/kubelet/dockertools/docker.go:ParseDockerName
+    # name_namespace_uid
+    fields = name.rstrip().split('_')
+
+    podName = fields[2]
+    uid = fields[4]
+
+    kubeapi = kubelet_get_api()
+
+    data = Shell.run('kubectl --server=%s get -o json pod %s' % (
+        kubeapi, podName))
+    return uid, json.loads(data)
+    
 def setup(pod_namespace, pod_name, docker_id):
     """
     project: pod_namespace
@@ -109,24 +126,6 @@ def setup(pod_namespace, pod_name, docker_id):
 
     Shell.run('ln -sf /proc/%d/ns/net /var/run/netns/%s' % (pid, short_id))
 
-    name = Shell.run('docker inspect -f \'{{.Name}}\' %s' % docker_id)
-    
-    # Name
-    # See: pkg/kubelet/dockertools/docker.go:ParseDockerName
-    # name_namespace_uid
-    fields = name.rstrip().split('_')
-
-    podName = fields[2]
-    uid = fields[4]
-
-    kubeapi = kubelet_get_api()
-
-    # list curl -k https://127.0.0.1:10250/pods
-    # find pod by uid.
-    data = Shell.run('kubectl --server=%s get -o json pod %s' % (
-        kubeapi, podName))
-    podInfo = json.loads(data)
-    
     manager = LxcManager()
 
     if client._net_mode == 'none':
@@ -134,11 +133,12 @@ def setup(pod_namespace, pod_name, docker_id):
     else:
         instance_ifname = 'eth0'
 
+    uid, podInfo = getPodInfo(docker_id)
     # TODO: Remove the need for a vmi lookup.
     # The lxc_manager uses the mac_address to setup the container interface.
     # Additionally the ip-address, prefixlen and gateway are also used.
     if not 'annotations' in podInfo:
-        logging.error('No annotations in pod %s', podName)
+        logging.error('No annotations in pod %s', podInfo["metadata"]["name"])
         sys.exit(1)
 
     vmi = client.InterfaceLookup(podInfo["annotations"]["vmi"])
@@ -155,8 +155,8 @@ def setup(pod_namespace, pod_name, docker_id):
     interface_register(uid, vmi, ifname)
     provisioner = Provisioner(api_server=client._server)
     (ipaddr, plen, gw) = provisioner.get_interface_ip_info(vmi)
-    Shell.run('ip netns exec %s ip addr add %s/%d dev %s' % \
-              (short_id, ipaddr, plen, instance_ifname))
+    Shell.run('ip netns exec %s ip addr add %s/32 peer %s dev %s' % \
+              (short_id, ipaddr, gw, instance_ifname))
     Shell.run('ip netns exec %s ip route add default via %s' % \
               (short_id, gw))
     Shell.run('ip netns exec %s ip link set %s up' %
@@ -167,6 +167,11 @@ def teardown(pod_namespace, pod_name, docker_id):
     client = ContrailClient()
     manager = LxcManager()
     short_id = docker_id[0:11]
+
+    uid, podInfo = getPodInfo(docker_id)
+    if 'annotations' in podInfo and 'vmi' in podInfo["annotations"]:
+        vmi = podInfo["annotations"]["vmi"]
+        interface_unregister(vmi)
 
     manager.clear_interfaces(short_id)
     Shell.run('ip netns delete %s' % short_id)
