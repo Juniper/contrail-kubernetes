@@ -399,7 +399,7 @@ func (c *Controller) enableServiceNetwork(network *types.VirtualNetwork) {
 	address, prefixlen := PrefixToAddressLen(ServiceSubnet)
 	attr.AddIpamSubnets(
 		&types.IpamSubnetType{
-			Subnet: types.SubnetType{address, prefixlen},
+			Subnet: &types.SubnetType{address, prefixlen},
 		})
 	network.ClearNetworkIpam()
 	obj, err := c.Client.FindByUuid("network-ipam", ref.Uuid)
@@ -601,7 +601,9 @@ func (c *Controller) locatePolicyRule(policy *types.NetworkPolicy, lhs, rhs *typ
 	}}
 	rule.SrcPorts = []types.PortType{types.PortType{-1, -1}}
 	rule.DstPorts = []types.PortType{types.PortType{-1, -1}}
-	rule.ActionList.SimpleAction = "pass"
+	rule.ActionList = &types.ActionListType{
+		SimpleAction: "pass",
+	}
 
 	entries.AddPolicyRule(rule)
 	policy.SetNetworkPolicyEntries(&entries)
@@ -624,7 +626,7 @@ func (c *Controller) attachPolicy(network *types.VirtualNetwork, policy *types.N
 	}
 	network.AddNetworkPolicy(policy,
 		types.VirtualNetworkPolicyType{
-			Sequence: types.SequenceType{10, 0},
+			Sequence: &types.SequenceType{10, 0},
 		})
 	err = c.Client.Update(network)
 	if err != nil {
