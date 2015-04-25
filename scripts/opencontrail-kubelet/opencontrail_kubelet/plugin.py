@@ -4,6 +4,7 @@
 
 import argparse
 import iniparse
+import json
 import logging
 import os
 import re
@@ -59,84 +60,12 @@ class ContrailClient(object):
             virtual_router_ip_address=localip)
         self._client.virtual_router_create(vrouter)
 
-    def _create_default_security_group(self, project):
-        def _create_rule(egress, sg, prefix, ethertype):
-            local = opencontrail.AddressType(security_group='local')
-            if sg:
-                group = project.get_fq_name() + [sg]
-                addr = opencontrail.AddressType(
-                    security_group=':'.join(group))
-            elif prefix:
-                addr = opencontrail.AddressType(
-                    subnet=opencontrail.SubnetType(prefix, 0))
-
-            src = local if egress else addr
-            dst = addr if egress else local
-            return opencontrail.PolicyRuleType(
-                rule_uuid=uuid.uuid4(), direction='>', protocol='any',
-                src_addresses=[src],
-                src_ports=[opencontrail.PortType(0, 65535)],
-                dst_addresses=[dst],
-                dst_ports=[opencontrail.PortType(0, 65535)],
-                ethertype=ethertype)
-
-        rules = [
-            _create_rule(False, 'default', None, 'IPv4'),
-            _create_rule(True, None, '0.0.0.0', 'IPv4')
-        ]
-
-        sg_group = opencontrail.SecurityGroup(
-            name='default', parent_obj=project,
-            security_group_entries=opencontrail.PolicyEntriesType(rules))
-
-        self._client.security_group_create(sg_group)
-        return sg_group
-
-    def _locate_default_security_group(self, project):
-        sg_groups = project.get_security_groups()
-        for sg_group in sg_groups or []:
-            if sg_group['to'][-1] == 'default':
-                return sg_group
-        return self._create_default_security_group(project)
-
-    def LocateProject(self, project_name):
-        fqn = ['default-domain', project_name]
+    def InterfaceLookup(self, uid):
         try:
-            project = self._client.project_read(fq_name=fqn)
-        except opencontrail.NoIdError:
-            logging.debug('Creating project %s' % project_name)
-            project = opencontrail.Project(project_name)
-            self._client.project_create(project)
-
-        # self._locate_default_security_group(project)
-        return project
-
-    def LocateNetwork(self, project, network_name):
-        def _add_subnet(network, subnet):
-            fqn = project.get_fq_name() + ['default-network-ipam']
-            try:
-                ipam = self._client.network_ipam_read(fq_name=fqn)
-            except opencontrail.NoIdError:
-                ipam = opencontrail.NetworkIpam('default-network-ipam',
-                                                parent_obj=project)
-                self._client.network_ipam_create(ipam)
-            (prefix, plen) = subnet.split('/')
-            subnet = opencontrail.IpamSubnetType(
-                subnet=opencontrail.SubnetType(prefix, int(plen)))
-            network.add_network_ipam(ipam,
-                                     opencontrail.VnSubnetsType([subnet]))
-
-        fqn = project.get_fq_name() + [network_name]
-        try:
-            network = self._client.virtual_network_read(fq_name=fqn)
-        except opencontrail.NoIdError:
-            logging.debug('Creating network %s' % network_name)
-            network = opencontrail.VirtualNetwork(
-                network_name, parent_obj=project)
-            _add_subnet(network, '10.0.0.0/8')
-            self._client.virtual_network_create(network)
-
-        return network
+            vmi = self._client.virtual_machine_interface_read(id=uid)
+            return vmi
+        except NoIdError:
+            return None
 
 # end class ContrailClient
 
@@ -152,6 +81,31 @@ def docker_get_pid(docker_id):
     return int(pid_str)
 
 
+def kubelet_get_api():
+    fp = open('/etc/kubernetes/kubelet', 'r')
+    for line in fp.readlines():
+        m = re.search(r'KUBELET_API_SERVER=\"--api_servers=http://(.*)\"', line)
+        if m:
+            return m.group(1)
+    return None
+
+def getPodInfo(docker_id):
+    name = Shell.run('docker inspect -f \'{{.Name}}\' %s' % docker_id)
+    
+    # Name
+    # See: pkg/kubelet/dockertools/docker.go:ParseDockerName
+    # name_namespace_uid
+    fields = name.rstrip().split('_')
+
+    podName = fields[2]
+    uid = fields[4]
+
+    kubeapi = kubelet_get_api()
+
+    data = Shell.run('kubectl --server=%s get -o json pod %s' % (
+        kubeapi, podName))
+    return uid, json.loads(data)
+    
 def setup(pod_namespace, pod_name, docker_id):
     """
     project: pod_namespace
@@ -159,9 +113,6 @@ def setup(pod_namespace, pod_name, docker_id):
     netns: docker_id{12}
     """
     client = ContrailClient()
-    project = client.LocateProject(pod_namespace)
-    # client.LocateNetwork(pod_name)
-    network = client.LocateNetwork(project, 'default')
 
     # Kubelet::createPodInfraContainer ensures that State.Pid is set
     pid = docker_get_pid(docker_id)
@@ -176,50 +127,54 @@ def setup(pod_namespace, pod_name, docker_id):
     Shell.run('ln -sf /proc/%d/ns/net /var/run/netns/%s' % (pid, short_id))
 
     manager = LxcManager()
-    provisioner = Provisioner(api_server=client._server)
-    vm = provisioner.virtual_machine_locate(short_id)
 
     if client._net_mode == 'none':
         instance_ifname = 'veth0'
     else:
         instance_ifname = 'eth0'
 
-    vmi = provisioner.vmi_locate(vm, project, network, instance_ifname)
+    uid, podInfo = getPodInfo(docker_id)
+    # TODO: Remove the need for a vmi lookup.
+    # The lxc_manager uses the mac_address to setup the container interface.
+    # Additionally the ip-address, prefixlen and gateway are also used.
+    if not 'annotations' in podInfo:
+        logging.error('No annotations in pod %s', podInfo["metadata"]["name"])
+        sys.exit(1)
+
+    vmi = client.InterfaceLookup(podInfo["annotations"]["vmi"])
+    if vmi == None:
+        logging.error("Interface not found %s" % (
+            podInfo["annotations"]["vmi"]))
+        sys.exit(1)
+
     if client._net_mode == 'none':
         ifname = manager.create_interface(short_id, instance_ifname, vmi)
     else:
         ifname = manager.move_interface(short_id, pid, instance_ifname, vmi)
 
-    interface_register(vm, vmi, ifname)
-    (ipaddr, plen) = provisioner.get_interface_ip_prefix(vmi)
-    Shell.run('ip netns exec %s ip addr add %s/%d dev %s' % \
-              (short_id, ipaddr, plen, instance_ifname))
+    interface_register(uid, vmi, ifname)
+    provisioner = Provisioner(api_server=client._server)
+    (ipaddr, plen, gw) = provisioner.get_interface_ip_info(vmi)
+    Shell.run('ip netns exec %s ip addr add %s/32 peer %s dev %s' % \
+              (short_id, ipaddr, gw, instance_ifname))
+    Shell.run('ip netns exec %s ip route add default via %s' % \
+              (short_id, gw))
     Shell.run('ip netns exec %s ip link set %s up' %
               (short_id, instance_ifname))
 
 
 def teardown(pod_namespace, pod_name, docker_id):
     client = ContrailClient()
-    provisioner = Provisioner(api_server=client._server)
     manager = LxcManager()
     short_id = docker_id[0:11]
 
-    vm = provisioner.virtual_machine_lookup(short_id)
-    if vm is not None:
-        vmi_list = vm.get_virtual_machine_interface_back_refs()
-        for ref in vmi_list or []:
-            uuid = ref['uuid']
-            interface_unregister(uuid)
+    uid, podInfo = getPodInfo(docker_id)
+    if 'annotations' in podInfo and 'vmi' in podInfo["annotations"]:
+        vmi = podInfo["annotations"]["vmi"]
+        interface_unregister(vmi)
 
-        manager.clear_interfaces(short_id)
-
-        for ref in vmi_list:
-            provisioner.vmi_delete(ref['uuid'])
-
-        provisioner.virtual_machine_delete(vm)
-
+    manager.clear_interfaces(short_id)
     Shell.run('ip netns delete %s' % short_id)
-
 
 def main():
     logging.basicConfig(filename='/var/log/contrail/kubelet-driver.log',
