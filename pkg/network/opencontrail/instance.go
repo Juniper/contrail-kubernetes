@@ -26,11 +26,11 @@ import (
 )
 
 type InstanceManager struct {
-	client    *contrail.Client
-	allocator *AddressAllocator
+	client    contrail.ApiClient
+	allocator AddressAllocator
 }
 
-func NewInstanceManager(client *contrail.Client, allocator *AddressAllocator) *InstanceManager {
+func NewInstanceManager(client contrail.ApiClient, allocator AddressAllocator) *InstanceManager {
 	manager := new(InstanceManager)
 	manager.client = client
 	manager.allocator = allocator
@@ -115,14 +115,26 @@ func (m *InstanceManager) LocateInterface(
 
 func (m *InstanceManager) ReleaseInterface(namespace, podName string) {
 	fqn := interfaceFQName(namespace, podName)
-	uid, err := m.client.UuidByName("virtual-machine-interface", strings.Join(fqn, ":"))
+	obj, err := m.client.FindByName("virtual-machine-interface", strings.Join(fqn, ":"))
 	if err != nil {
 		glog.Errorf("Get vmi %s: %v", strings.Join(fqn, ":"), err)
 		return
 	}
-	err = m.client.DeleteByUuid("virtual-machine-interface", uid)
+	vmi := obj.(*types.VirtualMachineInterface)
+	refs, err := vmi.GetFloatingIpBackRefs()
+	if err == nil {
+		for _, ref := range refs {
+			err = m.client.DeleteByUuid("floating-ip", ref.Uuid)
+			if err != nil {
+				glog.Errorf("Delete floating-ip %s: %v", ref.Uuid, err)
+			}
+		}
+	} else {
+		glog.Errorf("Get %s floating-ip back refs: %v", podName, err)
+	}
+	err = m.client.Delete(obj)
 	if err != nil {
-		glog.Errorf("Delete vmi %s: %v", uid, err)
+		glog.Errorf("Delete vmi %s: %v", obj.GetUuid(), err)
 	}
 }
 

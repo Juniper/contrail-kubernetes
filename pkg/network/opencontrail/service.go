@@ -26,10 +26,10 @@ import (
 )
 
 type ServiceManager struct {
-	client *contrail.Client
+	client contrail.ApiClient
 }
 
-func NewServiceManager(client *contrail.Client, config *Config) *ServiceManager {
+func NewServiceManager(client contrail.ApiClient, config *Config) *ServiceManager {
 	serviceMan := new(ServiceManager)
 	serviceMan.client = client
 	return serviceMan
