@@ -41,4 +41,6 @@ type NetworkController interface {
 	AddService(obj *api.Service)
 	UpdateService(oldObj, newObj *api.Service)
 	DeleteService(obj *api.Service)
+
+	Run(shutdown chan struct{})
 }
