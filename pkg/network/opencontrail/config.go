@@ -16,11 +16,12 @@ limitations under the License.
 
 package opencontrail
 
-import ()
+import (
+	flag "github.com/spf13/pflag"
+)
 
 const (
-	DefaultDomain  = "default-domain"
-	DefaultProject = "default-domain:default-project"
+	DefaultDomain = "default-domain"
 )
 
 type Config struct {
@@ -29,36 +30,46 @@ type Config struct {
 
 	DefaultProject string
 	PublicNetwork  string
-	PublicSubnet   string
-	PrivateSubnet  string
-	// aka PortalNet
+
+	PublicSubnet  string
+	PrivateSubnet string
 	ServiceSubnet string
 
 	NetworkTag       string
 	NetworkAccessTag string
 }
 
-func (c *Config) Defaults() {
-	c.ApiAddress = "localost"
-	c.ApiPort = 8082
-
-	c.NetworkTag = "name"
-	c.NetworkAccessTag = "uses"
+func NewConfig() *Config {
+	config := &Config{
+		ApiAddress:       "localhost",
+		ApiPort:          8082,
+		DefaultProject:   "default-domain:default-project",
+		PublicNetwork:    "default-domain:default-project:Public",
+		PrivateSubnet:    "10.0.0.0/16",
+		ServiceSubnet:    "10.254.0.0/16",
+		NetworkTag:       "name",
+		NetworkAccessTag: "uses",
+	}
+	return config
 }
 
-func (c *Config) Parse() {
-
+func (c *Config) Parse(args []string) {
+	fs := flag.NewFlagSet("opencontrail", flag.ExitOnError)
+	fs.StringVar(&c.ApiAddress, "contrail_api", "localhoost",
+		"Hostname or address for the OpenContrail API server.")
+	fs.IntVar(&c.ApiPort, "contrail_port", 8082,
+		"OpenContrail API port.")
+	fs.StringVar(&c.PublicNetwork, "public_name", c.PublicNetwork,
+		"External network name.")
+	fs.StringVar(&c.PublicSubnet, "public_net", "",
+		"External network subnet prefix used when provisioning the cluster.")
+	fs.StringVar(&c.PrivateSubnet, "private_net", c.PrivateSubnet,
+		"Address range to use for private IP addresses.")
+	fs.StringVar(&c.ServiceSubnet, "portal_net", c.PrivateSubnet,
+		"Address range to use for services.")
+	fs.StringVar(&c.NetworkTag, "network_label", c.NetworkTag,
+		"Label used to specify the network used by the resource (pod or service).")
+	fs.StringVar(&c.NetworkAccessTag, "access_label", c.NetworkAccessTag,
+		"Label used to determine what services this resource (pod/rc) accesses.")
+	fs.Parse(args)
 }
-
-// // TODO(prm): use configuration file to modify parameters
-// const (
-// 	ApiAddress     = "localhost"
-// 	ApiPort        = 8082
-// 	DefaultDomain  = "default-domain"
-// 	DefaultProject = "default-domain:default-project"
-// 	PublicNetwork  = "default-domain:default-project:Public"
-// 	PublicSubnet   = "10.1.0.0/16"
-// 	PrivateSubnet  = "10.0.0.0/16"
-// 	// TODO: read from kubernetes configuration file.
-// 	ServiceSubnet = "10.254.0.0/16"
-// )

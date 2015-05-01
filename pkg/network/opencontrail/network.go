@@ -117,11 +117,17 @@ func (m *NetworkManagerImpl) initializePublicNetwork() {
 		if err != nil {
 			glog.Fatalf("%s: %v", parent, err)
 		}
-		networkId, err := config.CreateNetworkWithSubnet(
-			m.client, projectId, m.config.PublicNetwork, m.config.PublicSubnet)
+		var networkId string
+		if len(m.config.PublicSubnet) > 0 {
+			networkId, err = config.CreateNetworkWithSubnet(
+				m.client, projectId, m.config.PublicNetwork, m.config.PublicSubnet)
+		} else {
+			networkId, err = config.CreateNetwork(m.client, projectId, m.config.PublicNetwork)
+		}
 		if err != nil {
 			glog.Fatalf("%s: %v", parent, err)
 		}
+
 		glog.Infof("Created network %s", m.config.PublicNetwork)
 
 		obj, err := m.client.FindByUuid("virtual-network", networkId)
@@ -134,7 +140,9 @@ func (m *NetworkManagerImpl) initializePublicNetwork() {
 	}
 
 	// TODO(prm): Ensure that the subnet is as specified.
-	m.LocateFloatingIpPool(network, m.config.PublicNetwork, m.config.PublicSubnet)
+	if len(m.config.PublicSubnet) > 0 {
+		m.LocateFloatingIpPool(network, m.config.PublicNetwork, m.config.PublicSubnet)
+	}
 }
 
 func (m *NetworkManagerImpl) LookupNetwork(projectName, networkName string) *types.VirtualNetwork {
@@ -199,7 +207,7 @@ func (m *NetworkManagerImpl) ReleaseNetworkIfEmpty(namespace, name string) {
 }
 
 func (m *NetworkManagerImpl) LocateFloatingIp(networkName, resourceName, address string) *types.FloatingIp {
-	poolName := fmt.Sprintf("%s:%s", DefaultProject, networkName)
+	poolName := fmt.Sprintf("%s:%s", m.config.DefaultProject, networkName)
 	obj, err := m.client.FindByName("floating-ip-pool", poolName)
 	if err != nil {
 		glog.Errorf("Get floating-ip-pool %s: %v", poolName, err)
@@ -222,9 +230,9 @@ func (m *NetworkManagerImpl) LocateFloatingIp(networkName, resourceName, address
 		return fip
 	}
 
-	obj, err = m.client.FindByName("project", DefaultProject)
+	obj, err = m.client.FindByName("project", m.config.DefaultProject)
 	if err != nil {
-		glog.Errorf("Get project %s: %v", DefaultProject, err)
+		glog.Errorf("Get project %s: %v", m.config.DefaultProject, err)
 		return nil
 	}
 	project := obj.(*types.Project)

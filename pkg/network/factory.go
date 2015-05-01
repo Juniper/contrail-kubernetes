@@ -23,16 +23,14 @@ import (
 
 // Placeholder class that constructs a NetworkController
 type NetworkFactory struct {
-	Client *client.Client
 }
 
-func NewNetworkFactory(client *client.Client) *NetworkFactory {
+func NewNetworkFactory() *NetworkFactory {
 	factory := new(NetworkFactory)
-	factory.Client = client
 	return factory
 }
 
-func (f *NetworkFactory) Create() NetworkController {
+func (f *NetworkFactory) Create(client *client.Client, args []string) NetworkController {
 	// TODO(prm): read configuration in order to select plugin.
-	return opencontrail.NewController(f.Client)
+	return opencontrail.NewController(client, args)
 }

@@ -39,13 +39,13 @@ type InstanceMetadata struct {
 	Gateway string
 }
 
-func NewController(kube *kubeclient.Client) *Controller {
+func NewController(kube *kubeclient.Client, args []string) *Controller {
 	controller := new(Controller)
 	controller.eventChannel = make(chan notification, 32)
 	controller.kube = kube
 	config := new(Config)
-	controller.config = config
-	config.Parse()
+	controller.config = NewConfig()
+	controller.config.Parse(args)
 	client := contrail.NewClient(config.ApiAddress, config.ApiPort)
 	controller.client = client
 	controller.allocator = NewAddressAllocator(client, config)

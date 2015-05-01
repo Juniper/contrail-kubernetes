@@ -43,8 +43,7 @@ func NewTestController(kube kubeclient.Interface, client contrail.ApiClient, all
 	controller.kube = kube
 
 	config := new(Config)
-	controller.config = config
-	config.Defaults()
+	controller.config = NewConfig()
 
 	config.PrivateSubnet = "10.0.0.0/16"
 	controller.client = client
