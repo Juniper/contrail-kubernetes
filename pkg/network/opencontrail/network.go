@@ -27,20 +27,31 @@ import (
 	"github.com/Juniper/contrail-go-api/types"
 )
 
-type NetworkManager struct {
-	client *contrail.Client
+type NetworkManager interface {
+	LocateFloatingIpPool(network *types.VirtualNetwork, name, subnet string) *types.FloatingIpPool
+	DeleteFloatingIpPool(network *types.VirtualNetwork, name string, cascade bool) error
+	LookupNetwork(projectName, networkName string) *types.VirtualNetwork
+	LocateNetwork(project, name, subnet string) *types.VirtualNetwork
+	DeleteNetwork(*types.VirtualNetwork) error
+	ReleaseNetworkIfEmpty(namespace, name string)
+	LocateFloatingIp(networkName, resourceName, address string) *types.FloatingIp
+	GetGatewayAddress(network *types.VirtualNetwork) (string, error)
+}
+
+type NetworkManagerImpl struct {
+	client contrail.ApiClient
 	config *Config
 }
 
-func NewNetworkManager(client *contrail.Client, config *Config) *NetworkManager {
-	manager := new(NetworkManager)
+func NewNetworkManager(client contrail.ApiClient, config *Config) NetworkManager {
+	manager := new(NetworkManagerImpl)
 	manager.client = client
 	manager.config = config
 	manager.initializePublicNetwork()
 	return manager
 }
 
-func (m *NetworkManager) LocateFloatingIpPool(
+func (m *NetworkManagerImpl) LocateFloatingIpPool(
 	network *types.VirtualNetwork, name, subnet string) *types.FloatingIpPool {
 	fqn := network.GetFQName()
 	fqn = AppendConst(fqn[0:len(fqn)-1], name)
@@ -66,7 +77,37 @@ func (m *NetworkManager) LocateFloatingIpPool(
 	return pool
 }
 
-func (m *NetworkManager) initializePublicNetwork() {
+func (m *NetworkManagerImpl) floatingIpPoolDeleteChildren(pool *types.FloatingIpPool) error {
+	fips, err := pool.GetFloatingIps()
+	if err != nil {
+		glog.Errorf("Get floating-ip-pool %s: %v", pool.GetName(), err)
+		return err
+	}
+	for _, fip := range fips {
+		err := m.client.DeleteByUuid("floating-ip", fip.Uuid)
+		if err != nil {
+			glog.Errorf("Delete floating-ip %s: %v", fip.Uuid, err)
+		}
+	}
+	return nil
+}
+func (m *NetworkManagerImpl) DeleteFloatingIpPool(network *types.VirtualNetwork, name string, cascade bool) error {
+	networkName := network.GetFQName()
+	fqn := AppendConst(networkName[0:len(networkName)-1], name)
+	obj, err := m.client.FindByName("floating-ip-pool", strings.Join(fqn, ":"))
+	if err != nil {
+		glog.Errorf("Get floating-ip-pool %s: %v", name, err)
+		return err
+	}
+	if cascade {
+		pool := obj.(*types.FloatingIpPool)
+		m.floatingIpPoolDeleteChildren(pool)
+	}
+	m.client.Delete(obj)
+	return nil
+}
+
+func (m *NetworkManagerImpl) initializePublicNetwork() {
 	var network *types.VirtualNetwork
 	obj, err := m.client.FindByName("virtual-network", m.config.PublicNetwork)
 	if err != nil {
@@ -96,7 +137,7 @@ func (m *NetworkManager) initializePublicNetwork() {
 	m.LocateFloatingIpPool(network, m.config.PublicNetwork, m.config.PublicSubnet)
 }
 
-func (m *NetworkManager) LookupNetwork(projectName, networkName string) *types.VirtualNetwork {
+func (m *NetworkManagerImpl) LookupNetwork(projectName, networkName string) *types.VirtualNetwork {
 	fqn := strings.Split(projectName, ":")
 	fqn = AppendConst(fqn, networkName)
 	obj, err := m.client.FindByName("virtual-network", strings.Join(fqn, ":"))
@@ -107,7 +148,7 @@ func (m *NetworkManager) LookupNetwork(projectName, networkName string) *types.V
 	return obj.(*types.VirtualNetwork)
 }
 
-func (m *NetworkManager) LocateNetwork(project, name, subnet string) *types.VirtualNetwork {
+func (m *NetworkManagerImpl) LocateNetwork(project, name, subnet string) *types.VirtualNetwork {
 	fqn := append(strings.Split(project, ":"), name)
 	fqname := strings.Join(fqn, ":")
 
@@ -136,7 +177,7 @@ func (m *NetworkManager) LocateNetwork(project, name, subnet string) *types.Virt
 	return obj.(*types.VirtualNetwork)
 }
 
-func (m *NetworkManager) ReleaseNetworkIfEmpty(namespace, name string) {
+func (m *NetworkManagerImpl) ReleaseNetworkIfEmpty(namespace, name string) {
 	fqn := []string{DefaultDomain, namespace, name}
 	obj, err := m.client.FindByName("virtual-network", strings.Join(fqn, ":"))
 	if err != nil {
@@ -157,7 +198,7 @@ func (m *NetworkManager) ReleaseNetworkIfEmpty(namespace, name string) {
 	}
 }
 
-func (m *NetworkManager) LocateFloatingIp(networkName, resourceName, address string) *types.FloatingIp {
+func (m *NetworkManagerImpl) LocateFloatingIp(networkName, resourceName, address string) *types.FloatingIp {
 	poolName := fmt.Sprintf("%s:%s", DefaultProject, networkName)
 	obj, err := m.client.FindByName("floating-ip-pool", poolName)
 	if err != nil {
@@ -201,6 +242,27 @@ func (m *NetworkManager) LocateFloatingIp(networkName, resourceName, address str
 	return fip
 }
 
-func (m *NetworkManager) GetGatewayAddress(network *types.VirtualNetwork) (string, error) {
+func (m *NetworkManagerImpl) GetGatewayAddress(network *types.VirtualNetwork) (string, error) {
 	return "", nil
+}
+
+func (m *NetworkManagerImpl) DeleteNetwork(network *types.VirtualNetwork) error {
+	refs, err := network.GetNetworkPolicyRefs()
+	if err != nil {
+		glog.Errorf("Get %s policy refs: %v", network.GetName(), err)
+	}
+	m.client.Delete(network)
+
+	for _, ref := range refs {
+		obj, err := m.client.FindByUuid("network-policy", ref.Uuid)
+		if err != nil {
+			glog.Errorf("Get policy %s: %v", ref.Uuid, err)
+		}
+		policy := obj.(*types.NetworkPolicy)
+		npRefs, err := policy.GetVirtualNetworkBackRefs()
+		if len(npRefs) == 0 {
+			m.client.Delete(policy)
+		}
+	}
+	return nil
 }

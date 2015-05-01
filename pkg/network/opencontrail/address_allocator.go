@@ -26,9 +26,14 @@ import (
 	"github.com/Juniper/contrail-go-api/types"
 )
 
+type AddressAllocator interface {
+	LocateIpAddress(uid string) (string, error)
+	ReleaseIpAddress(uid string)
+}
+
 // Allocate an unique address for each Pod.
-type AddressAllocator struct {
-	client        *contrail.Client
+type AddressAllocatorImpl struct {
+	client        contrail.ApiClient
 	network       *types.VirtualNetwork
 	privateSubnet string
 }
@@ -37,15 +42,15 @@ const (
 	AddressAllocationNetwork = "default-domain:default-project:addr-alloc"
 )
 
-func NewAddressAllocator(client *contrail.Client, config *Config) *AddressAllocator {
-	allocator := new(AddressAllocator)
+func NewAddressAllocator(client contrail.ApiClient, config *Config) AddressAllocator {
+	allocator := new(AddressAllocatorImpl)
 	allocator.client = client
 	allocator.privateSubnet = config.PrivateSubnet
 	allocator.initializeAllocator()
 	return allocator
 }
 
-func (a *AddressAllocator) initializeAllocator() {
+func (a *AddressAllocatorImpl) initializeAllocator() {
 	obj, err := a.client.FindByName("virtual-network", AddressAllocationNetwork)
 	if err == nil {
 		a.network = obj.(*types.VirtualNetwork)
@@ -66,7 +71,7 @@ func (a *AddressAllocator) initializeAllocator() {
 	glog.Infof("Created network %s", AddressAllocationNetwork)
 }
 
-func (a *AddressAllocator) allocateIpAddress(uid string) (contrail.IObject, error) {
+func (a *AddressAllocatorImpl) allocateIpAddress(uid string) (contrail.IObject, error) {
 	ipObj := new(types.InstanceIp)
 	ipObj.SetName(uid)
 	ipObj.AddVirtualNetwork(a.network)
@@ -83,7 +88,7 @@ func (a *AddressAllocator) allocateIpAddress(uid string) (contrail.IObject, erro
 	return obj, err
 }
 
-func (a *AddressAllocator) LocateIpAddress(uid string) (string, error) {
+func (a *AddressAllocatorImpl) LocateIpAddress(uid string) (string, error) {
 	obj, err := a.client.FindByName("instance-ip", uid)
 	if err != nil {
 		obj, err = a.allocateIpAddress(uid)
@@ -96,7 +101,7 @@ func (a *AddressAllocator) LocateIpAddress(uid string) (string, error) {
 	return ipObj.GetInstanceIpAddress(), nil
 }
 
-func (a *AddressAllocator) ReleaseIpAddress(uid string) {
+func (a *AddressAllocatorImpl) ReleaseIpAddress(uid string) {
 	objid, err := a.client.UuidByName("instance-ip", uid)
 	if err != nil {
 		err = a.client.DeleteByUuid("instance-ip", objid)

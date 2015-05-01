@@ -26,10 +26,10 @@ import (
 )
 
 type NamespaceManager struct {
-	client *contrail.Client
+	client contrail.ApiClient
 }
 
-func NewNamespaceManager(client *contrail.Client) *NamespaceManager {
+func NewNamespaceManager(client contrail.ApiClient) *NamespaceManager {
 	manager := new(NamespaceManager)
 	manager.client = client
 	return manager

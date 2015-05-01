@@ -38,18 +38,18 @@ import (
 // - Services allocate floating-ip addresses.
 
 type Controller struct {
-	kube *kubeclient.Client
+	kube kubeclient.Interface
 
-	client *contrail.Client
+	client contrail.ApiClient
 	config *Config
 
 	eventChannel chan notification
 
 	instanceMgr  *InstanceManager
-	networkMgr   *NetworkManager
+	networkMgr   NetworkManager
 	serviceMgr   *ServiceManager
 	namespaceMgr *NamespaceManager
-	allocator    *AddressAllocator
+	allocator    AddressAllocator
 }
 
 type eventType string
@@ -148,14 +148,18 @@ func (c *Controller) getPodNetwork(pod *api.Pod) *types.VirtualNetwork {
 	return c.networkMgr.LocateNetwork(pod.Namespace, name, c.config.PrivateSubnet)
 }
 
-func (c *Controller) getServiceNetwork(pod *api.Pod) *types.VirtualNetwork {
-	name, ok := pod.Labels[c.config.NetworkTag]
+func (c *Controller) serviceNetworkName(labels map[string]string) string {
+	name, ok := labels[c.config.NetworkTag]
 	if !ok {
-		name = "services"
-	} else {
-		name = fmt.Sprintf(ServiceNetworkFmt, name)
+		return "services"
 	}
-	network := c.networkMgr.LocateNetwork(pod.Namespace, name, c.config.ServiceSubnet)
+
+	return fmt.Sprintf(ServiceNetworkFmt, name)
+}
+
+func (c *Controller) locateServiceNetwork(service *api.Service) *types.VirtualNetwork {
+	name := c.serviceNetworkName(service.Labels)
+	network := c.networkMgr.LocateNetwork(service.Namespace, name, c.config.ServiceSubnet)
 	c.networkMgr.LocateFloatingIpPool(network, name, c.config.ServiceSubnet)
 	return network
 }
@@ -242,7 +246,7 @@ func (c *Controller) addService(service *api.Service) {
 	var serviceNetwork *types.VirtualNetwork = nil
 	// Allocate this IP address on the service network.
 	if service.Spec.PortalIP != "" {
-		serviceNetwork = c.getServiceNetwork(&pods.Items[0])
+		serviceNetwork = c.locateServiceNetwork(service)
 		if serviceNetwork != nil {
 			serviceIp = c.networkMgr.LocateFloatingIp(
 				serviceNetwork.GetName(), service.Name, service.Spec.PortalIP)
@@ -283,4 +287,12 @@ func (c *Controller) addService(service *api.Service) {
 }
 
 func (c *Controller) deleteService(service *api.Service) {
+	networkName := c.serviceNetworkName(service.Labels)
+	network := c.networkMgr.LookupNetwork(service.Namespace, networkName)
+	if network == nil {
+		return
+	}
+
+	c.networkMgr.DeleteFloatingIpPool(network, networkName, true)
+	c.networkMgr.DeleteNetwork(network)
 }
