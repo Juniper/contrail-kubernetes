@@ -179,5 +179,6 @@ func (m *NetworkManager) Run(_ []string) error {
 	go m.NamespaceInformer.Run(m.Shutdown)
 	go m.RCInformer.Run(m.Shutdown)
 	go m.ServiceInformer.Run(m.Shutdown)
+	go m.Controller.Run(m.Shutdown)
 	select {}
 }
