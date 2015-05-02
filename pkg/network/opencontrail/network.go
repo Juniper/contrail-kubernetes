@@ -118,7 +118,7 @@ func (m *NetworkManagerImpl) initializePublicNetwork() {
 			glog.Fatalf("%s: %v", parent, err)
 		}
 		var networkId string
-		networkName := fqn[len(m.config.PublicNetwork)-1]
+		networkName := fqn[len(fqn)-1]
 		if len(m.config.PublicSubnet) > 0 {
 			networkId, err = config.CreateNetworkWithSubnet(
 				m.client, projectId, networkName, m.config.PublicSubnet)
