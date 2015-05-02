@@ -43,9 +43,9 @@ func NewController(kube *kubeclient.Client, args []string) *Controller {
 	controller := new(Controller)
 	controller.eventChannel = make(chan notification, 32)
 	controller.kube = kube
-	config := new(Config)
-	controller.config = NewConfig()
-	controller.config.Parse(args)
+	config := NewConfig()
+	controller.config = config
+	config.Parse(args)
 	client := contrail.NewClient(config.ApiAddress, config.ApiPort)
 	controller.client = client
 	controller.allocator = NewAddressAllocator(client, config)

@@ -55,7 +55,7 @@ func NewConfig() *Config {
 
 func (c *Config) Parse(args []string) {
 	fs := flag.NewFlagSet("opencontrail", flag.ExitOnError)
-	fs.StringVar(&c.ApiAddress, "contrail_api", "localhoost",
+	fs.StringVar(&c.ApiAddress, "contrail_api", c.ApiAddress,
 		"Hostname or address for the OpenContrail API server.")
 	fs.IntVar(&c.ApiPort, "contrail_port", 8082,
 		"OpenContrail API port.")
