@@ -118,11 +118,12 @@ func (m *NetworkManagerImpl) initializePublicNetwork() {
 			glog.Fatalf("%s: %v", parent, err)
 		}
 		var networkId string
+		networkName := fqn[len(m.config.PublicNetwork)-1]
 		if len(m.config.PublicSubnet) > 0 {
 			networkId, err = config.CreateNetworkWithSubnet(
-				m.client, projectId, m.config.PublicNetwork, m.config.PublicSubnet)
+				m.client, projectId, networkName, m.config.PublicSubnet)
 		} else {
-			networkId, err = config.CreateNetwork(m.client, projectId, m.config.PublicNetwork)
+			networkId, err = config.CreateNetwork(m.client, projectId, networkName)
 		}
 		if err != nil {
 			glog.Fatalf("%s: %v", parent, err)
