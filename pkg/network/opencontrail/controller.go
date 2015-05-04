@@ -90,6 +90,10 @@ func (c *Controller) Run(shutdown chan struct{}) {
 				c.addService(event.object.(*api.Service))
 			case evDeleteService:
 				c.deleteService(event.object.(*api.Service))
+			case evAddNamespace:
+				c.addNamespace(event.object.(*api.Namespace))
+			case evDeleteNamespace:
+				c.deleteNamespace(event.object.(*api.Namespace))
 			}
 		case <-shutdown:
 			return
@@ -295,4 +299,12 @@ func (c *Controller) deleteService(service *api.Service) {
 
 	c.networkMgr.DeleteFloatingIpPool(network, networkName, true)
 	c.networkMgr.DeleteNetwork(network)
+}
+
+func (c *Controller) addNamespace(namespace *api.Namespace) {
+	c.namespaceMgr.LocateNamespace(namespace.Name, string(namespace.ObjectMeta.UID))
+}
+
+func (c *Controller) deleteNamespace(namespace *api.Namespace) {
+	c.namespaceMgr.DeleteNamespace(namespace.Name)
 }

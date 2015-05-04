@@ -61,3 +61,15 @@ func (m *NamespaceManager) LocateNamespace(name, uid string) *types.Project {
 	}
 	return project
 }
+
+func (m *NamespaceManager) DeleteNamespace(name string) error {
+	fqn := []string{DefaultDomain, name}
+
+	obj, err := m.client.FindByName("project", strings.Join(fqn, ":"))
+	if err != nil {
+		return err
+	}
+
+	m.client.Delete(obj)
+	return nil
+}

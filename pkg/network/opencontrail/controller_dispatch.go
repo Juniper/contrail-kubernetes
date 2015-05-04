@@ -84,13 +84,15 @@ func (c *Controller) DeleteService(service *api.Service) {
 	c.eventChannel <- notification{evDeleteService, service}
 }
 
-func (c *Controller) AddNamespace(obj *api.Namespace) {
+func (c *Controller) AddNamespace(namespace *api.Namespace) {
+	c.eventChannel <- notification{evAddNamespace, namespace}
 }
 
 func (c *Controller) UpdateNamespace(oldObj, newObj *api.Namespace) {
 }
 
-func (c *Controller) DeleteNamespace(obj *api.Namespace) {
+func (c *Controller) DeleteNamespace(namespace *api.Namespace) {
+	c.eventChannel <- notification{evDeleteNamespace, namespace}
 }
 
 func (c *Controller) AddReplicationController(rc *api.ReplicationController) {

@@ -23,7 +23,7 @@ import (
 
 	"code.google.com/p/go-uuid/uuid"
 
-	_ "github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/assert"
 	_ "github.com/stretchr/testify/mock"
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
@@ -174,4 +174,66 @@ func TestPodDelete(t *testing.T) {
 	// The floating-ip will not be deleted since we don't currently have a
 	// good way to set the vmi floating-ip back refs.
 	allocator.AssertExpectations(t)
+}
+
+func TestNamespaceAdd(t *testing.T) {
+	client := new(contrail_mocks.ApiClient)
+	client.Init()
+	allocator := new(mocks.AddressAllocator)
+	networkMgr := new(mocks.NetworkManager)
+	controller := NewTestController(nil, client, allocator, networkMgr)
+
+	namespace := &api.Namespace{
+		ObjectMeta: api.ObjectMeta{
+			Name: "netns",
+			UID:  kubetypes.UID(uuid.New()),
+		},
+	}
+
+	controller.AddNamespace(namespace)
+
+	shutdown := make(chan struct{})
+	go controller.Run(shutdown)
+	time.Sleep(100 * time.Millisecond)
+	type shutdownMsg struct {
+	}
+	shutdown <- shutdownMsg{}
+
+	obj, err := client.FindByUuid("project", string(namespace.ObjectMeta.UID))
+	if err != nil {
+		t.Fatalf("Namespace %s: Not found", string(namespace.ObjectMeta.UID))
+	}
+	assert.Equal(t, namespace.Name, obj.GetName())
+}
+
+func TestNamespaceDelete(t *testing.T) {
+	client := new(contrail_mocks.ApiClient)
+	client.Init()
+	allocator := new(mocks.AddressAllocator)
+	networkMgr := new(mocks.NetworkManager)
+	controller := NewTestController(nil, client, allocator, networkMgr)
+
+	namespace := &api.Namespace{
+		ObjectMeta: api.ObjectMeta{
+			Name: "netns",
+			UID:  kubetypes.UID(uuid.New()),
+		},
+	}
+
+	project := new(types.Project)
+	project.SetFQName("domain", []string{DefaultDomain, "netns"})
+	project.SetUuid(string(namespace.ObjectMeta.UID))
+	client.Create(project)
+
+	controller.DeleteNamespace(namespace)
+
+	shutdown := make(chan struct{})
+	go controller.Run(shutdown)
+	time.Sleep(100 * time.Millisecond)
+	type shutdownMsg struct {
+	}
+	shutdown <- shutdownMsg{}
+
+	_, err := client.FindByUuid("project", string(namespace.ObjectMeta.UID))
+	assert.NotNil(t, err)
 }
