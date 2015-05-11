@@ -142,7 +142,9 @@ func (m *NetworkManagerImpl) initializePublicNetwork() {
 
 	// TODO(prm): Ensure that the subnet is as specified.
 	if len(m.config.PublicSubnet) > 0 {
-		m.LocateFloatingIpPool(network, m.config.PublicNetwork, m.config.PublicSubnet)
+		fqn := strings.Split(m.config.PublicNetwork, ":")
+		poolName := fqn[len(fqn)-1]
+		m.LocateFloatingIpPool(network, poolName, m.config.PublicSubnet)
 	}
 }
 
