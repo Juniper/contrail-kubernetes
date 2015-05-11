@@ -50,7 +50,7 @@ func NewTestController(kube kubeclient.Interface, client contrail.ApiClient, all
 	controller.allocator = allocator
 	controller.instanceMgr = NewInstanceManager(client, controller.allocator)
 	controller.networkMgr = networkMgr
-	controller.serviceMgr = NewServiceManager(client, config)
+	controller.serviceMgr = NewServiceManager(client, config, networkMgr)
 	controller.namespaceMgr = NewNamespaceManager(client)
 	return controller
 }
@@ -144,7 +144,7 @@ func TestPodDelete(t *testing.T) {
 	client.Create(vmi)
 
 	ipObj := new(types.InstanceIp)
-	ipObj.SetFQName("", fqn)
+	ipObj.SetName("testns_test")
 	client.Create(ipObj)
 
 	fip := new(types.FloatingIp)

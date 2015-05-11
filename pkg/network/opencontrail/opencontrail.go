@@ -51,7 +51,7 @@ func NewController(kube *kubeclient.Client, args []string) *Controller {
 	controller.allocator = NewAddressAllocator(client, config)
 	controller.instanceMgr = NewInstanceManager(client, controller.allocator)
 	controller.networkMgr = NewNetworkManager(client, config)
-	controller.serviceMgr = NewServiceManager(client, config)
+	controller.serviceMgr = NewServiceManager(client, config, controller.networkMgr)
 	controller.namespaceMgr = NewNamespaceManager(client)
 	return controller
 }

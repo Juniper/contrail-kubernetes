@@ -17,9 +17,6 @@ limitations under the License.
 package opencontrail
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/golang/glog"
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
@@ -47,7 +44,7 @@ type Controller struct {
 
 	instanceMgr  *InstanceManager
 	networkMgr   NetworkManager
-	serviceMgr   *ServiceManager
+	serviceMgr   ServiceManager
 	namespaceMgr *NamespaceManager
 	allocator    AddressAllocator
 }
@@ -70,10 +67,6 @@ type notification struct {
 	event  eventType
 	object runtime.Object
 }
-
-const (
-	ServiceNetworkFmt = "service-%s"
-)
 
 func (c *Controller) Run(shutdown chan struct{}) {
 	for {
@@ -152,20 +145,13 @@ func (c *Controller) getPodNetwork(pod *api.Pod) *types.VirtualNetwork {
 	return c.networkMgr.LocateNetwork(pod.Namespace, name, c.config.PrivateSubnet)
 }
 
-func (c *Controller) serviceNetworkName(labels map[string]string) string {
+func (c *Controller) serviceName(labels map[string]string) string {
 	name, ok := labels[c.config.NetworkTag]
 	if !ok {
-		return "services"
+		return "default"
 	}
 
-	return fmt.Sprintf(ServiceNetworkFmt, name)
-}
-
-func (c *Controller) locateServiceNetwork(service *api.Service) *types.VirtualNetwork {
-	name := c.serviceNetworkName(service.Labels)
-	network := c.networkMgr.LocateNetwork(service.Namespace, name, c.config.ServiceSubnet)
-	c.networkMgr.LocateFloatingIpPool(network, name, c.config.ServiceSubnet)
-	return network
+	return name
 }
 
 func (c *Controller) ensureNamespace(namespaceName string) {
@@ -207,14 +193,7 @@ func (c *Controller) updatePod(pod *api.Pod) {
 
 	policyTag, ok := pod.Labels[c.config.NetworkAccessTag]
 	if ok {
-		var policyName string
-		if pod.GenerateName == "" {
-			policyName = pod.Name
-		} else {
-			policyName = strings.TrimRight(pod.GenerateName, "-")
-		}
-		serviceName := fmt.Sprintf(ServiceNetworkFmt, policyTag)
-		c.serviceMgr.NetworkAccess(network, policyName, serviceName)
+		c.serviceMgr.Connect(pod.Namespace, policyTag, network)
 	}
 }
 
@@ -234,6 +213,11 @@ func (c *Controller) deletePod(pod *api.Pod) {
 // to the backends.
 func (c *Controller) addService(service *api.Service) {
 	glog.Infof("Add Service %s", service.Name)
+	serviceName := c.serviceName(service.Labels)
+	err := c.serviceMgr.Create(service.Namespace, serviceName)
+	if err != nil {
+		return
+	}
 
 	pods, err := c.kube.Pods(service.Namespace).List(
 		labels.Set(service.Spec.Selector).AsSelector())
@@ -247,11 +231,10 @@ func (c *Controller) addService(service *api.Service) {
 	}
 
 	var serviceIp *types.FloatingIp = nil
-	var serviceNetwork *types.VirtualNetwork = nil
 	// Allocate this IP address on the service network.
 	if service.Spec.PortalIP != "" {
-		serviceNetwork = c.locateServiceNetwork(service)
-		if serviceNetwork != nil {
+		serviceNetwork, err := c.serviceMgr.LocateServiceNetwork(service.Namespace, serviceName)
+		if err == nil {
 			serviceIp = c.networkMgr.LocateFloatingIp(
 				serviceNetwork.GetName(), service.Name, service.Spec.PortalIP)
 		}
@@ -291,14 +274,7 @@ func (c *Controller) addService(service *api.Service) {
 }
 
 func (c *Controller) deleteService(service *api.Service) {
-	networkName := c.serviceNetworkName(service.Labels)
-	network := c.networkMgr.LookupNetwork(service.Namespace, networkName)
-	if network == nil {
-		return
-	}
-
-	c.networkMgr.DeleteFloatingIpPool(network, networkName, true)
-	c.networkMgr.DeleteNetwork(network)
+	c.serviceMgr.Delete(service.Namespace, c.serviceName(service.Labels))
 }
 
 func (c *Controller) addNamespace(namespace *api.Namespace) {

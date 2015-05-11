@@ -17,6 +17,7 @@ limitations under the License.
 package opencontrail
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/golang/glog"
@@ -25,32 +26,47 @@ import (
 	"github.com/Juniper/contrail-go-api/types"
 )
 
-type ServiceManager struct {
-	client contrail.ApiClient
+type ServiceManager interface {
+	Create(tenant, serviceName string) error
+	Delete(tenant, serviceName string) error
+	Connect(tenant, serviceName string, network *types.VirtualNetwork) error
+	Disconnect(tenant, serviceName string, network *types.VirtualNetwork) error
+	LocateServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error)
 }
 
-func NewServiceManager(client contrail.ApiClient, config *Config) *ServiceManager {
-	serviceMan := new(ServiceManager)
-	serviceMan.client = client
-	return serviceMan
+type ServiceManagerImpl struct {
+	client     contrail.ApiClient
+	config     *Config
+	networkMgr NetworkManager
 }
 
-func (m *ServiceManager) locatePolicyRule(policy *types.NetworkPolicy, lhs, rhs *types.VirtualNetwork) {
-	lhsName := strings.Join(lhs.GetFQName(), ":")
+const (
+	ServiceNetworkFmt = "service-%s"
+)
+
+func NewServiceManager(client contrail.ApiClient, config *Config, networkMgr NetworkManager) ServiceManager {
+	serviceMgr := new(ServiceManagerImpl)
+	serviceMgr.client = client
+	serviceMgr.config = config
+	serviceMgr.networkMgr = networkMgr
+	return serviceMgr
+}
+
+func (m *ServiceManagerImpl) locatePolicyRule(policy *types.NetworkPolicy, rhs *types.VirtualNetwork) error {
 	rhsName := strings.Join(rhs.GetFQName(), ":")
 
 	entries := policy.GetNetworkPolicyEntries()
 	for _, rule := range entries.PolicyRule {
-		if rule.SrcAddresses[0].VirtualNetwork == lhsName &&
+		if rule.SrcAddresses[0].VirtualNetwork == "any" &&
 			rule.DstAddresses[0].VirtualNetwork == rhsName {
-			return
+			return nil
 		}
 	}
 	rule := new(types.PolicyRuleType)
 	rule.Protocol = "any"
 	rule.Direction = "<>"
 	rule.SrcAddresses = []types.AddressType{types.AddressType{
-		VirtualNetwork: lhsName,
+		VirtualNetwork: "any",
 	}}
 	rule.DstAddresses = []types.AddressType{types.AddressType{
 		VirtualNetwork: rhsName,
@@ -66,18 +82,20 @@ func (m *ServiceManager) locatePolicyRule(policy *types.NetworkPolicy, lhs, rhs 
 	err := m.client.Update(policy)
 	if err != nil {
 		glog.Errorf("policy-rule: %v", err)
+		return err
 	}
+	return nil
 }
 
-func (m *ServiceManager) attachPolicy(network *types.VirtualNetwork, policy *types.NetworkPolicy) {
+func (m *ServiceManagerImpl) attachPolicy(network *types.VirtualNetwork, policy *types.NetworkPolicy) error {
 	refs, err := network.GetNetworkPolicyRefs()
 	if err != nil {
 		glog.Errorf("get network policy-refs %s: %v", network.GetName(), err)
-		return
+		return err
 	}
 	for _, ref := range refs {
 		if ref.Uuid == policy.GetUuid() {
-			return
+			return nil
 		}
 	}
 	network.AddNetworkPolicy(policy,
@@ -87,39 +105,114 @@ func (m *ServiceManager) attachPolicy(network *types.VirtualNetwork, policy *typ
 	err = m.client.Update(network)
 	if err != nil {
 		glog.Errorf("Update network %s policies: %v", network.GetName(), err)
+		return err
 	}
+	return nil
 }
 
-// create a policy that connects two networks.
-func (m *ServiceManager) NetworkAccess(
-	network *types.VirtualNetwork, policyName, policyTag string) {
-	glog.Infof("policy %s: %s <=> %s", policyName, network.GetName(), policyTag)
-	networkFQN := network.GetFQName()
-	fqn := AppendConst(networkFQN[0:len(networkFQN)-1], policyName)
+func (m *ServiceManagerImpl) detachPolicy(network *types.VirtualNetwork, policyName string) error {
+	refs, err := network.GetNetworkPolicyRefs()
+	if err != nil {
+		glog.Errorf("get network policy-refs %s: %v", network.GetName(), err)
+		return err
+	}
+	for _, ref := range refs {
+		if strings.Join(ref.To, ":") == policyName {
+			network.DeleteNetworkPolicy(ref.Uuid)
+			err := m.client.Update(network)
+			if err != nil {
+				glog.Errorf("Update network %s policies: %v", network.GetName(), err)
+			}
+			return err
+		}
+	}
+	return nil
+}
 
+func (m *ServiceManagerImpl) LocateServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error) {
+	networkName := fmt.Sprintf(ServiceNetworkFmt, serviceName)
+	network := m.networkMgr.LocateNetwork(tenant, networkName, m.config.ServiceSubnet)
+	m.networkMgr.LocateFloatingIpPool(network, serviceName, m.config.ServiceSubnet)
+	return network, nil
+}
+
+func (m *ServiceManagerImpl) locatePolicy(tenant, serviceName string) (*types.NetworkPolicy, error) {
 	var policy *types.NetworkPolicy = nil
-	obj, err := m.client.FindByName("network-policy", strings.Join(fqn, ":"))
 
+	fqn := []string{DefaultDomain, tenant, serviceName}
+	obj, err := m.client.FindByName("network-policy", strings.Join(fqn, ":"))
 	if err != nil {
 		policy = new(types.NetworkPolicy)
 		policy.SetFQName("project", fqn)
 		err = m.client.Create(policy)
 		if err != nil {
-			glog.Errorf("Create policy %s: %v", policyName, err)
-			return
+			glog.Errorf("Create policy %s: %v", strings.Join(fqn, ":"), err)
+			return nil, err
 		}
 	} else {
 		policy = obj.(*types.NetworkPolicy)
 	}
+	return policy, nil
+}
 
-	rhsName := AppendConst(networkFQN[0:len(networkFQN)-1], policyTag)
-	obj, err = m.client.FindByName("virtual-network", strings.Join(rhsName, ":"))
+// Attach the network to the service policy.
+func (m *ServiceManagerImpl) Connect(tenant, serviceName string, network *types.VirtualNetwork) error {
+	policy, err := m.locatePolicy(tenant, serviceName)
 	if err != nil {
-		glog.Errorf("GET virtual-network %s: %v", policyTag, err)
-		return
+		return err
 	}
-	rhsNetwork := obj.(*types.VirtualNetwork)
-	m.locatePolicyRule(policy, network, rhsNetwork)
 	m.attachPolicy(network, policy)
-	m.attachPolicy(rhsNetwork, policy)
+	return nil
+}
+
+func (m *ServiceManagerImpl) Disconnect(tenant, serviceName string, network *types.VirtualNetwork) error {
+	fqn := []string{DefaultDomain, tenant, serviceName}
+	return m.detachPolicy(network, strings.Join(fqn, ":"))
+}
+
+func (m *ServiceManagerImpl) Create(tenant, serviceName string) error {
+	network, err := m.LocateServiceNetwork(tenant, serviceName)
+	if err != nil {
+		return err
+	}
+	policy, err := m.locatePolicy(tenant, serviceName)
+	if err != nil {
+		return nil
+	}
+	m.locatePolicyRule(policy, network)
+	m.attachPolicy(network, policy)
+	return nil
+}
+
+func (m *ServiceManagerImpl) Delete(tenant, serviceName string) error {
+	// Delete network
+	networkName := fmt.Sprintf(ServiceNetworkFmt, serviceName)
+	network := m.networkMgr.LookupNetwork(tenant, networkName)
+	if network != nil {
+		m.networkMgr.DeleteFloatingIpPool(network, networkName, true)
+		m.networkMgr.DeleteNetwork(network)
+	}
+
+	// Disassociate policy
+	fqn := []string{DefaultDomain, tenant, serviceName}
+	obj, err := m.client.FindByName("network-policy", strings.Join(fqn, ":"))
+	if err != nil {
+		return err
+	}
+	policy := obj.(*types.NetworkPolicy)
+	refs, err := policy.GetVirtualNetworkBackRefs()
+	if err == nil {
+		for _, ref := range refs {
+			netObj, err := m.client.FindByUuid("virtual-network", ref.Uuid)
+			if err != nil {
+				glog.Errorf("Get network %s: %v", strings.Join(ref.To, ":"), err)
+				continue
+			}
+			m.detachPolicy(netObj.(*types.VirtualNetwork), strings.Join(policy.GetFQName(), ":"))
+		}
+	}
+
+	// Delete policy
+	err = m.client.DeleteByUuid("network-policy", policy.GetUuid())
+	return err
 }

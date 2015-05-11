@@ -37,23 +37,23 @@ func NewInstanceManager(client contrail.ApiClient, allocator AddressAllocator) *
 	return manager
 }
 
-func instanceFQName(namespace, podName string) []string {
-	fqn := []string{DefaultDomain, namespace, podName}
+func instanceFQName(tenant, podName string) []string {
+	fqn := []string{DefaultDomain, tenant, podName}
 	return fqn
 }
 
-func (m *InstanceManager) LocateInstance(namespace, podName, uid string) *types.VirtualMachine {
+func (m *InstanceManager) LocateInstance(tenant, podName, uid string) *types.VirtualMachine {
 	obj, err := m.client.FindByUuid("virtual-machine", string(uid))
 	if err == nil {
 		return obj.(*types.VirtualMachine)
 	}
 
 	instance := new(types.VirtualMachine)
-	instance.SetFQName("project", instanceFQName(namespace, podName))
-	instance.SetUuid(string(uid))
+	instance.SetFQName("project", instanceFQName(tenant, podName))
+	instance.SetUuid(uid)
 	err = m.client.Create(instance)
 	if err != nil {
-		glog.Errorf("Create %s: %v", podName)
+		glog.Errorf("Create %s: %v", podName, err)
 		return nil
 	}
 	return instance
@@ -64,15 +64,14 @@ func (m *InstanceManager) DeleteInstance(uid string) error {
 	return err
 }
 
-func interfaceFQName(namespace, podName string) []string {
-	fqn := []string{DefaultDomain, namespace, podName}
+func interfaceFQName(tenant, podName string) []string {
+	fqn := []string{DefaultDomain, tenant, podName}
 	return fqn
 }
 
-func (m *InstanceManager) LookupInterface(namespace, podName string) *types.VirtualMachineInterface {
-	fqn := interfaceFQName(namespace, podName)
-	obj, err := m.client.FindByName(
-		"virtual-machine-interface", strings.Join(fqn, ":"))
+func (m *InstanceManager) LookupInterface(tenant, podName string) *types.VirtualMachineInterface {
+	fqn := interfaceFQName(tenant, podName)
+	obj, err := m.client.FindByName("virtual-machine-interface", strings.Join(fqn, ":"))
 	if err != nil {
 		glog.Infof("Get vmi %s: %v", podName, err)
 		return nil
@@ -82,8 +81,8 @@ func (m *InstanceManager) LookupInterface(namespace, podName string) *types.Virt
 
 func (m *InstanceManager) LocateInterface(
 	network *types.VirtualNetwork, instance *types.VirtualMachine) *types.VirtualMachineInterface {
-	namespace := instance.GetFQName()[len(instance.GetFQName())-2]
-	fqn := interfaceFQName(namespace, instance.GetName())
+	tenant := instance.GetFQName()[len(instance.GetFQName())-2]
+	fqn := interfaceFQName(tenant, instance.GetName())
 
 	obj, err := m.client.FindByName(
 		"virtual-machine-interface", strings.Join(fqn, ":"))
@@ -113,8 +112,8 @@ func (m *InstanceManager) LocateInterface(
 	return nic
 }
 
-func (m *InstanceManager) ReleaseInterface(namespace, podName string) {
-	fqn := interfaceFQName(namespace, podName)
+func (m *InstanceManager) ReleaseInterface(tenant, podName string) {
+	fqn := interfaceFQName(tenant, podName)
 	obj, err := m.client.FindByName("virtual-machine-interface", strings.Join(fqn, ":"))
 	if err != nil {
 		glog.Errorf("Get vmi %s: %v", strings.Join(fqn, ":"), err)
@@ -138,15 +137,15 @@ func (m *InstanceManager) ReleaseInterface(namespace, podName string) {
 	}
 }
 
-func makeInstanceIpFQName(namespace, nicName string) []string {
-	return []string{DefaultDomain, namespace, nicName}
+func makeInstanceIpName(tenant, nicName string) string {
+	return tenant + "_" + nicName
 }
 
 func (m *InstanceManager) LocateInstanceIp(
 	network *types.VirtualNetwork, instanceUID string, nic *types.VirtualMachineInterface) *types.InstanceIp {
-	namespace := nic.GetFQName()[len(nic.GetFQName())-2]
-	fqn := makeInstanceIpFQName(namespace, nic.GetName())
-	obj, err := m.client.FindByName("instance-ip", strings.Join(fqn, ":"))
+	tenant := nic.GetFQName()[len(nic.GetFQName())-2]
+	name := makeInstanceIpName(tenant, nic.GetName())
+	obj, err := m.client.FindByName("instance-ip", name)
 	if err == nil {
 		// TODO(prm): ensure that attributes are as expected
 		return obj.(*types.InstanceIp)
@@ -159,7 +158,7 @@ func (m *InstanceManager) LocateInstanceIp(
 
 	// Create InstanceIp
 	ipObj := new(types.InstanceIp)
-	ipObj.SetFQName("", fqn)
+	ipObj.SetName(name)
 	ipObj.AddVirtualNetwork(network)
 	ipObj.AddVirtualMachineInterface(nic)
 	ipObj.SetInstanceIpAddress(address)
@@ -176,11 +175,11 @@ func (m *InstanceManager) LocateInstanceIp(
 	return ipObj
 }
 
-func (m *InstanceManager) ReleaseInstanceIp(namespace, nicName, instanceUID string) {
-	fqn := makeInstanceIpFQName(namespace, nicName)
-	uid, err := m.client.UuidByName("instance-ip", strings.Join(fqn, ":"))
+func (m *InstanceManager) ReleaseInstanceIp(tenant, nicName, instanceUID string) {
+	name := makeInstanceIpName(tenant, nicName)
+	uid, err := m.client.UuidByName("instance-ip", name)
 	if err != nil {
-		glog.Errorf("Get instance-ip %s: %v", strings.Join(fqn, ":"), err)
+		glog.Errorf("Get instance-ip %s: %v", name, err)
 		return
 	}
 	err = m.client.DeleteByUuid("instance-ip", uid)
@@ -194,7 +193,7 @@ func (m *InstanceManager) ReleaseInstanceIp(namespace, nicName, instanceUID stri
 func (m *InstanceManager) AttachFloatingIp(
 	podName, projectName string, floatingIp *types.FloatingIp) {
 
-	fqn := AppendConst(strings.Split(projectName, ":"), podName)
+	fqn := append(strings.Split(projectName, ":"), podName)
 	obj, err := m.client.FindByName(
 		"virtual-machine-interface", strings.Join(fqn, ":"))
 	if err != nil {
