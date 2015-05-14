@@ -109,7 +109,7 @@ func (m *InstanceManager) LocateInterface(
 		glog.Errorf("Get vmi %s: %v", nic.GetUuid(), err)
 		return nil
 	}
-	return nic
+	return obj.(*types.VirtualMachineInterface)
 }
 
 func (m *InstanceManager) ReleaseInterface(tenant, podName string) {
