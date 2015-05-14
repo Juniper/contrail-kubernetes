@@ -98,7 +98,7 @@ func TestPodCreate(t *testing.T) {
 
 	allocator.On("LocateIpAddress", string(pod.ObjectMeta.UID)).Return("10.0.0.42", nil)
 	networkMgr.On("LocateNetwork", "testns", "testnet",
-		controller.config.PrivateSubnet).Return(testnet)
+		controller.config.PrivateSubnet).Return(testnet, nil)
 	networkMgr.On("GetGatewayAddress", testnet).Return("10.0.255.254", nil)
 
 	kube.PodInterface.On("Update", pod).Return(pod, nil)

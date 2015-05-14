@@ -131,8 +131,11 @@ func (m *ServiceManagerImpl) detachPolicy(network *types.VirtualNetwork, policyN
 
 func (m *ServiceManagerImpl) LocateServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error) {
 	networkName := fmt.Sprintf(ServiceNetworkFmt, serviceName)
-	network := m.networkMgr.LocateNetwork(tenant, networkName, m.config.ServiceSubnet)
-	m.networkMgr.LocateFloatingIpPool(network, serviceName, m.config.ServiceSubnet)
+	network, err := m.networkMgr.LocateNetwork(tenant, networkName, m.config.ServiceSubnet)
+	if err != nil {
+		return nil, err
+	}
+	m.networkMgr.LocateFloatingIpPool(network, m.config.ServiceSubnet)
 	return network, nil
 }
 
@@ -187,9 +190,9 @@ func (m *ServiceManagerImpl) Create(tenant, serviceName string) error {
 func (m *ServiceManagerImpl) Delete(tenant, serviceName string) error {
 	// Delete network
 	networkName := fmt.Sprintf(ServiceNetworkFmt, serviceName)
-	network := m.networkMgr.LookupNetwork(tenant, networkName)
+	network, err := m.networkMgr.LookupNetwork(tenant, networkName)
 	if network != nil {
-		m.networkMgr.DeleteFloatingIpPool(network, networkName, true)
+		m.networkMgr.DeleteFloatingIpPool(network, true)
 		m.networkMgr.DeleteNetwork(network)
 	}
 

@@ -28,19 +28,21 @@ import (
 )
 
 type NetworkManager interface {
-	LocateFloatingIpPool(network *types.VirtualNetwork, name, subnet string) *types.FloatingIpPool
-	DeleteFloatingIpPool(network *types.VirtualNetwork, name string, cascade bool) error
-	LookupNetwork(projectName, networkName string) *types.VirtualNetwork
-	LocateNetwork(project, name, subnet string) *types.VirtualNetwork
+	LocateFloatingIpPool(network *types.VirtualNetwork, subnet string) (*types.FloatingIpPool, error)
+	DeleteFloatingIpPool(network *types.VirtualNetwork, cascade bool) error
+	LookupNetwork(projectName, networkName string) (*types.VirtualNetwork, error)
+	LocateNetwork(project, name, subnet string) (*types.VirtualNetwork, error)
 	DeleteNetwork(*types.VirtualNetwork) error
-	ReleaseNetworkIfEmpty(namespace, name string)
-	LocateFloatingIp(networkName, resourceName, address string) *types.FloatingIp
+	ReleaseNetworkIfEmpty(namespace, name string) error
+	LocateFloatingIp(network *types.VirtualNetwork, resourceName, address string) (*types.FloatingIp, error)
+	GetPublicNetwork() *types.VirtualNetwork
 	GetGatewayAddress(network *types.VirtualNetwork) (string, error)
 }
 
 type NetworkManagerImpl struct {
-	client contrail.ApiClient
-	config *Config
+	client        contrail.ApiClient
+	config        *Config
+	publicNetwork *types.VirtualNetwork
 }
 
 func NewNetworkManager(client contrail.ApiClient, config *Config) NetworkManager {
@@ -51,30 +53,39 @@ func NewNetworkManager(client contrail.ApiClient, config *Config) NetworkManager
 	return manager
 }
 
+func (m *NetworkManagerImpl) GetPublicNetwork() *types.VirtualNetwork {
+	return m.publicNetwork
+}
+
+func makePoolName(network *types.VirtualNetwork) string {
+	fqn := make([]string, len(network.GetFQName()), len(network.GetFQName())+1)
+	copy(fqn, network.GetFQName())
+	fqn = append(fqn, fqn[len(fqn)-1])
+	return strings.Join(fqn, ":")
+}
+
 func (m *NetworkManagerImpl) LocateFloatingIpPool(
-	network *types.VirtualNetwork, name, subnet string) *types.FloatingIpPool {
-	fqn := network.GetFQName()
-	fqn = AppendConst(fqn[0:len(fqn)-1], name)
+	network *types.VirtualNetwork, subnet string) (*types.FloatingIpPool, error) {
 	obj, err := m.client.FindByName(
-		"floating-ip-pool", strings.Join(fqn, ":"))
+		"floating-ip-pool", makePoolName(network))
 	if err == nil {
-		return obj.(*types.FloatingIpPool)
+		return obj.(*types.FloatingIpPool), nil
 	}
 
 	address, prefixlen := PrefixToAddressLen(subnet)
 
 	pool := new(types.FloatingIpPool)
-	pool.SetName(name)
+	pool.SetName(network.GetName())
 	pool.SetParent(network)
 	pool.SetFloatingIpPoolPrefixes(
 		&types.FloatingIpPoolType{
 			Subnet: []types.SubnetType{types.SubnetType{address, prefixlen}}})
 	err = m.client.Create(pool)
 	if err != nil {
-		glog.Errorf("Create floating-ip-pool %s: %v", name, err)
-		return nil
+		glog.Errorf("Create floating-ip-pool %s: %v", network.GetName(), err)
+		return nil, err
 	}
-	return pool
+	return pool, nil
 }
 
 func (m *NetworkManagerImpl) floatingIpPoolDeleteChildren(pool *types.FloatingIpPool) error {
@@ -91,12 +102,10 @@ func (m *NetworkManagerImpl) floatingIpPoolDeleteChildren(pool *types.FloatingIp
 	}
 	return nil
 }
-func (m *NetworkManagerImpl) DeleteFloatingIpPool(network *types.VirtualNetwork, name string, cascade bool) error {
-	networkName := network.GetFQName()
-	fqn := AppendConst(networkName[0:len(networkName)-1], name)
-	obj, err := m.client.FindByName("floating-ip-pool", strings.Join(fqn, ":"))
+func (m *NetworkManagerImpl) DeleteFloatingIpPool(network *types.VirtualNetwork, cascade bool) error {
+	obj, err := m.client.FindByName("floating-ip-pool", makePoolName(network))
 	if err != nil {
-		glog.Errorf("Get floating-ip-pool %s: %v", name, err)
+		glog.Errorf("Get floating-ip-pool %s: %v", network.GetName(), err)
 		return err
 	}
 	if cascade {
@@ -140,81 +149,81 @@ func (m *NetworkManagerImpl) initializePublicNetwork() {
 		network = obj.(*types.VirtualNetwork)
 	}
 
+	m.publicNetwork = network
+
 	// TODO(prm): Ensure that the subnet is as specified.
 	if len(m.config.PublicSubnet) > 0 {
-		fqn := strings.Split(m.config.PublicNetwork, ":")
-		poolName := fqn[len(fqn)-1]
-		m.LocateFloatingIpPool(network, poolName, m.config.PublicSubnet)
+		m.LocateFloatingIpPool(network, m.config.PublicSubnet)
 	}
 }
 
-func (m *NetworkManagerImpl) LookupNetwork(projectName, networkName string) *types.VirtualNetwork {
-	fqn := strings.Split(projectName, ":")
-	fqn = AppendConst(fqn, networkName)
+func (m *NetworkManagerImpl) LookupNetwork(projectName, networkName string) (*types.VirtualNetwork, error) {
+	fqn := []string{DefaultDomain, projectName, networkName}
 	obj, err := m.client.FindByName("virtual-network", strings.Join(fqn, ":"))
 	if err != nil {
 		glog.Errorf("GET virtual-network %s: %v", networkName, err)
-		return nil
+		return nil, err
 	}
-	return obj.(*types.VirtualNetwork)
+	return obj.(*types.VirtualNetwork), nil
 }
 
-func (m *NetworkManagerImpl) LocateNetwork(project, name, subnet string) *types.VirtualNetwork {
-	fqn := append(strings.Split(project, ":"), name)
+func (m *NetworkManagerImpl) LocateNetwork(project, name, subnet string) (*types.VirtualNetwork, error) {
+	fqn := []string{DefaultDomain, project, name}
 	fqname := strings.Join(fqn, ":")
 
 	obj, err := m.client.FindByName("virtual-network", fqname)
 	if err == nil {
-		return obj.(*types.VirtualNetwork)
+		return obj.(*types.VirtualNetwork), nil
 	}
 
-	projectId, err := m.client.UuidByName("project", project)
+	projectId, err := m.client.UuidByName("project", fmt.Sprintf("%s:%s", DefaultDomain, project))
 	if err != nil {
 		glog.Infof("GET %s: %v", project, err)
-		return nil
+		return nil, err
 	}
 	uid, err := config.CreateNetworkWithSubnet(
 		m.client, projectId, name, subnet)
 	if err != nil {
 		glog.Infof("Create %s: %v", name, err)
-		return nil
+		return nil, err
 	}
 	obj, err = m.client.FindByUuid("virtual-network", uid)
 	if err != nil {
 		glog.Infof("GET %s: %v", name, err)
-		return nil
+		return nil, err
 	}
 	glog.Infof("Create network %s", fqname)
-	return obj.(*types.VirtualNetwork)
+	return obj.(*types.VirtualNetwork), nil
 }
 
-func (m *NetworkManagerImpl) ReleaseNetworkIfEmpty(namespace, name string) {
+func (m *NetworkManagerImpl) ReleaseNetworkIfEmpty(namespace, name string) error {
 	fqn := []string{DefaultDomain, namespace, name}
 	obj, err := m.client.FindByName("virtual-network", strings.Join(fqn, ":"))
 	if err != nil {
 		glog.Errorf("Get virtual-network %s: %v", name, err)
-		return
+		return err
 	}
 	network := obj.(*types.VirtualNetwork)
 	refs, err := network.GetVirtualMachineInterfaceBackRefs()
 	if err != nil {
 		glog.Errorf("Get network vmi references %s: %v", name, err)
-		return
+		return err
 	}
 	if len(refs) == 0 {
 		err = m.client.Delete(network)
 		if err != nil {
 			glog.Errorf("Delete virtual-network %s: %v", name, err)
+			return err
 		}
 	}
+	return nil
 }
 
-func (m *NetworkManagerImpl) LocateFloatingIp(networkName, resourceName, address string) *types.FloatingIp {
-	poolName := fmt.Sprintf("%s:%s", m.config.DefaultProject, networkName)
-	obj, err := m.client.FindByName("floating-ip-pool", poolName)
+func (m *NetworkManagerImpl) LocateFloatingIp(network *types.VirtualNetwork, resourceName, address string) (*types.FloatingIp, error) {
+	obj, err := m.client.FindByName("floating-ip-pool", makePoolName(network))
 	if err != nil {
-		glog.Errorf("Get floating-ip-pool %s: %v", poolName, err)
-		return nil
+		glog.Errorf("Get floating-ip-pool %s: %v", network.GetName(), err)
+		return nil, err
 	}
 	pool := obj.(*types.FloatingIpPool)
 
@@ -227,16 +236,17 @@ func (m *NetworkManagerImpl) LocateFloatingIp(networkName, resourceName, address
 			err = m.client.Update(fip)
 			if err != nil {
 				glog.Errorf("Update floating-ip %s: %v", resourceName, err)
-				return nil
+				return nil, err
 			}
 		}
-		return fip
+		return fip, nil
 	}
 
-	obj, err = m.client.FindByName("project", m.config.DefaultProject)
+	projectFQN := network.GetFQName()[0 : len(network.GetFQName())-1]
+	obj, err = m.client.FindByName("project", strings.Join(projectFQN, ":"))
 	if err != nil {
-		glog.Errorf("Get project %s: %v", m.config.DefaultProject, err)
-		return nil
+		glog.Errorf("Get project %s: %v", projectFQN[len(projectFQN)-1], err)
+		return nil, err
 	}
 	project := obj.(*types.Project)
 
@@ -248,13 +258,30 @@ func (m *NetworkManagerImpl) LocateFloatingIp(networkName, resourceName, address
 	err = m.client.Create(fip)
 	if err != nil {
 		glog.Errorf("Create floating-ip %s: %v", resourceName, err)
-		return nil
+		return nil, err
 	}
-	return fip
+	return fip, nil
 }
 
 func (m *NetworkManagerImpl) GetGatewayAddress(network *types.VirtualNetwork) (string, error) {
-	return "", nil
+	refs, err := network.GetNetworkIpamRefs()
+	if err != nil {
+		glog.Errorf("Get network %s network-ipam refs: %v", network.GetName(), err)
+		return "", err
+	}
+
+	attr := refs[0].Attr.(types.VnSubnetsType)
+	if len(attr.IpamSubnets) == 0 {
+		glog.Errorf("Network %s has no subnets configured", network.GetName())
+		return "", fmt.Errorf("Network %s: empty subnet list", network.GetName())
+	}
+
+	gateway := attr.IpamSubnets[0].DefaultGateway
+	if gateway == "" {
+		return "", fmt.Errorf("Gateway is empty: %+v", attr.IpamSubnets)
+	}
+
+	return gateway, nil
 }
 
 func (m *NetworkManagerImpl) DeleteNetwork(network *types.VirtualNetwork) error {

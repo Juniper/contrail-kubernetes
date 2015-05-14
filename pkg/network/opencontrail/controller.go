@@ -142,7 +142,11 @@ func (c *Controller) getPodNetwork(pod *api.Pod) *types.VirtualNetwork {
 	if !ok {
 		name = "default-network"
 	}
-	return c.networkMgr.LocateNetwork(pod.Namespace, name, c.config.PrivateSubnet)
+	network, err := c.networkMgr.LocateNetwork(pod.Namespace, name, c.config.PrivateSubnet)
+	if err != nil {
+		return nil
+	}
+	return network
 }
 
 func (c *Controller) serviceName(labels map[string]string) string {
@@ -235,16 +239,16 @@ func (c *Controller) addService(service *api.Service) {
 	if service.Spec.PortalIP != "" {
 		serviceNetwork, err := c.serviceMgr.LocateServiceNetwork(service.Namespace, serviceName)
 		if err == nil {
-			serviceIp = c.networkMgr.LocateFloatingIp(
-				serviceNetwork.GetName(), service.Name, service.Spec.PortalIP)
+			serviceIp, err = c.networkMgr.LocateFloatingIp(
+				serviceNetwork, service.Name, service.Spec.PortalIP)
 		}
 	}
 
 	var publicIp *types.FloatingIp = nil
 	if service.Spec.PublicIPs != nil {
 		// Allocate a floating-ip from the public pool.
-		publicIp = c.networkMgr.LocateFloatingIp(
-			c.config.PublicNetwork, service.Name, service.Spec.PublicIPs[0])
+		publicIp, err = c.networkMgr.LocateFloatingIp(
+			c.networkMgr.GetPublicNetwork(), service.Name, service.Spec.PublicIPs[0])
 	}
 
 	if serviceIp == nil && publicIp == nil {
