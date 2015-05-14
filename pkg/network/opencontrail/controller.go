@@ -115,7 +115,14 @@ func (c *Controller) updateInstanceMetadata(
 	if updateElement(pod.Annotations, "nic_uuid", nic.GetUuid()) {
 		doUpdate = true
 	}
-	if updateElement(pod.Annotations, "mac_address", nic.GetVirtualMachineInterfaceMacAddresses().MacAddress[0]) {
+	var mac_address string
+	addressArr := nic.GetVirtualMachineInterfaceMacAddresses()
+	if len(addressArr.MacAddress) > 0 {
+		mac_address = addressArr.MacAddress[0]
+	} else {
+		glog.Errorf("interface %s: no mac-addresses", nic.GetName())
+	}
+	if updateElement(pod.Annotations, "mac_address", mac_address) {
 		doUpdate = true
 	}
 	if updateElement(pod.Annotations, "ip_address", address) {
