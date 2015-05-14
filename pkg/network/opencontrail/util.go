@@ -14,23 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package network
+package opencontrail
 
 import (
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/client"
-	"github.com/Juniper/contrail-kubernetes/pkg/network/opencontrail"
+	"strconv"
+	"strings"
 )
 
-// Placeholder class that constructs a NetworkController
-type NetworkFactory struct {
+func AppendConst(slice []string, element string) []string {
+	newSlice := make([]string, len(slice), len(slice)+1)
+	copy(newSlice, slice)
+	return append(newSlice, element)
 }
 
-func NewNetworkFactory() *NetworkFactory {
-	factory := new(NetworkFactory)
-	return factory
-}
-
-func (f *NetworkFactory) Create(client *client.Client, args []string) NetworkController {
-	// TODO(prm): read configuration in order to select plugin.
-	return opencontrail.NewController(client, args)
+func PrefixToAddressLen(subnet string) (string, int) {
+	prefix := strings.Split(subnet, "/")
+	address := prefix[0]
+	prefixlen, _ := strconv.Atoi(prefix[1])
+	return address, prefixlen
 }

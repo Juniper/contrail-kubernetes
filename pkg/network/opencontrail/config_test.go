@@ -14,23 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package network
+package opencontrail
 
 import (
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/client"
-	"github.com/Juniper/contrail-kubernetes/pkg/network/opencontrail"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-// Placeholder class that constructs a NetworkController
-type NetworkFactory struct {
-}
-
-func NewNetworkFactory() *NetworkFactory {
-	factory := new(NetworkFactory)
-	return factory
-}
-
-func (f *NetworkFactory) Create(client *client.Client, args []string) NetworkController {
-	// TODO(prm): read configuration in order to select plugin.
-	return opencontrail.NewController(client, args)
+func TestParse(t *testing.T) {
+	assert := assert.New(t)
+	config := NewConfig()
+	assert.Equal("localhost", config.ApiAddress)
+	config.Parse([]string{"--portal_net=172.12.0.0/16"})
+	assert.Equal("172.12.0.0/16", config.ServiceSubnet)
+	assert.Equal("localhost", config.ApiAddress)
 }

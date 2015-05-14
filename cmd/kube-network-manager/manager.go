@@ -17,12 +17,14 @@ limitations under the License.
 package main
 
 import (
-	"os"
+	flag "github.com/spf13/pflag"
 
 	"github.com/Juniper/contrail-kubernetes/cmd/kube-network-manager/app"
 )
 
 func main() {
 	m := app.NewNetworkManager()
-	m.Run(os.Args)
+	m.AddFlags(flag.CommandLine)
+	flag.Parse()
+	m.Run(flag.CommandLine.Args())
 }

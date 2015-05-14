@@ -1,8 +1,18 @@
 import logging
+import os
 import re
 import subprocess
 import sys
 from shell import Shell
+
+def ifindex2name(ifindex):
+    for ifname in os.listdir('/sys/class/net'):
+        content = open(
+            os.path.join('/sys/class/net', ifname, 'ifindex'), 'r').readlines()
+        index = int('\n'.join(content).strip())
+        if index == ifindex:
+            return ifname
+    return None
 
 class LxcManager(object):
     def __init__(self):
@@ -31,51 +41,34 @@ class LxcManager(object):
                                'grep peer_ifindex | awk \'{print $2}\'' \
                                % (nsname, ifname_instance))
 
-        # Get the list of docker0 bridge member interface names.
-        bridge_members = [ member_if[member_if.find("veth"):] for member_if in \
-            Shell.run("brctl show docker0 | grep veth").split("\n") \
-        ]
-
-        # Remove the trailing empty string, which comes as a result of split.
-        bridge_members.pop()
-
-        # Get all member interfaces' ifindex
-        bridge_members_ifindex = [ Shell.run( \
-            "ethtool -S %s | grep peer_ifindex | awk '{print $2}'" % i) \
-                for i in bridge_members ]
-
-        # Peer interface ifindex is one less than that of container intf's index
-        try:
-            member_index = bridge_members_ifindex.index('%s\n' % \
-                (int(ns_ifindex) - 1))
-        except:
-            logging.error('Cannot find find member for %s' % nsname)
-            raise
-        logging.info('Peer interface found: %s' % bridge_members[member_index])
-        return bridge_members[member_index]
+        ifname = ifindex2name(int(ns_ifindex))
+        return ifname
 
     # Move the interface out of the docker0 bridge and attach it to contrail
     # Return the moved interface name
-    def move_interface(self, nsname, pid, ifname_instance, vmi):
+    def move_interface(self, nsname, pid, ifname_instance, mac):
         ifname_master = self.interface_find_peer_name(ifname_instance, nsname)
 
         # Remove the interface from the bridge
-        Shell.run('brctl delif docker0 %s' % ifname_master)
-        if vmi:
-            # Set interface mac and remove any IP address already assigned
-            mac = vmi.virtual_machine_interface_mac_addresses.mac_address[0]
+        try:
+            Shell.run('brctl delif docker0 %s' % ifname_master)
+        except Exception as ex:
+            logging.error(ex)
+
+        if mac:
+            # Set interface mac
             Shell.run('ip netns exec %s ifconfig eth0 hw ether %s' %
                       (nsname, mac))
-            Shell.run('ip netns exec %s ip addr flush dev %s' %
-                      (nsname, ifname_instance))
+        # remove any IP address already assigned
+        Shell.run('ip netns exec %s ip addr flush dev %s' %
+                  (nsname, ifname_instance))
         return ifname_master
 
-    def create_interface(self, nsname, ifname_instance, vmi=None):
+    def create_interface(self, nsname, ifname_instance, mac):
         ifname_master = self._interface_generate_unique_name()
         Shell.run('ip link add %s type veth peer name %s' %
                   (ifname_instance, ifname_master))
-        if vmi:
-            mac = vmi.virtual_machine_interface_mac_addresses.mac_address[0]
+        if mac:
             Shell.run('ifconfig %s hw ether %s' % (ifname_instance, mac))
 
         Shell.run('ip link set %s netns %s' % (ifname_instance, nsname))

@@ -19,21 +19,28 @@ package app
 import (
 	"time"
 
+	"github.com/golang/glog"
+	flag "github.com/spf13/pflag"
+
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/client"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/client/cache"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/controller/framework"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/fields"
-	"github.com/golang/glog"
 
 	"github.com/Juniper/contrail-kubernetes/pkg/network"
 )
 
+type Config struct {
+	KubeUrl      string
+	ResyncPeriod time.Duration
+}
+
 type NetworkManager struct {
+	config Config
+
 	Client     *client.Client
 	Controller network.NetworkController
-
-	ResyncPeriod time.Duration
 
 	PodStore    cache.Store
 	PodInformer *framework.Controller
@@ -51,133 +58,145 @@ type NetworkManager struct {
 }
 
 func NewNetworkManager() *NetworkManager {
-	config := &client.Config{
-		Host: "http://localhost:8080",
-	}
 	manager := new(NetworkManager)
+	manager.config = Config{
+		KubeUrl:      "http://localhost:8080",
+		ResyncPeriod: time.Minute,
+	}
+	manager.Shutdown = make(chan struct{})
+	return manager
+}
+
+func (m *NetworkManager) AddFlags(fs *flag.FlagSet) {
+	fs.StringVar(&m.config.KubeUrl, "master", m.config.KubeUrl,
+		"Kubernetes API endpoint")
+}
+
+func (m *NetworkManager) start(args []string) {
+	config := &client.Config{
+		Host: m.config.KubeUrl,
+	}
 	var err error
-	manager.Client, err = client.New(config)
+	m.Client, err = client.New(config)
 	if err != nil {
 		glog.Fatalf("Invalid API configuratin: %v", err)
 	}
 
-	manager.Controller = network.NewNetworkFactory(manager.Client).Create()
-	manager.Shutdown = make(chan struct{})
-	manager.ResyncPeriod = time.Minute
+	m.Controller = network.NewNetworkFactory().Create(m.Client, args)
 
-	manager.PodStore, manager.PodInformer = framework.NewInformer(
+	m.PodStore, m.PodInformer = framework.NewInformer(
 		cache.NewListWatchFromClient(
-			manager.Client,
+			m.Client,
 			string(api.ResourcePods),
 			api.NamespaceAll,
 			fields.Everything(),
 		),
 		&api.Pod{},
-		manager.ResyncPeriod,
+		m.config.ResyncPeriod,
 		framework.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				manager.Controller.AddPod(obj.(*api.Pod))
+				m.Controller.AddPod(obj.(*api.Pod))
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
-				manager.Controller.UpdatePod(
+				m.Controller.UpdatePod(
 					oldObj.(*api.Pod), newObj.(*api.Pod))
 			},
 			DeleteFunc: func(obj interface{}) {
-				manager.Controller.DeletePod(obj.(*api.Pod))
+				m.Controller.DeletePod(obj.(*api.Pod))
 			},
 		},
 	)
-	manager.Controller.SetPodStore(&manager.PodStore)
 
-	manager.NamespaceStore, manager.NamespaceInformer =
-		framework.NewInformer(
-			cache.NewListWatchFromClient(
-				manager.Client,
-				"namespaces",
-				api.NamespaceAll,
-				fields.Everything(),
-			),
-			&api.Namespace{},
-			manager.ResyncPeriod,
-			framework.ResourceEventHandlerFuncs{
-				AddFunc: func(obj interface{}) {
-					manager.Controller.AddNamespace(
-						obj.(*api.Namespace))
-				},
-				UpdateFunc: func(oldObj, newObj interface{}) {
-					manager.Controller.UpdateNamespace(
-						oldObj.(*api.Namespace),
-						newObj.(*api.Namespace))
-				},
-				DeleteFunc: func(obj interface{}) {
-					manager.Controller.DeleteNamespace(
-						obj.(*api.Namespace))
-				},
-			},
-		)
-	manager.Controller.SetNamespaceStore(&manager.NamespaceStore)
-
-	manager.RCStore, manager.RCInformer = framework.NewInformer(
+	m.NamespaceStore, m.NamespaceInformer = framework.NewInformer(
 		cache.NewListWatchFromClient(
-			manager.Client,
+			m.Client,
+			"namespaces",
+			api.NamespaceAll,
+			fields.Everything(),
+		),
+		&api.Namespace{},
+		m.config.ResyncPeriod,
+		framework.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				m.Controller.AddNamespace(
+					obj.(*api.Namespace))
+			},
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				m.Controller.UpdateNamespace(
+					oldObj.(*api.Namespace),
+					newObj.(*api.Namespace))
+			},
+			DeleteFunc: func(obj interface{}) {
+				m.Controller.DeleteNamespace(
+					obj.(*api.Namespace))
+			},
+		},
+	)
+
+	m.RCStore, m.RCInformer = framework.NewInformer(
+		cache.NewListWatchFromClient(
+			m.Client,
 			string(api.ResourceReplicationControllers),
 			api.NamespaceAll,
 			fields.Everything(),
 		),
 		&api.ReplicationController{},
-		manager.ResyncPeriod,
+		m.config.ResyncPeriod,
 		framework.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				manager.Controller.AddReplicationController(
+				m.Controller.AddReplicationController(
 					obj.(*api.ReplicationController))
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
-				manager.Controller.UpdateReplicationController(
+				m.Controller.UpdateReplicationController(
 					oldObj.(*api.ReplicationController),
 					newObj.(*api.ReplicationController))
 			},
 			DeleteFunc: func(obj interface{}) {
-				manager.Controller.DeleteReplicationController(
+				m.Controller.DeleteReplicationController(
 					obj.(*api.ReplicationController))
 			},
 		},
 	)
-	manager.Controller.SetReplicationControllerStore(&manager.RCStore)
 
-	manager.ServiceStore, manager.ServiceInformer = framework.NewInformer(
+	m.ServiceStore, m.ServiceInformer = framework.NewInformer(
 		cache.NewListWatchFromClient(
-			manager.Client,
+			m.Client,
 			string(api.ResourceServices),
 			api.NamespaceAll,
 			fields.Everything(),
 		),
 		&api.Service{},
-		manager.ResyncPeriod,
+		m.config.ResyncPeriod,
 		framework.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				manager.Controller.AddService(
+				m.Controller.AddService(
 					obj.(*api.Service))
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
-				manager.Controller.UpdateService(
+				m.Controller.UpdateService(
 					oldObj.(*api.Service),
 					newObj.(*api.Service))
 			},
 			DeleteFunc: func(obj interface{}) {
-				manager.Controller.DeleteService(
+				m.Controller.DeleteService(
 					obj.(*api.Service))
 			},
 		},
 	)
-	manager.Controller.SetServiceStore(&manager.ServiceStore)
 
-	return manager
+	m.Controller.SetPodStore(&m.PodStore)
+	m.Controller.SetNamespaceStore(&m.NamespaceStore)
+	m.Controller.SetReplicationControllerStore(&m.RCStore)
+	m.Controller.SetServiceStore(&m.ServiceStore)
 }
 
-func (m *NetworkManager) Run(_ []string) error {
+func (m *NetworkManager) Run(args []string) error {
+	m.start(args)
 	go m.PodInformer.Run(m.Shutdown)
 	go m.NamespaceInformer.Run(m.Shutdown)
 	go m.RCInformer.Run(m.Shutdown)
 	go m.ServiceInformer.Run(m.Shutdown)
+	go m.Controller.Run(m.Shutdown)
 	select {}
 }
