@@ -63,12 +63,17 @@ func (a *AddressAllocatorImpl) initializeAllocator() {
 	if err != nil {
 		glog.Fatalf("%s: %v", parent, err)
 	}
-	_, err = config.CreateNetworkWithSubnet(
+	netId, err := config.CreateNetworkWithSubnet(
 		a.client, projectId, fqn[len(fqn)-1], a.privateSubnet)
 	if err != nil {
 		glog.Fatalf("%s: %v", parent, err)
 	}
 	glog.Infof("Created network %s", AddressAllocationNetwork)
+	obj, err = a.client.FindByUuid("virtual-network", netId)
+	if err != nil {
+		glog.Fatal("Get virtual-network %s: %v", netId, err)
+	}
+	a.network = obj.(*types.VirtualNetwork)
 }
 
 func (a *AddressAllocatorImpl) allocateIpAddress(uid string) (contrail.IObject, error) {
