@@ -15,9 +15,8 @@ import uuid
 
 import vnc_api.vnc_api as opencontrail
 
-from instance_provisioner import Provisioner
+from contrail_vrouter_api.vrouter_api import ContrailVRouterApi
 from lxc_manager import LxcManager
-from vrouter_control import interface_register, interface_unregister
 from shell import Shell
 
 class ContrailClient(object):
@@ -59,13 +58,6 @@ class ContrailClient(object):
             hostname,
             virtual_router_ip_address=localip)
         self._client.virtual_router_create(vrouter)
-
-    def InterfaceLookup(self, uid):
-        try:
-            vmi = self._client.virtual_machine_interface_read(id=uid)
-            return vmi
-        except NoIdError:
-            return None
 
 # end class ContrailClient
 
@@ -141,27 +133,29 @@ def setup(pod_namespace, pod_name, docker_id):
         logging.error('No annotations in pod %s', podInfo["metadata"]["name"])
         sys.exit(1)
 
-    vmi = client.InterfaceLookup(podInfo["annotations"]["vmi"])
-    if vmi == None:
-        logging.error("Interface not found %s" % (
-            podInfo["annotations"]["vmi"]))
-        sys.exit(1)
-
+    nic_uuid = podInfo["annotations"]["nic_uuid"]
+    mac_address = podInfo["annotations"]["mac_address"]
     if client._net_mode == 'none':
-        ifname = manager.create_interface(short_id, instance_ifname, vmi)
+        ifname = manager.create_interface(short_id, instance_ifname,
+                                          mac_address)
     else:
-        ifname = manager.move_interface(short_id, pid, instance_ifname, vmi)
+        ifname = manager.move_interface(short_id, pid, instance_ifname,
+                                        mac_address)
 
-    interface_register(uid, vmi, ifname)
-    provisioner = Provisioner(api_server=client._server)
-    (ipaddr, plen, gw) = provisioner.get_interface_ip_info(vmi)
+    api = ContrailVRouterApi()
+    api.add_port(uid, nic_uuid, ifname, mac_address,
+                 port_type='NovaVMPort',
+                 display_name=podInfo['id'],
+                 hostname=podInfo['id']+'.'+pod_namespace)
+
+    ip_address = podInfo["annotations"]["ip_address"]
+    gateway = podInfo["annotations"]["gateway"]
     Shell.run('ip netns exec %s ip addr add %s/32 peer %s dev %s' % \
-              (short_id, ipaddr, gw, instance_ifname))
+              (short_id, ip_address, gateway, instance_ifname))
     Shell.run('ip netns exec %s ip route add default via %s' % \
-              (short_id, gw))
+              (short_id, gateway))
     Shell.run('ip netns exec %s ip link set %s up' %
               (short_id, instance_ifname))
-
 
 def teardown(pod_namespace, pod_name, docker_id):
     client = ContrailClient()
@@ -170,8 +164,10 @@ def teardown(pod_namespace, pod_name, docker_id):
 
     uid, podInfo = getPodInfo(docker_id)
     if 'annotations' in podInfo and 'vmi' in podInfo["annotations"]:
-        vmi = podInfo["annotations"]["vmi"]
-        interface_unregister(vmi)
+        vmi_uuid = podInfo["annotations"]["vmi"]
+        api = ContrailVRouterApi()
+        api.delete_port(vmi_uuid)
+
 
     manager.clear_interfaces(short_id)
     Shell.run('ip netns delete %s' % short_id)
