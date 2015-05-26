@@ -20,6 +20,7 @@ import (
 	"github.com/golang/glog"
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/fields"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/labels"
 )
 
@@ -61,7 +62,7 @@ func (c *Controller) DeletePod(pod *api.Pod) {
 
 func (c *Controller) AddService(service *api.Service) {
 	pods, err := c.kube.Pods(service.Namespace).List(
-		labels.Set(service.Spec.Selector).AsSelector())
+		labels.Set(service.Spec.Selector).AsSelector(), fields.Everything())
 	if err != nil {
 		glog.Errorf("List pods by service %s: %v", service.Name, err)
 		return
