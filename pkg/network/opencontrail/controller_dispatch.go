@@ -40,13 +40,28 @@ func (c *Controller) AddPod(pod *api.Pod) {
 	c.eventChannel <- notification{evAddPod, pod}
 }
 
+func (c *Controller) podAnnotationsCheck(pod *api.Pod) bool {
+	if pod.Annotations == nil {
+		return false
+	}
+	id, ok := pod.Annotations["nic_uuid"]
+	if !ok {
+		return false
+	}
+	nic := c.instanceMgr.LookupInterface(pod.Namespace, pod.Name)
+	if nic == nil || nic.GetUuid() != id {
+		return false
+	}
+	return true
+}
+
 func (c *Controller) UpdatePod(oldPod, newPod *api.Pod) {
 	watchTags := []string{
 		c.config.NetworkTag,
 		c.config.NetworkAccessTag,
 	}
 	update := false
-	if newPod.Annotations == nil {
+	if !c.podAnnotationsCheck(newPod) {
 		update = true
 	} else if !EqualTags(oldPod.Labels, newPod.Labels, watchTags) {
 		update = true
