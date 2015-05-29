@@ -21,6 +21,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
 	kubeclient "github.com/GoogleCloudPlatform/kubernetes/pkg/client"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/fields"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/labels"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/runtime"
 
@@ -231,7 +232,7 @@ func (c *Controller) addService(service *api.Service) {
 	}
 
 	pods, err := c.kube.Pods(service.Namespace).List(
-		labels.Set(service.Spec.Selector).AsSelector())
+		labels.Set(service.Spec.Selector).AsSelector(), fields.Everything())
 	if err != nil {
 		glog.Errorf("List pods by service %s: %v", service.Name, err)
 		return
@@ -252,10 +253,10 @@ func (c *Controller) addService(service *api.Service) {
 	}
 
 	var publicIp *types.FloatingIp = nil
-	if service.Spec.PublicIPs != nil {
+	if service.Spec.DeprecatedPublicIPs != nil {
 		// Allocate a floating-ip from the public pool.
 		publicIp, err = c.networkMgr.LocateFloatingIp(
-			c.networkMgr.GetPublicNetwork(), service.Name, service.Spec.PublicIPs[0])
+			c.networkMgr.GetPublicNetwork(), service.Name, service.Spec.DeprecatedPublicIPs[0])
 	}
 
 	if serviceIp == nil && publicIp == nil {

@@ -20,6 +20,7 @@ import (
 	"github.com/golang/glog"
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/fields"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/labels"
 )
 
@@ -39,13 +40,28 @@ func (c *Controller) AddPod(pod *api.Pod) {
 	c.eventChannel <- notification{evAddPod, pod}
 }
 
+func (c *Controller) podAnnotationsCheck(pod *api.Pod) bool {
+	if pod.Annotations == nil {
+		return false
+	}
+	id, ok := pod.Annotations["nic_uuid"]
+	if !ok {
+		return false
+	}
+	nic := c.instanceMgr.LookupInterface(pod.Namespace, pod.Name)
+	if nic == nil || nic.GetUuid() != id {
+		return false
+	}
+	return true
+}
+
 func (c *Controller) UpdatePod(oldPod, newPod *api.Pod) {
 	watchTags := []string{
 		c.config.NetworkTag,
 		c.config.NetworkAccessTag,
 	}
 	update := false
-	if newPod.Annotations == nil {
+	if !c.podAnnotationsCheck(newPod) {
 		update = true
 	} else if !EqualTags(oldPod.Labels, newPod.Labels, watchTags) {
 		update = true
@@ -61,7 +77,7 @@ func (c *Controller) DeletePod(pod *api.Pod) {
 
 func (c *Controller) AddService(service *api.Service) {
 	pods, err := c.kube.Pods(service.Namespace).List(
-		labels.Set(service.Spec.Selector).AsSelector())
+		labels.Set(service.Spec.Selector).AsSelector(), fields.Everything())
 	if err != nil {
 		glog.Errorf("List pods by service %s: %v", service.Name, err)
 		return

@@ -65,7 +65,7 @@ func (c *Config) Parse(args []string) {
 		"External network subnet prefix used when provisioning the cluster.")
 	fs.StringVar(&c.PrivateSubnet, "private_net", c.PrivateSubnet,
 		"Address range to use for private IP addresses.")
-	fs.StringVar(&c.ServiceSubnet, "portal_net", c.PrivateSubnet,
+	fs.StringVar(&c.ServiceSubnet, "portal_net", c.ServiceSubnet,
 		"Address range to use for services.")
 	fs.StringVar(&c.NetworkTag, "network_label", c.NetworkTag,
 		"Label used to specify the network used by the resource (pod or service).")

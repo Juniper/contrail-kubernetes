@@ -193,7 +193,7 @@ func (m *InstanceManager) ReleaseInstanceIp(tenant, nicName, instanceUID string)
 func (m *InstanceManager) AttachFloatingIp(
 	podName, projectName string, floatingIp *types.FloatingIp) {
 
-	fqn := append(strings.Split(projectName, ":"), podName)
+	fqn := []string{DefaultDomain, projectName, podName}
 	obj, err := m.client.FindByName(
 		"virtual-machine-interface", strings.Join(fqn, ":"))
 	if err != nil {
