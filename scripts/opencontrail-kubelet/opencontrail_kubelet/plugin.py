@@ -8,10 +8,12 @@ import json
 import logging
 import os
 import re
+import requests
 import socket
 import subprocess
 import sys
 import uuid
+import xml.etree.ElementTree as ElementTree
 
 import vnc_api.vnc_api as opencontrail
 
@@ -81,7 +83,7 @@ def kubelet_get_api():
             return m.group(1)
     return None
 
-def getPodInfo(docker_id):
+def getDockerPod(docker_id):
     name = Shell.run('docker inspect -f \'{{.Name}}\' %s' % docker_id)
     
     # Name
@@ -91,12 +93,14 @@ def getPodInfo(docker_id):
 
     podName = fields[2]
     uid = fields[4]
+    return uid, podName
 
+def getPodInfo(podName):
     kubeapi = kubelet_get_api()
 
     data = Shell.run('kubectl --server=%s get -o json pod %s' % (
         kubeapi, podName))
-    return uid, json.loads(data)
+    return json.loads(data)
     
 def setup(pod_namespace, pod_name, docker_id):
     """
@@ -125,8 +129,9 @@ def setup(pod_namespace, pod_name, docker_id):
     else:
         instance_ifname = 'eth0'
 
-    uid, podInfo = getPodInfo(docker_id)
-    # TODO: Remove the need for a vmi lookup.
+    uid, podName = getDockerPod(docker_id)
+    podInfo = getPodInfo(podName)
+    
     # The lxc_manager uses the mac_address to setup the container interface.
     # Additionally the ip-address, prefixlen and gateway are also used.
     if not 'annotations' in podInfo:
@@ -145,8 +150,8 @@ def setup(pod_namespace, pod_name, docker_id):
     api = ContrailVRouterApi()
     api.add_port(uid, nic_uuid, ifname, mac_address,
                  port_type='NovaVMPort',
-                 display_name=podInfo['id'],
-                 hostname=podInfo['id']+'.'+pod_namespace)
+                 display_name=podName,
+                 hostname=podName+'.'+pod_namespace)
 
     ip_address = podInfo["annotations"]["ip_address"]
     gateway = podInfo["annotations"]["gateway"]
@@ -157,17 +162,27 @@ def setup(pod_namespace, pod_name, docker_id):
     Shell.run('ip netns exec %s ip link set %s up' %
               (short_id, instance_ifname))
 
+def vrouter_interface_by_name(vmName):
+    r = requests.get('http://localhost:8085/Snh_ItfReq')
+    root = ElementTree.fromstring(r.text)
+    for interface in root.iter('ItfSandeshData'):
+        vm = interface.find('vm_name')
+        if vm is not None and vm.text == vmName:
+            vmi = interface.find('uuid')
+            return vmi.text
+    return None
+
 def teardown(pod_namespace, pod_name, docker_id):
     client = ContrailClient()
     manager = LxcManager()
     short_id = docker_id[0:11]
 
-    uid, podInfo = getPodInfo(docker_id)
-    if 'annotations' in podInfo and 'vmi' in podInfo["annotations"]:
-        vmi_uuid = podInfo["annotations"]["vmi"]
-        api = ContrailVRouterApi()
-        api.delete_port(vmi_uuid)
+    api = ContrailVRouterApi()
 
+    _, podName = getDockerPod(docker_id)
+    vmi = vrouter_interface_by_name(podName)
+    if vmi is not None:
+        api.delete_port(vmi)
 
     manager.clear_interfaces(short_id)
     Shell.run('ip netns delete %s' % short_id)

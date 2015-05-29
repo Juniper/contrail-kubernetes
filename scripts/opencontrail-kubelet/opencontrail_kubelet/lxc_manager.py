@@ -129,8 +129,12 @@ class LxcManager(object):
                       (daemon, ifname_guest))
 
     def clear_interfaces(self, nsname):
-        Shell.run('ip netns exec %s dhclient -r' % nsname)
-        output = Shell.run('ip netns exec %s ip link list' % nsname)
+        output = ""
+        try:
+            output = Shell.run('ip netns exec %s ip link list' % nsname)
+        except Exception as ex:
+            logging.error(ex)
+
         for line in output.split('\n'):
             m = re.match(r'^[\d]+: ([\w]+):', line)
             if m:
