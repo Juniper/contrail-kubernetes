@@ -81,3 +81,12 @@ func (c *KubeClient) ServerVersion() (*version.Info, error) {
 func (c *KubeClient) ServerAPIVersions() (*api.APIVersions, error) {
 	return nil, nil
 }
+func (c *KubeClient) ComponentStatuses() client.ComponentStatusInterface {
+	return nil
+}
+func (c *KubeClient) PodTemplates(namespace string) client.PodTemplateInterface {
+	return nil
+}
+func (c *KubeClient) ServiceAccounts(namespace string) client.ServiceAccountsInterface {
+	return nil
+}

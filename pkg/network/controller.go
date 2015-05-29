@@ -22,22 +22,22 @@ import (
 )
 
 type NetworkController interface {
-	SetNamespaceStore(store *cache.Store)
+	SetNamespaceStore(store cache.Store)
 	AddNamespace(obj *api.Namespace)
 	UpdateNamespace(oldObj, newObj *api.Namespace)
 	DeleteNamespace(obj *api.Namespace)
 
-	SetPodStore(store *cache.Store)
+	SetPodStore(store cache.Store)
 	AddPod(obj *api.Pod)
 	UpdatePod(oldObj, newObj *api.Pod)
 	DeletePod(obj *api.Pod)
 
-	SetReplicationControllerStore(store *cache.Store)
+	SetReplicationControllerStore(store cache.Store)
 	AddReplicationController(obj *api.ReplicationController)
 	UpdateReplicationController(oldObj, newObj *api.ReplicationController)
 	DeleteReplicationController(obj *api.ReplicationController)
 
-	SetServiceStore(store *cache.Store)
+	SetServiceStore(store cache.Store)
 	AddService(obj *api.Service)
 	UpdateService(oldObj, newObj *api.Service)
 	DeleteService(obj *api.Service)

@@ -21,6 +21,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
 	kubeclient "github.com/GoogleCloudPlatform/kubernetes/pkg/client"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/client/cache"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/fields"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/labels"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/runtime"
@@ -43,6 +44,7 @@ type Controller struct {
 
 	eventChannel chan notification
 
+	serviceStore cache.Store
 	instanceMgr  *InstanceManager
 	networkMgr   NetworkManager
 	serviceMgr   ServiceManager
@@ -179,6 +181,34 @@ func (c *Controller) ensureNamespace(namespaceName string) {
 	project = c.namespaceMgr.LocateNamespace(namespace.Name, string(namespace.ObjectMeta.UID))
 }
 
+func (c *Controller) updatePodServiceIp(service *api.Service, pod *api.Pod) {
+	if service.Spec.PortalIP == "" {
+		return
+	}
+
+	serviceNetwork, err := c.serviceMgr.LocateServiceNetwork(service.Namespace, service.Name)
+	if err != nil {
+		return
+	}
+	serviceIp, err := c.networkMgr.LocateFloatingIp(serviceNetwork, service.Name, service.Spec.PortalIP)
+	if err != nil {
+		return
+	}
+	c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, serviceIp)
+}
+
+func (c *Controller) updatePodPublicIp(service *api.Service, pod *api.Pod) {
+	if service.Spec.DeprecatedPublicIPs == nil {
+		return
+	}
+	publicIp, err := c.networkMgr.LocateFloatingIp(c.networkMgr.GetPublicNetwork(), service.Name,
+		service.Spec.DeprecatedPublicIPs[0])
+	if err != nil {
+		return
+	}
+	c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, publicIp)
+}
+
 func (c *Controller) updatePod(pod *api.Pod) {
 	glog.Infof("Pod %s", pod.Name)
 
@@ -206,6 +236,19 @@ func (c *Controller) updatePod(pod *api.Pod) {
 	policyTag, ok := pod.Labels[c.config.NetworkAccessTag]
 	if ok {
 		c.serviceMgr.Connect(pod.Namespace, policyTag, network)
+	}
+
+	for _, item := range c.serviceStore.List() {
+		service := item.(*api.Service)
+		if service.Namespace != pod.Namespace {
+			continue
+		}
+		selector := labels.SelectorFromSet(service.Spec.Selector)
+		if selector.Matches(labels.Set(pod.Labels)) {
+			glog.Infof("Pod %s is a member of service %s", pod.Name, service.Name)
+			c.updatePodServiceIp(service, pod)
+			c.updatePodPublicIp(service, pod)
+		}
 	}
 }
 

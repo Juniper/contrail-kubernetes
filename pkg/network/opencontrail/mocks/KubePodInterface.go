@@ -11,8 +11,8 @@ type KubePodInterface struct {
 	mock.Mock
 }
 
-func (m *KubePodInterface) List(selector labels.Selector) (*api.PodList, error) {
-	ret := m.Called(selector)
+func (m *KubePodInterface) List(label labels.Selector, field fields.Selector) (*api.PodList, error) {
+	ret := m.Called(label, field)
 
 	var r0 *api.PodList
 	if ret.Get(0) != nil {
@@ -33,8 +33,8 @@ func (m *KubePodInterface) Get(name string) (*api.Pod, error) {
 
 	return r0, r1
 }
-func (m *KubePodInterface) Delete(name string) error {
-	ret := m.Called(name)
+func (m *KubePodInterface) Delete(name string, options *api.DeleteOptions) error {
+	ret := m.Called(name, options)
 
 	r0 := ret.Error(0)
 

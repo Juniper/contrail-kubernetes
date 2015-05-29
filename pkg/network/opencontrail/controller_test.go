@@ -28,6 +28,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
 	kubeclient "github.com/GoogleCloudPlatform/kubernetes/pkg/client"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/client/cache"
 	kubetypes "github.com/GoogleCloudPlatform/kubernetes/pkg/types"
 
 	"github.com/Juniper/contrail-go-api"
@@ -37,8 +38,13 @@ import (
 	"github.com/Juniper/contrail-kubernetes/pkg/network/opencontrail/mocks"
 )
 
+func testKeyFunc(obj interface{}) (string, error) {
+	return "", nil
+}
+
 func NewTestController(kube kubeclient.Interface, client contrail.ApiClient, allocator AddressAllocator, networkMgr NetworkManager) *Controller {
 	controller := new(Controller)
+	controller.serviceStore = cache.NewStore(testKeyFunc)
 	controller.eventChannel = make(chan notification, 32)
 	controller.kube = kube
 

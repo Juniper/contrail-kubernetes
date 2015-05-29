@@ -185,10 +185,10 @@ func (m *NetworkManager) start(args []string) {
 		},
 	)
 
-	m.Controller.SetPodStore(&m.PodStore)
-	m.Controller.SetNamespaceStore(&m.NamespaceStore)
-	m.Controller.SetReplicationControllerStore(&m.RCStore)
-	m.Controller.SetServiceStore(&m.ServiceStore)
+	m.Controller.SetPodStore(m.PodStore)
+	m.Controller.SetNamespaceStore(m.NamespaceStore)
+	m.Controller.SetReplicationControllerStore(m.RCStore)
+	m.Controller.SetServiceStore(m.ServiceStore)
 }
 
 func (m *NetworkManager) Run(args []string) error {
