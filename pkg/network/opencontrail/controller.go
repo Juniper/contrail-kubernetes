@@ -243,6 +243,9 @@ func (c *Controller) updatePod(pod *api.Pod) {
 		if service.Namespace != pod.Namespace {
 			continue
 		}
+		if len(service.Spec.Selector) == 0 {
+			continue
+		}
 		selector := labels.SelectorFromSet(service.Spec.Selector)
 		if selector.Matches(labels.Set(pod.Labels)) {
 			glog.Infof("Pod %s is a member of service %s", pod.Name, service.Name)
