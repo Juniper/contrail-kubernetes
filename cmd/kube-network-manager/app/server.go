@@ -199,7 +199,7 @@ func (m *NetworkManager) start(args []string) {
 func (m *NetworkManager) Run(args []string) error {
 	m.start(args)
 	go m.PodInformer.Run(m.Shutdown)
-	go m.NamespaceInformer.Run(m.Shutdown)
+	// go m.NamespaceInformer.Run(m.Shutdown)
 	go m.RCInformer.Run(m.Shutdown)
 	go m.ServiceInformer.Run(m.Shutdown)
 	go m.Controller.Run(m.Shutdown)
