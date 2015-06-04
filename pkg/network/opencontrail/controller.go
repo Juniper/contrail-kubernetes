@@ -186,7 +186,8 @@ func (c *Controller) updatePodServiceIp(service *api.Service, pod *api.Pod) {
 		return
 	}
 
-	serviceNetwork, err := c.serviceMgr.LocateServiceNetwork(service.Namespace, service.Name)
+	serviceName := c.serviceName(service.Labels)
+	serviceNetwork, err := c.serviceMgr.LocateServiceNetwork(service.Namespace, serviceName)
 	if err != nil {
 		return
 	}
