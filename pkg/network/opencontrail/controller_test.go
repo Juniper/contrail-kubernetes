@@ -24,7 +24,7 @@ import (
 	"code.google.com/p/go-uuid/uuid"
 
 	"github.com/stretchr/testify/assert"
-	_ "github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
 	kubeclient "github.com/GoogleCloudPlatform/kubernetes/pkg/client"
@@ -52,6 +52,7 @@ func NewTestController(kube kubeclient.Interface, client contrail.ApiClient, all
 	controller.config = NewConfig()
 
 	config.PrivateSubnet = "10.0.0.0/16"
+	config.ServiceSubnet = "10.254.0.0/16"
 	controller.client = client
 	controller.allocator = allocator
 	controller.instanceMgr = NewInstanceManager(client, controller.allocator)
@@ -242,4 +243,162 @@ func TestNamespaceDelete(t *testing.T) {
 
 	_, err := client.FindByUuid("project", string(namespace.ObjectMeta.UID))
 	assert.NotNil(t, err)
+}
+
+func TestServiceAddWithPod(t *testing.T) {
+	kube := mocks.NewKubeClient()
+
+	client := new(contrail_mocks.ApiClient)
+	client.Init()
+
+	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
+	allocator := new(mocks.AddressAllocator)
+	networkMgr := new(mocks.NetworkManager)
+
+	controller := NewTestController(kube, client, allocator, networkMgr)
+	pod := &api.Pod{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "test",
+			Namespace: "testns",
+			UID:       kubetypes.UID(uuid.New()),
+			Labels: map[string]string{
+				"name": "testpod",
+			},
+		},
+	}
+	service := &api.Service{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "s1",
+			Namespace: "testns",
+			Labels: map[string]string{
+				"name": "x1",
+			},
+		},
+		Spec: api.ServiceSpec{
+			Selector: map[string]string{
+				"name": "testpod",
+			},
+			ClusterIP: "10.254.42.42",
+		},
+	}
+
+	netnsProject := new(types.Project)
+	netnsProject.SetFQName("", []string{"default-domain", "testns"})
+	client.Create(netnsProject)
+
+	testnet := new(types.VirtualNetwork)
+	testnet.SetFQName("project", []string{"default-domain", "testns", "testpod"})
+	client.Create(testnet)
+	networkMgr.On("LocateNetwork", "testns", "testpod",
+		controller.config.PrivateSubnet).Return(testnet, nil)
+	networkMgr.On("GetGatewayAddress", testnet).Return("10.0.255.254", nil)
+	allocator.On("LocateIpAddress", string(pod.ObjectMeta.UID)).Return("10.0.0.1", nil)
+
+	servicenet := new(types.VirtualNetwork)
+	servicenet.SetFQName("project", []string{"default-domain", "testns", "service-x1"})
+	client.Create(servicenet)
+	networkMgr.On("LocateNetwork", "testns", "service-x1", controller.config.ServiceSubnet).Return(servicenet, nil)
+	pool := new(types.FloatingIpPool)
+	pool.SetFQName("virtual-network", []string{DefaultDomain, "testns", "service-x1", "service-x1"})
+	client.Create(pool)
+	networkMgr.On("LocateFloatingIpPool", servicenet, controller.config.ServiceSubnet).Return(pool, nil)
+	sip := new(types.FloatingIp)
+	sip.SetFQName("floating-ip-pool", []string{DefaultDomain, "testns", "service-x1", "service-x1", service.Name})
+	client.Create(sip)
+	networkMgr.On("LocateFloatingIp", servicenet, service.Name, service.Spec.ClusterIP).Return(sip, nil)
+
+	kube.PodInterface.On("Update", pod).Return(pod, nil)
+	kube.PodInterface.On("List", mock.Anything, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod}}, nil)
+	controller.AddPod(pod)
+	controller.AddService(service)
+
+	shutdown := make(chan struct{})
+	go controller.Run(shutdown)
+	time.Sleep(100 * time.Millisecond)
+	type shutdownMsg struct {
+	}
+	shutdown <- shutdownMsg{}
+
+	refList, err := sip.GetVirtualMachineInterfaceRefs()
+	assert.Nil(t, err)
+	assert.NotEmpty(t, refList)
+}
+
+func TestPodAddWithService(t *testing.T) {
+	kube := mocks.NewKubeClient()
+
+	client := new(contrail_mocks.ApiClient)
+	client.Init()
+
+	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
+	allocator := new(mocks.AddressAllocator)
+	networkMgr := new(mocks.NetworkManager)
+
+	controller := NewTestController(kube, client, allocator, networkMgr)
+	pod := &api.Pod{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "test",
+			Namespace: "testns",
+			UID:       kubetypes.UID(uuid.New()),
+			Labels: map[string]string{
+				"name": "testpod",
+			},
+		},
+	}
+	service := &api.Service{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "s1",
+			Namespace: "testns",
+			Labels: map[string]string{
+				"name": "x1",
+			},
+		},
+		Spec: api.ServiceSpec{
+			Selector: map[string]string{
+				"name": "testpod",
+			},
+			ClusterIP: "10.254.42.42",
+		},
+	}
+
+	netnsProject := new(types.Project)
+	netnsProject.SetFQName("", []string{"default-domain", "testns"})
+	client.Create(netnsProject)
+
+	testnet := new(types.VirtualNetwork)
+	testnet.SetFQName("project", []string{"default-domain", "testns", "testpod"})
+	client.Create(testnet)
+	networkMgr.On("LocateNetwork", "testns", "testpod",
+		controller.config.PrivateSubnet).Return(testnet, nil)
+	networkMgr.On("GetGatewayAddress", testnet).Return("10.0.255.254", nil)
+	allocator.On("LocateIpAddress", string(pod.ObjectMeta.UID)).Return("10.0.0.1", nil)
+
+	servicenet := new(types.VirtualNetwork)
+	servicenet.SetFQName("project", []string{"default-domain", "testns", "service-x1"})
+	client.Create(servicenet)
+	networkMgr.On("LocateNetwork", "testns", "service-x1", controller.config.ServiceSubnet).Return(servicenet, nil)
+	pool := new(types.FloatingIpPool)
+	pool.SetFQName("virtual-network", []string{DefaultDomain, "testns", "service-x1", "service-x1"})
+	client.Create(pool)
+	networkMgr.On("LocateFloatingIpPool", servicenet, controller.config.ServiceSubnet).Return(pool, nil)
+	sip := new(types.FloatingIp)
+	sip.SetFQName("floating-ip-pool", []string{DefaultDomain, "testns", "service-x1", "service-x1", service.Name})
+	client.Create(sip)
+	networkMgr.On("LocateFloatingIp", servicenet, service.Name, service.Spec.ClusterIP).Return(sip, nil)
+
+	kube.PodInterface.On("Update", pod).Return(pod, nil)
+	controller.serviceStore.Add(service)
+	controller.AddPod(pod)
+
+	shutdown := make(chan struct{})
+	go controller.Run(shutdown)
+	time.Sleep(100 * time.Millisecond)
+	type shutdownMsg struct {
+	}
+	shutdown <- shutdownMsg{}
+
+	refList, err := sip.GetVirtualMachineInterfaceRefs()
+	assert.Nil(t, err)
+	assert.NotEmpty(t, refList)
+
 }
