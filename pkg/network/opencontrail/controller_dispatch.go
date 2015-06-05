@@ -76,6 +76,9 @@ func (c *Controller) DeletePod(pod *api.Pod) {
 }
 
 func (c *Controller) AddService(service *api.Service) {
+	if len(service.Spec.Selector) == 0 {
+		return
+	}
 	pods, err := c.kube.Pods(service.Namespace).List(
 		labels.Set(service.Spec.Selector).AsSelector(), fields.Everything())
 	if err != nil {

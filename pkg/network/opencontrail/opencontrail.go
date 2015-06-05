@@ -56,18 +56,18 @@ func NewController(kube *kubeclient.Client, args []string) *Controller {
 	return controller
 }
 
-func (c *Controller) SetNamespaceStore(store *cache.Store) {
+func (c *Controller) SetNamespaceStore(store cache.Store) {
 	//	c.NamespaceStore = store
 }
 
-func (c *Controller) SetPodStore(store *cache.Store) {
+func (c *Controller) SetPodStore(store cache.Store) {
 	//	c.PodStore = store
 }
 
-func (c *Controller) SetReplicationControllerStore(store *cache.Store) {
+func (c *Controller) SetReplicationControllerStore(store cache.Store) {
 	//	c.RCStore = store
 }
 
-func (c *Controller) SetServiceStore(store *cache.Store) {
-	//	c.ServiceStore = store
+func (c *Controller) SetServiceStore(store cache.Store) {
+	c.serviceStore = store
 }

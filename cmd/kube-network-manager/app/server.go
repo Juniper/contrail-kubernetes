@@ -102,36 +102,39 @@ func (m *NetworkManager) start(args []string) {
 					oldObj.(*api.Pod), newObj.(*api.Pod))
 			},
 			DeleteFunc: func(obj interface{}) {
-				m.Controller.DeletePod(obj.(*api.Pod))
+				if pod, ok := obj.(*api.Pod); ok {
+					m.Controller.DeletePod(pod)
+				}
 			},
 		},
 	)
 
-	m.NamespaceStore, m.NamespaceInformer = framework.NewInformer(
-		cache.NewListWatchFromClient(
-			m.Client,
-			"namespaces",
-			api.NamespaceAll,
-			fields.Everything(),
-		),
-		&api.Namespace{},
-		m.config.ResyncPeriod,
-		framework.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-				m.Controller.AddNamespace(
-					obj.(*api.Namespace))
-			},
-			UpdateFunc: func(oldObj, newObj interface{}) {
-				m.Controller.UpdateNamespace(
-					oldObj.(*api.Namespace),
-					newObj.(*api.Namespace))
-			},
-			DeleteFunc: func(obj interface{}) {
-				m.Controller.DeleteNamespace(
-					obj.(*api.Namespace))
-			},
-		},
-	)
+	// m.NamespaceStore, m.NamespaceInformer = framework.NewInformer(
+	// 	cache.NewListWatchFromClient(
+	// 		m.Client,
+	// 		"namespaces",
+	// 		api.NamespaceAll,
+	// 		fields.Everything(),
+	// 	),
+	// 	&api.Namespace{},
+	// 	m.config.ResyncPeriod,
+	// 	framework.ResourceEventHandlerFuncs{
+	// 		AddFunc: func(obj interface{}) {
+	// 			m.Controller.AddNamespace(
+	// 				obj.(*api.Namespace))
+	// 		},
+	// 		UpdateFunc: func(oldObj, newObj interface{}) {
+	// 			m.Controller.UpdateNamespace(
+	// 				oldObj.(*api.Namespace),
+	// 				newObj.(*api.Namespace))
+	// 		},
+	// 		DeleteFunc: func(obj interface{}) {
+	// 			if namespace, ok := obj.(*api.Namespace); ok {
+	// 				m.Controller.DeleteNamespace(namespace)
+	// 			}
+	// 		},
+	// 	},
+	// )
 
 	m.RCStore, m.RCInformer = framework.NewInformer(
 		cache.NewListWatchFromClient(
@@ -153,8 +156,9 @@ func (m *NetworkManager) start(args []string) {
 					newObj.(*api.ReplicationController))
 			},
 			DeleteFunc: func(obj interface{}) {
-				m.Controller.DeleteReplicationController(
-					obj.(*api.ReplicationController))
+				if rc, ok := obj.(*api.ReplicationController); ok {
+					m.Controller.DeleteReplicationController(rc)
+				}
 			},
 		},
 	)
@@ -179,22 +183,23 @@ func (m *NetworkManager) start(args []string) {
 					newObj.(*api.Service))
 			},
 			DeleteFunc: func(obj interface{}) {
-				m.Controller.DeleteService(
-					obj.(*api.Service))
+				if service, ok := obj.(*api.Service); ok {
+					m.Controller.DeleteService(service)
+				}
 			},
 		},
 	)
 
-	m.Controller.SetPodStore(&m.PodStore)
-	m.Controller.SetNamespaceStore(&m.NamespaceStore)
-	m.Controller.SetReplicationControllerStore(&m.RCStore)
-	m.Controller.SetServiceStore(&m.ServiceStore)
+	m.Controller.SetPodStore(m.PodStore)
+	m.Controller.SetNamespaceStore(m.NamespaceStore)
+	m.Controller.SetReplicationControllerStore(m.RCStore)
+	m.Controller.SetServiceStore(m.ServiceStore)
 }
 
 func (m *NetworkManager) Run(args []string) error {
 	m.start(args)
 	go m.PodInformer.Run(m.Shutdown)
-	go m.NamespaceInformer.Run(m.Shutdown)
+	// go m.NamespaceInformer.Run(m.Shutdown)
 	go m.RCInformer.Run(m.Shutdown)
 	go m.ServiceInformer.Run(m.Shutdown)
 	go m.Controller.Run(m.Shutdown)
