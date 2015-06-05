@@ -12,6 +12,7 @@ import requests
 import socket
 import subprocess
 import sys
+import time
 import uuid
 import xml.etree.ElementTree as ElementTree
 
@@ -76,9 +77,14 @@ def docker_get_pid(docker_id):
 
 
 def kubelet_get_api():
-    fp = open('/etc/kubernetes/kubelet', 'r')
+    fp = None
+    try:
+        fp = open('/etc/kubernetes/kubelet', 'r')
+    except:
+        fp = open('/etc/default/kubelet', 'r')
+
     for line in fp.readlines():
-        m = re.search(r'KUBELET_API_SERVER=\"--api_servers=http://(.*)\"', line)
+        m = re.search(r'--api_servers=http[s]?://(\d+\.\d+\.\d+\.\d+)', line)
         if m:
             return m.group(1)
     return None
@@ -98,8 +104,8 @@ def getDockerPod(docker_id):
 def getPodInfo(podName):
     kubeapi = kubelet_get_api()
 
-    data = Shell.run('kubectl --server=%s get -o json pod %s' % (
-        kubeapi, podName))
+    data = Shell.run('/usr/local/bin/kubectl --server=%s:7080 get -o json pod %s' % (
+            kubeapi, podName), True)
     return json.loads(data)
     
 def setup(pod_namespace, pod_name, docker_id):
@@ -130,13 +136,21 @@ def setup(pod_namespace, pod_name, docker_id):
         instance_ifname = 'eth0'
 
     uid, podName = getDockerPod(docker_id)
-    podInfo = getPodInfo(podName)
+
+    podInfo = None
+    for i in range(0, 120):
+        podInfo = getPodInfo(podName)
+        if 'annotations' in podInfo["metadata"] and \
+           'nic_uuid' in podInfo["metadata"]["annotations"]:
+            break
+        time.sleep(1)
     
     # The lxc_manager uses the mac_address to setup the container interface.
     # Additionally the ip-address, prefixlen and gateway are also used.
-    if not 'annotations' in podInfo['metadata']:
+    if not 'annotations' in podInfo["metadata"] or not 'nic_uuid' in podInfo["metadata"]["annotations"]:
         logging.error('No annotations in pod %s', podInfo["metadata"]["name"])
         sys.exit(1)
+
 
     podAnnotations = podInfo["metadata"]["annotations"]
     nic_uuid = podAnnotations["nic_uuid"]
@@ -215,4 +229,8 @@ def main():
         teardown(args.pod_namespace, args.pod_name, args.docker_id)
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except:
+        logging.error("Unexpected error: %s", sys.exc_info()[0])
+        raise

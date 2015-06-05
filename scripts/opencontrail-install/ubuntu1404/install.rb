@@ -5,13 +5,14 @@
 @pkg_tag = "#{@branch}-#{@tag}"
 
 @common_packages = [
-    "docker",
+#   "docker",
     "gdebi-core",
     "git",
     "sshpass",
     "strace",
     "tcpdump",
     "unzip",
+    "vim",
 ]
 
 @controller_thirdparty_packages = [
@@ -87,11 +88,13 @@
 def download_contrail_software
     sh("wget -qO - https://github.com/rombie/opencontrail-packages/blob/master/ubuntu1404/contrail.tar.xz?raw=true | tar Jx")
     sh("wget -qO - https://github.com/rombie/opencontrail-packages/blob/master/ubuntu1404/thirdparty.tar.xz?raw=true | tar Jx")
+    sh("wget -qO - https://github.com/rombie/opencontrail-packages/blob/master/ubuntu1404/kubernetes.tar.xz?raw=true | tar Jx")
 end
 
 # Install from /cs-shared/builder/cache/centoslinux70/icehouse
 def install_thirdparty_software_controller
-    sh("apt-get -y install #{@common_packages.join(" ")} rabbitmq-server")
+    sh("apt-get -y install openjdk-7-jre rabbitmq-server zookeeperd")
+    sh("apt-get -y install #{@common_packages.join(" ")}")
     @controller_thirdparty_packages.each { |pkg| sh("gdebi -n #{pkg}") }
 end
 
@@ -100,9 +103,10 @@ def install_contrail_software_controller
     @controller_contrail_packages.each { |pkg| sh("gdebi -n #{pkg}") }
 
     sh("rm -rf /etc/init/zookeeper.conf")
-    sh("gdebi -n #{@ws}/build/debian/contrail-openstack-database_#{@pkg_tag}_all.deb")
+    sh("dpkg -i --force-overwrite #{@ws}/build/debian/contrail-openstack-database_#{@pkg_tag}_all.deb")
 
     # Fix ubuntu specific issues
+    sh("apt-get -y remove openjdk-6-jre", true)
     sh("apt-get -y autoremove")
     sh("ln -sf /etc/cassandra /etc/cassandra/conf")
 
