@@ -114,6 +114,11 @@ end
 def install_contrail_software_controller
     sh("yum -y install #{@controller_contrail_packages.join(" ")}")
 
+    # Install node-v0.8.15
+    # sh("wget -O - http://nodejs.org/dist/v0.8.15/node-v0.8.15.tar.gz | tar xz")
+    # sh("cd node && ./configure && make all install")
+    sh("wget -qO - https://github.com/rombie/opencontrail-packages/blob/master/fedora20/contrail_web_core.tar.xz?raw=true | tar -C /usr/src/contrail/ -Jx")
+
     sh("rpm2cpio #{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-openstack-database-#{@pkg_tag}.fc20.noarch.rpm | cpio -idmv")
     sh("cp etc/rc.d/init.d/zookeeper /etc/rc.d/init.d/")
     sh("rpm2cpio #{@ws}/contrail/controller/build/package-build/RPMS/noarch/contrail-openstack-config-#{@pkg_tag}.fc20.noarch.rpm | cpio -idmv")

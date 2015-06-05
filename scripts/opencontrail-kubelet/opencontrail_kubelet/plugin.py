@@ -75,13 +75,16 @@ def docker_get_pid(docker_id):
     pid_str = Shell.run('docker inspect -f \'{{.State.Pid}}\' %s' % docker_id)
     return int(pid_str)
 
-
+# kubelet config is at different places in different envs, unfortunately
 def kubelet_get_api():
     fp = None
     try:
-        fp = open('/etc/kubernetes/kubelet', 'r')
+        fp = open('/etc/sysconfig/kubelet', 'r')
     except:
-        fp = open('/etc/default/kubelet', 'r')
+        try:
+            fp = open('/etc/default/kubelet', 'r')
+        except:
+            fp = open('/etc/kubernetes/kubelet', 'r')
 
     for line in fp.readlines():
         m = re.search(r'--api_servers=http[s]?://(\d+\.\d+\.\d+\.\d+)', line)

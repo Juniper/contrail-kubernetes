@@ -45,9 +45,8 @@ func NewConfig() *Config {
 		ApiPort:          8082,
 		DefaultProject:   "default-domain:default-project",
 		PublicNetwork:    "default-domain:default-project:Public",
-		PrivateSubnet:    "10.10.0.0/16",
-		ServiceSubnet:    "10.247.0.0/16",
-		PublicSubnet:     "10.1.0.0/16",
+		PrivateSubnet:    "10.0.0.0/16",
+		ServiceSubnet:    "10.254.0.0/16",
 		NetworkTag:       "name",
 		NetworkAccessTag: "uses",
 	}
@@ -62,7 +61,7 @@ func (c *Config) Parse(args []string) {
 		"OpenContrail API port.")
 	fs.StringVar(&c.PublicNetwork, "public_name", c.PublicNetwork,
 		"External network name.")
-	fs.StringVar(&c.PublicSubnet, "public_net", c.PublicSubnet,
+	fs.StringVar(&c.PublicSubnet, "public_net", "c.PublicSubnet",
 		"External network subnet prefix used when provisioning the cluster.")
 	fs.StringVar(&c.PrivateSubnet, "private_net", c.PrivateSubnet,
 		"Address range to use for private IP addresses.")

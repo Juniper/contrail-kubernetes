@@ -5,9 +5,14 @@
 
 raise 'Must run with superuser privilages' unless Process.uid == 0
 
+#TODO: Add all these through proper command line options
 @controller_host = ARGV[0]
 @role = ARGV[1]
 @setup_kubernetes = true
+
+@private_net = "10.10.0.0/16"
+@portal_net = "10.0.0.0/16"
+@public_net = "10.1.0.0/16"
 
 @ws="#{File.dirname($0)}"
 require "#{@ws}/util"
@@ -16,9 +21,12 @@ require "#{@ws}/util"
 # TODO Take via command line options
 @intf = "eth0"
 @user = "ubuntu"
+@vagrant = false
 if File.directory? "/vagrant" then
     @intf = "eth1"
     @user = "vagrant"
+    @portal_net = "10.247.0.0/16"
+    @vagrant = true
 end
 
 # Find platform OS
@@ -70,6 +78,7 @@ def initial_setup
     sh("echo 127.0.0.1 localhost >> /etc/hosts") if $?.to_i != 0
 
     Dir.chdir("#{@ws}")
+    sh("mkdir -p /var/crashes", true)
 end
 
 def update_controller_etc_hosts
@@ -98,10 +107,8 @@ def verify_controller
     sh("netstat -anp | \grep LISTEN | \grep -w 8086", false, 10, 3) # Collector
     sh("netstat -anp | \grep LISTEN | \grep -w 8081", false, 10, 3) # OpServer
 
-    if @platform =~ /ubuntu/ then
-        sh("netstat -anp | \grep LISTEN | \grep -w 8143", false, 10, 3) # WebUI
-        sh("netstat -anp | \grep LISTEN | \grep -w 8070", false, 10, 3) # WebUI
-    end
+    sh("netstat -anp | \grep LISTEN | \grep -w 8143", false, 10, 3) # WebUI
+    sh("netstat -anp | \grep LISTEN | \grep -w 8070", false, 10, 3) # WebUI
 
     puts "All contrail controller components up"
 end
@@ -131,6 +138,16 @@ def provision_contrail_controller
     end
     sh(%{sed -i "s/config.orchestration.Manager = 'openstack'/config.orchestration.Manager = 'none'/" /etc/contrail/config.global.js})
     sh(%{sed -i 's/8080/8070/' /etc/contrail/config.global.js})
+
+    # Fix nodemgr configs
+    nodemgr_conf = <<EOF
+[COLLECTOR]
+server_list=127.0.0.1:8086
+EOF
+    File.open("/etc/contrail/contrail-control-nodemgr.conf", "a") {|fp| fp.puts nodemgr_conf}
+    File.open("/etc/contrail/contrail-database-nodemgr.conf", "a") {|fp| fp.puts nodemgr_conf}
+    File.open("/etc/contrail/contrail-analytics-nodemgr.conf", "a") {|fp| fp.puts nodemgr_conf}
+    File.open("/etc/contrail/contrail-config-nodemgr.conf", "a") {|fp| fp.puts nodemgr_conf}
 
     if @platform =~ /fedora/
         sh("service cassandra restart")
@@ -177,6 +194,15 @@ def provision_contrail_compute
     sh("sed -i 's/# ip=[0-9]\\+\.[0-9]\\+\.[0-9]\\+\.[0-9]\\+\\/[0-9]\\+/ip=#{ip}\\/#{prefix_len}/' /etc/contrail/contrail-vrouter-agent.conf")
     sh("sed -i 's/# gateway=[0-9]\\+\.[0-9]\\+\.[0-9]\\+\.[0-9]\\+/gateway=#{gw}/' /etc/contrail/contrail-vrouter-agent.conf")
 
+    nodemgr_conf = <<EOF
+[DISCOVERY]
+server=#{@contrail_controller}
+port=5998
+[COLLECTOR]
+server_list=#{@contrail_controller}:8086
+EOF
+    File.open("/etc/contrail/contrail-vrouter-nodemgr.conf", "w") {|fp| fp.puts nodemgr_conf}
+
     key_file = "/home/#{@user}/.ssh/contrail_rsa"
     key = File.file?(key_file) ? "-i #{key_file}" : ""
     sh("sshpass -p #{@user} ssh -t #{key} #{@user}@#{@controller_host} sudo python /opt/contrail/utils/provision_vrouter.py --host_name #{sh('hostname')} --host_ip #{ip} --api_server_ip #{@contrail_controller} --oper add", false, 20, 6)
@@ -191,7 +217,7 @@ def provision_contrail_compute
     sh("ip route add 0.0.0.0/0 via #{gw}", true)
 
     # Setup virtual gateway
-    sh("python /opt/contrail/utils/provision_vgw_interface.py --oper create --interface vgw_public --subnets 10.1.0.0/16 --routes 0.0.0.0/0 --vrf default-domain:default-project:Public:Public")
+    sh("python /opt/contrail/utils/provision_vgw_interface.py --oper create --interface vgw_public --subnets #{@public_net} --routes 0.0.0.0/0 --vrf default-domain:default-project:Public:Public")
 
     verify_compute
 end
@@ -201,14 +227,20 @@ def provision_contrail_controller_kubernetes
 
     # Start kube web server in background
     # http://localhost:8001/static/app/#/dashboard/
+    sh("ln -sf /usr/local/bin/kubectl /usr/bin/kubectl", true)
     sh("nohup /usr/local/bin/kubectl proxy --www=#{@ws}/build_kubernetes/www 2>&1 > /var/log/kubectl-web-proxy.log", true, 1, 1, true)
 
     # Start kube-network-manager plugin daemon in background
-    sh("nohup #{@ws}/build_kubernetes/kube-network-manager 2>&1 > /var/log/contrail/kube-network-manager.log", true, 1, 1, true)
+    # sh(%{nohup #{@ws}/build_kubernetes/kube-network-manager -- --public_net="#{@public_net}" --portal_net="#{@portal_net}" --private_net="#{@private_net}" 2>&1 > /var/log/contrail/kube-network-manager.log}, true, 1, 1, true)
+
+    # Add public_net route in vagrant setup.
+    sh(%{ip route add #{@public_net} via `grep kubernetes-minion-1 /etc/hosts | awk '{print $1}'`}, true) if @vagrant
 end
 
 # http://www.fedora.hk/linux/yumwei/show_45.html
 def fix_docker_file_system_issue
+    return if @platform !~ /ubuntu/
+
     sh("service docker stop", true)
     sh("mv /mnt/docker /mnt/docker.old", true)
     sh("mkdir -p /root/docker", true)
@@ -225,6 +257,7 @@ def provision_contrail_compute_kubernetes
     key_file = "/home/#{@user}/.ssh/contrail_rsa"
     key = File.file?(key_file) ? "-i #{key_file}" : ""
     sh("sshpass -p #{@user} scp #{key} #{@user}@#{@controller_host}:/usr/local/bin/kubectl /usr/local/bin/.")
+    sh("ln -sf /usr/local/bin/kubectl /usr/bin/kubectl", true)
 
     Dir.chdir("#{@ws}/../opencontrail-kubelet")
     sh("python setup.py install")
@@ -272,6 +305,8 @@ def main
     initial_setup
     download_contrail_software
     if @role == "controller" or @role == "all" then
+        # Make sure that kubeapi is up and running
+        sh("netstat -anp | \grep LISTEN | \grep -w 8080", false, 60, 10)
         install_thirdparty_software_controller
         install_contrail_software_controller
         provision_contrail_controller
@@ -284,6 +319,9 @@ def main
         provision_contrail_compute
         provision_contrail_compute_kubernetes
     end
+
+    # Wait a bit before exiting
+    sleep 10
 end
 
 main
