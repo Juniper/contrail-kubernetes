@@ -278,6 +278,7 @@ func (m *NetworkManagerImpl) GetGatewayAddress(network *types.VirtualNetwork) (s
 
 	gateway := attr.IpamSubnets[0].DefaultGateway
 	if gateway == "" {
+		glog.Errorf("Gateway for %s is empty", network.GetName())
 		return "", fmt.Errorf("Gateway is empty: %+v", attr.IpamSubnets)
 	}
 

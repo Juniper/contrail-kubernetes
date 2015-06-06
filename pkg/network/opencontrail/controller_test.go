@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"code.google.com/p/go-uuid/uuid"
+	"github.com/golang/glog"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -48,16 +49,21 @@ func NewTestController(kube kubeclient.Interface, client contrail.ApiClient, all
 	controller.eventChannel = make(chan notification, 32)
 	controller.kube = kube
 
-	config := new(Config)
 	controller.config = NewConfig()
 
-	config.PrivateSubnet = "10.0.0.0/16"
-	config.ServiceSubnet = "10.254.0.0/16"
 	controller.client = client
-	controller.allocator = allocator
+	if allocator == nil {
+		controller.allocator = NewAddressAllocator(client, controller.config)
+	} else {
+		controller.allocator = allocator
+	}
 	controller.instanceMgr = NewInstanceManager(client, controller.allocator)
-	controller.networkMgr = networkMgr
-	controller.serviceMgr = NewServiceManager(client, config, networkMgr)
+	if networkMgr == nil {
+		controller.networkMgr = NewNetworkManager(client, controller.config)
+	} else {
+		controller.networkMgr = networkMgr
+	}
+	controller.serviceMgr = NewServiceManager(client, controller.config, controller.networkMgr)
 	controller.namespaceMgr = NewNamespaceManager(client)
 	return controller
 }
@@ -71,6 +77,31 @@ func (v *VmiInterceptor) Get(ptr contrail.IObject) {
 		mac.AddMacAddress("00:01:02:03:04:05")
 		nic.SetVirtualMachineInterfaceMacAddresses(&mac)
 	}
+}
+
+func (v *VmiInterceptor) Put(ptr contrail.IObject) {
+}
+
+type NetworkInterceptor struct{}
+
+func (i *NetworkInterceptor) Put(ptr contrail.IObject) {
+	network := ptr.(*types.VirtualNetwork)
+	refs, err := network.GetNetworkIpamRefs()
+	if err != nil || len(refs) == 0 {
+		glog.Infof("%s: no ipam refs", network.GetName())
+		return
+	}
+
+	attr := refs[0].Attr.(types.VnSubnetsType)
+	if len(attr.IpamSubnets) == 0 {
+		glog.Infof("%s: no subnets", network.GetName())
+		return
+	}
+
+	attr.IpamSubnets[0].DefaultGateway = "1.1.1.1"
+}
+
+func (i *NetworkInterceptor) Get(ptr contrail.IObject) {
 }
 
 func TestPodCreate(t *testing.T) {
@@ -94,6 +125,7 @@ func TestPodCreate(t *testing.T) {
 			},
 		},
 	}
+
 	netnsProject := new(types.Project)
 	netnsProject.SetUuid(uuid.New())
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
@@ -252,10 +284,12 @@ func TestServiceAddWithPod(t *testing.T) {
 	client.Init()
 
 	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	allocator := new(mocks.AddressAllocator)
-	networkMgr := new(mocks.NetworkManager)
+	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
 
-	controller := NewTestController(kube, client, allocator, networkMgr)
+	allocator := new(mocks.AddressAllocator)
+
+	controller := NewTestController(kube, client, allocator, nil)
+
 	pod := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
 			Name:      "test",
@@ -286,26 +320,7 @@ func TestServiceAddWithPod(t *testing.T) {
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	testnet := new(types.VirtualNetwork)
-	testnet.SetFQName("project", []string{"default-domain", "testns", "testpod"})
-	client.Create(testnet)
-	networkMgr.On("LocateNetwork", "testns", "testpod",
-		controller.config.PrivateSubnet).Return(testnet, nil)
-	networkMgr.On("GetGatewayAddress", testnet).Return("10.0.255.254", nil)
 	allocator.On("LocateIpAddress", string(pod.ObjectMeta.UID)).Return("10.0.0.1", nil)
-
-	servicenet := new(types.VirtualNetwork)
-	servicenet.SetFQName("project", []string{"default-domain", "testns", "service-x1"})
-	client.Create(servicenet)
-	networkMgr.On("LocateNetwork", "testns", "service-x1", controller.config.ServiceSubnet).Return(servicenet, nil)
-	pool := new(types.FloatingIpPool)
-	pool.SetFQName("virtual-network", []string{DefaultDomain, "testns", "service-x1", "service-x1"})
-	client.Create(pool)
-	networkMgr.On("LocateFloatingIpPool", servicenet, controller.config.ServiceSubnet).Return(pool, nil)
-	sip := new(types.FloatingIp)
-	sip.SetFQName("floating-ip-pool", []string{DefaultDomain, "testns", "service-x1", "service-x1", service.Name})
-	client.Create(sip)
-	networkMgr.On("LocateFloatingIp", servicenet, service.Name, service.Spec.ClusterIP).Return(sip, nil)
 
 	kube.PodInterface.On("Update", pod).Return(pod, nil)
 	kube.PodInterface.On("List", mock.Anything, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod}}, nil)
@@ -319,6 +334,11 @@ func TestServiceAddWithPod(t *testing.T) {
 	}
 	shutdown <- shutdownMsg{}
 
+	obj, err := client.FindByName("virtual-network", "default-domain:testns:service-x1")
+	assert.NoError(t, err)
+	serviceNet := obj.(*types.VirtualNetwork)
+	sip, err := controller.networkMgr.LocateFloatingIp(serviceNet, service.Name, service.Spec.ClusterIP)
+	assert.NoError(t, err)
 	refList, err := sip.GetVirtualMachineInterfaceRefs()
 	assert.Nil(t, err)
 	assert.NotEmpty(t, refList)
@@ -331,10 +351,11 @@ func TestPodAddWithService(t *testing.T) {
 	client.Init()
 
 	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	allocator := new(mocks.AddressAllocator)
-	networkMgr := new(mocks.NetworkManager)
+	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
 
-	controller := NewTestController(kube, client, allocator, networkMgr)
+	allocator := new(mocks.AddressAllocator)
+
+	controller := NewTestController(kube, client, allocator, nil)
 	pod := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
 			Name:      "test",
@@ -365,26 +386,7 @@ func TestPodAddWithService(t *testing.T) {
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	testnet := new(types.VirtualNetwork)
-	testnet.SetFQName("project", []string{"default-domain", "testns", "testpod"})
-	client.Create(testnet)
-	networkMgr.On("LocateNetwork", "testns", "testpod",
-		controller.config.PrivateSubnet).Return(testnet, nil)
-	networkMgr.On("GetGatewayAddress", testnet).Return("10.0.255.254", nil)
 	allocator.On("LocateIpAddress", string(pod.ObjectMeta.UID)).Return("10.0.0.1", nil)
-
-	servicenet := new(types.VirtualNetwork)
-	servicenet.SetFQName("project", []string{"default-domain", "testns", "service-x1"})
-	client.Create(servicenet)
-	networkMgr.On("LocateNetwork", "testns", "service-x1", controller.config.ServiceSubnet).Return(servicenet, nil)
-	pool := new(types.FloatingIpPool)
-	pool.SetFQName("virtual-network", []string{DefaultDomain, "testns", "service-x1", "service-x1"})
-	client.Create(pool)
-	networkMgr.On("LocateFloatingIpPool", servicenet, controller.config.ServiceSubnet).Return(pool, nil)
-	sip := new(types.FloatingIp)
-	sip.SetFQName("floating-ip-pool", []string{DefaultDomain, "testns", "service-x1", "service-x1", service.Name})
-	client.Create(sip)
-	networkMgr.On("LocateFloatingIp", servicenet, service.Name, service.Spec.ClusterIP).Return(sip, nil)
 
 	kube.PodInterface.On("Update", pod).Return(pod, nil)
 	controller.serviceStore.Add(service)
@@ -397,8 +399,14 @@ func TestPodAddWithService(t *testing.T) {
 	}
 	shutdown <- shutdownMsg{}
 
+	kube.PodInterface.AssertExpectations(t)
+
+	obj, err := client.FindByName("virtual-network", "default-domain:testns:service-x1")
+	assert.NoError(t, err)
+	serviceNet := obj.(*types.VirtualNetwork)
+	sip, err := controller.networkMgr.LocateFloatingIp(serviceNet, service.Name, service.Spec.ClusterIP)
+	assert.NoError(t, err)
 	refList, err := sip.GetVirtualMachineInterfaceRefs()
 	assert.Nil(t, err)
 	assert.NotEmpty(t, refList)
-
 }
