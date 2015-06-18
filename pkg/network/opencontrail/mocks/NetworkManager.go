@@ -55,12 +55,13 @@ func (m *NetworkManager) DeleteNetwork(_a0 *types.VirtualNetwork) error {
 
 	return r0
 }
-func (m *NetworkManager) ReleaseNetworkIfEmpty(namespace string, name string) error {
+func (m *NetworkManager) ReleaseNetworkIfEmpty(namespace string, name string) (bool, error) {
 	ret := m.Called(namespace, name)
 
-	r0 := ret.Error(0)
+	r0 := ret.Get(0).(bool)
+	r1 := ret.Error(1)
 
-	return r0
+	return r0, r1
 }
 func (m *NetworkManager) LocateFloatingIp(network *types.VirtualNetwork, resourceName string, address string) (*types.FloatingIp, error) {
 	ret := m.Called(network, resourceName, address)
@@ -72,6 +73,13 @@ func (m *NetworkManager) LocateFloatingIp(network *types.VirtualNetwork, resourc
 	r1 := ret.Error(1)
 
 	return r0, r1
+}
+func (m *NetworkManager) DeleteFloatingIp(network *types.VirtualNetwork, resourceName string) error {
+	ret := m.Called(network, resourceName)
+
+	r0 := ret.Error(0)
+
+	return r0
 }
 func (m *NetworkManager) GetPublicNetwork() *types.VirtualNetwork {
 	ret := m.Called()

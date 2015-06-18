@@ -32,6 +32,8 @@ type ServiceManager interface {
 	Connect(tenant, serviceName string, network *types.VirtualNetwork) error
 	Disconnect(tenant, serviceName string, network *types.VirtualNetwork) error
 	LocateServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error)
+	LookupServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error)
+	ReleasePolicyIfEmpty(tenant, serviceName string) (bool, error)
 }
 
 type ServiceManagerImpl struct {
@@ -139,6 +141,11 @@ func (m *ServiceManagerImpl) LocateServiceNetwork(tenant, serviceName string) (*
 	return network, nil
 }
 
+func (m *ServiceManagerImpl) LookupServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error) {
+	networkName := fmt.Sprintf(ServiceNetworkFmt, serviceName)
+	return m.networkMgr.LookupNetwork(tenant, networkName)
+}
+
 func (m *ServiceManagerImpl) locatePolicy(tenant, serviceName string) (*types.NetworkPolicy, error) {
 	var policy *types.NetworkPolicy = nil
 
@@ -159,6 +166,7 @@ func (m *ServiceManagerImpl) locatePolicy(tenant, serviceName string) (*types.Ne
 }
 
 // Attach the network to the service policy.
+// The policy can be created either by the first referer or when the service is created.
 func (m *ServiceManagerImpl) Connect(tenant, serviceName string, network *types.VirtualNetwork) error {
 	policy, err := m.locatePolicy(tenant, serviceName)
 	if err != nil {
@@ -188,34 +196,33 @@ func (m *ServiceManagerImpl) Create(tenant, serviceName string) error {
 }
 
 func (m *ServiceManagerImpl) Delete(tenant, serviceName string) error {
+	fqn := []string{DefaultDomain, tenant, serviceName}
+
 	// Delete network
 	networkName := fmt.Sprintf(ServiceNetworkFmt, serviceName)
 	network, err := m.networkMgr.LookupNetwork(tenant, networkName)
 	if network != nil {
+		m.detachPolicy(network, strings.Join(fqn, ":"))
 		m.networkMgr.DeleteFloatingIpPool(network, true)
 		m.networkMgr.DeleteNetwork(network)
 	}
 
-	// Disassociate policy
+	_, err = m.ReleasePolicyIfEmpty(tenant, serviceName)
+	return err
+}
+
+func (m *ServiceManagerImpl) ReleasePolicyIfEmpty(tenant, serviceName string) (bool, error) {
 	fqn := []string{DefaultDomain, tenant, serviceName}
-	obj, err := m.client.FindByName("network-policy", strings.Join(fqn, ":"))
+	policy, err := types.NetworkPolicyByName(m.client, strings.Join(fqn, ":"))
 	if err != nil {
-		return err
+		return false, nil
 	}
-	policy := obj.(*types.NetworkPolicy)
 	refs, err := policy.GetVirtualNetworkBackRefs()
-	if err == nil {
-		for _, ref := range refs {
-			netObj, err := m.client.FindByUuid("virtual-network", ref.Uuid)
-			if err != nil {
-				glog.Errorf("Get network %s: %v", strings.Join(ref.To, ":"), err)
-				continue
-			}
-			m.detachPolicy(netObj.(*types.VirtualNetwork), strings.Join(policy.GetFQName(), ":"))
-		}
+	if err == nil && len(refs) == 0 {
+		// Delete policy
+		err = m.client.Delete(policy)
+		return err == nil, err
 	}
 
-	// Delete policy
-	err = m.client.DeleteByUuid("network-policy", policy.GetUuid())
-	return err
+	return false, err
 }

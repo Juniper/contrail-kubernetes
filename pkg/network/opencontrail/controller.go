@@ -263,8 +263,22 @@ func (c *Controller) deletePod(pod *api.Pod) {
 	c.instanceMgr.ReleaseInstanceIp(pod.Namespace, pod.Name, string(pod.ObjectMeta.UID))
 	c.instanceMgr.ReleaseInterface(pod.Namespace, pod.Name)
 	c.instanceMgr.DeleteInstance(string(pod.ObjectMeta.UID))
-	// TODO(prm): cleanup the network if there are no more interfaces
-	// associated with it.
+
+	netname, ok := pod.Labels[c.config.NetworkTag]
+	if !ok {
+		netname = "default-network"
+	}
+	deleted, err := c.networkMgr.ReleaseNetworkIfEmpty(pod.Namespace, netname)
+	if err != nil {
+		glog.Infof("Release network %s: %v", netname, err)
+	}
+
+	if deleted {
+		policyTag, ok := pod.Labels[c.config.NetworkAccessTag]
+		if ok {
+			c.serviceMgr.ReleasePolicyIfEmpty(pod.Namespace, policyTag)
+		}
+	}
 }
 
 // Services can specify "publicIPs", these are mapped to floating-ip
@@ -319,21 +333,20 @@ func (c *Controller) addService(service *api.Service) {
 			c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, publicIp)
 		}
 	}
-
-	// There may be a policy implied in the service definition.
-	// networkName, ok := service.Labels["name"]
-	// if !ok {
-	// 	networkName = "default-network"
-	// }
-	// policyTag, ok := service.Labels["uses"]
-	// if ok {
-	// 	network := c.lookupNetwork(DefaultProject, networkName)
-	// 	c.networkAccess(network, service.Name, policyTag)
-	// }
 }
 
 func (c *Controller) deleteService(service *api.Service) {
-	c.serviceMgr.Delete(service.Namespace, c.serviceName(service.Labels))
+	glog.Infof("Delete Service %s", service.Name)
+	serviceName := c.serviceName(service.Labels)
+	serviceNetwork, err := c.serviceMgr.LookupServiceNetwork(service.Namespace, serviceName)
+	if err == nil {
+		c.networkMgr.DeleteFloatingIp(serviceNetwork, service.Name)
+	}
+	if service.Spec.DeprecatedPublicIPs != nil {
+		c.networkMgr.DeleteFloatingIp(c.networkMgr.GetPublicNetwork(), service.Name)
+	}
+
+	c.serviceMgr.Delete(service.Namespace, serviceName)
 }
 
 func (c *Controller) addNamespace(namespace *api.Namespace) {
