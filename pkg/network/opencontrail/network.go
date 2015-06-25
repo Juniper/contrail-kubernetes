@@ -33,8 +33,9 @@ type NetworkManager interface {
 	LookupNetwork(projectName, networkName string) (*types.VirtualNetwork, error)
 	LocateNetwork(project, name, subnet string) (*types.VirtualNetwork, error)
 	DeleteNetwork(*types.VirtualNetwork) error
-	ReleaseNetworkIfEmpty(namespace, name string) error
+	ReleaseNetworkIfEmpty(namespace, name string) (bool, error)
 	LocateFloatingIp(network *types.VirtualNetwork, resourceName, address string) (*types.FloatingIp, error)
+	DeleteFloatingIp(network *types.VirtualNetwork, resourceName string) error
 	GetPublicNetwork() *types.VirtualNetwork
 	GetGatewayAddress(network *types.VirtualNetwork) (string, error)
 }
@@ -196,27 +197,28 @@ func (m *NetworkManagerImpl) LocateNetwork(project, name, subnet string) (*types
 	return obj.(*types.VirtualNetwork), nil
 }
 
-func (m *NetworkManagerImpl) ReleaseNetworkIfEmpty(namespace, name string) error {
+func (m *NetworkManagerImpl) ReleaseNetworkIfEmpty(namespace, name string) (bool, error) {
 	fqn := []string{DefaultDomain, namespace, name}
 	obj, err := m.client.FindByName("virtual-network", strings.Join(fqn, ":"))
 	if err != nil {
 		glog.Errorf("Get virtual-network %s: %v", name, err)
-		return err
+		return false, err
 	}
 	network := obj.(*types.VirtualNetwork)
 	refs, err := network.GetVirtualMachineInterfaceBackRefs()
 	if err != nil {
 		glog.Errorf("Get network vmi references %s: %v", name, err)
-		return err
+		return false, err
 	}
 	if len(refs) == 0 {
 		err = m.client.Delete(network)
 		if err != nil {
 			glog.Errorf("Delete virtual-network %s: %v", name, err)
-			return err
+			return false, err
 		}
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
 func (m *NetworkManagerImpl) LocateFloatingIp(network *types.VirtualNetwork, resourceName, address string) (*types.FloatingIp, error) {
@@ -261,6 +263,15 @@ func (m *NetworkManagerImpl) LocateFloatingIp(network *types.VirtualNetwork, res
 		return nil, err
 	}
 	return fip, nil
+}
+
+func (m *NetworkManagerImpl) DeleteFloatingIp(network *types.VirtualNetwork, resourceName string) error {
+	name := fmt.Sprintf("%s:%s", makePoolName(network), resourceName)
+	obj, err := m.client.FindByName("floating-ip", name)
+	if err != nil {
+		return err
+	}
+	return m.client.Delete(obj)
 }
 
 func (m *NetworkManagerImpl) GetGatewayAddress(network *types.VirtualNetwork) (string, error) {
