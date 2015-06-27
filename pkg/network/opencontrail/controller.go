@@ -276,7 +276,7 @@ func (c *Controller) deletePod(pod *api.Pod) {
 	if deleted {
 		policyTag, ok := pod.Labels[c.config.NetworkAccessTag]
 		if ok {
-			c.serviceMgr.ReleasePolicyIfEmpty(pod.Namespace, policyTag)
+			c.serviceMgr.Disconnect(pod.Namespace, policyTag, netname)
 		}
 	}
 }
