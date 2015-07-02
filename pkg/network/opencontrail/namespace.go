@@ -53,7 +53,7 @@ func (m *NamespaceManager) LocateNamespace(name, uid string) *types.Project {
 		return obj.(*types.Project)
 	}
 	project := new(types.Project)
-	project.SetFQName("", fqn)
+	project.SetFQName("domain", fqn)
 	project.SetUuid(uid)
 	err = m.client.Create(project)
 	if err != nil {
