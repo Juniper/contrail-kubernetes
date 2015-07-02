@@ -44,14 +44,26 @@ class LxcManager(object):
         ifname = ifindex2name(int(ns_ifindex))
         return ifname
 
-    # Move the interface out of the docker0 bridge and attach it to contrail
+    # Find the name of the docker bridge. By default, it is docker0
+    def get_docker_bridge(self):
+        bridge = "docker0"
+
+        # Check if docker is running on a different bridge than default docker0
+        br = Shell.run("ps -efww|grep -w docker|grep bridge|grep -v grep", True)
+        m = re.search(r'--bridge\W+(.*?)\W', br)
+        if m and len(m.group(1)) > 0:
+            bridge = m.group(1)
+        return bridge
+
+    # Move the interface out of the docker bridge and attach it to contrail
     # Return the moved interface name
     def move_interface(self, nsname, pid, ifname_instance, mac):
         ifname_master = self.interface_find_peer_name(ifname_instance, nsname)
 
         # Remove the interface from the bridge
         try:
-            Shell.run('brctl delif docker0 %s' % ifname_master)
+            Shell.run('brctl delif %s %s' % \
+                      (self.get_docker_bridge(), ifname_master))
         except Exception as ex:
             logging.error(ex)
 

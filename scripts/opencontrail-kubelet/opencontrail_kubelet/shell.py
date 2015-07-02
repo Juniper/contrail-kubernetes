@@ -8,8 +8,13 @@ import logging
 class Shell:
     # Run a shell command. Log the command run and its output.
     @staticmethod
-    def run(str):
-        logging.debug('sh: %s' % str)
-        cmd = subprocess.check_output(str, shell=True)
+    def run(cmd, ignore=False):
+        logging.debug('sh: %s' % cmd)
+        try:
+            cmd = subprocess.check_output(cmd, shell=True)
+        except:
+            if not ignore:
+                logging.error('command failed: %s' % cmd.rstrip())
+                raise
         logging.debug('output: %s' % cmd.rstrip())
         return cmd
