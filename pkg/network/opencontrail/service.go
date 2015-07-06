@@ -89,8 +89,9 @@ func (m *ServiceManagerImpl) locatePolicyRule(policy *types.NetworkPolicy, lhs, 
 	return nil
 }
 
-func removeRulesIndex(rules []types.PolicyRuleType, index int) {
+func removeRulesIndex(rules []types.PolicyRuleType, index int) []types.PolicyRuleType {
 	rules[index], rules = rules[len(rules)-1], rules[:len(rules)-1]
+	return rules
 }
 
 func (m *ServiceManagerImpl) deletePolicyRule(policy *types.NetworkPolicy, lhsName, rhsName string) error {
@@ -100,12 +101,13 @@ func (m *ServiceManagerImpl) deletePolicyRule(policy *types.NetworkPolicy, lhsNa
 		if rule.SrcAddresses[0].VirtualNetwork == lhsName &&
 			rule.DstAddresses[0].VirtualNetwork == rhsName {
 			index = i
+			break
 		}
 	}
 	if index < 0 {
 		return nil
 	}
-	removeRulesIndex(entries.PolicyRule, index)
+	entries.PolicyRule = removeRulesIndex(entries.PolicyRule, index)
 	policy.SetNetworkPolicyEntries(&entries)
 	err := m.client.Update(policy)
 	if err != nil {
@@ -178,6 +180,7 @@ func (m *ServiceManagerImpl) locatePolicy(tenant, serviceName string) (*types.Ne
 	obj, err := m.client.FindByName("network-policy", strings.Join(fqn, ":"))
 	if err != nil {
 		policy = new(types.NetworkPolicy)
+		policy.SetIdPerms(&types.IdPermsType{Creator: "kubernetes"})
 		policy.SetFQName("project", fqn)
 		err = m.client.Create(policy)
 		if err != nil {
@@ -216,7 +219,7 @@ func (m *ServiceManagerImpl) Create(tenant, serviceName string) error {
 	}
 
 	refs, err := policy.GetVirtualNetworkBackRefs()
-	if err != nil {
+	if err == nil {
 		for _, ref := range refs {
 			if ref.Uuid == network.GetUuid() {
 				continue

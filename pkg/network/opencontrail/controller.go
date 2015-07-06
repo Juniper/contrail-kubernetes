@@ -238,6 +238,8 @@ func (c *Controller) updatePod(pod *api.Pod) {
 	if ok {
 		c.serviceMgr.Connect(pod.Namespace, policyTag, network)
 	}
+	// TODO(prm): Disconnect from any policy that the network is associated with other than the
+	// policies above.
 
 	for _, item := range c.serviceStore.List() {
 		service := item.(*api.Service)
@@ -273,6 +275,7 @@ func (c *Controller) deletePod(pod *api.Pod) {
 		glog.Infof("Release network %s: %v", netname, err)
 	}
 
+	// TODO(prm): cleanup all the policies
 	if deleted {
 		policyTag, ok := pod.Labels[c.config.NetworkAccessTag]
 		if ok {

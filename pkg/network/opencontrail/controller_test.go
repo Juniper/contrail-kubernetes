@@ -105,6 +105,16 @@ func (i *NetworkInterceptor) Put(ptr contrail.IObject) {
 func (i *NetworkInterceptor) Get(ptr contrail.IObject) {
 }
 
+func policyHasRule(policy *types.NetworkPolicy, lhsName, rhsName string) bool {
+	entries := policy.GetNetworkPolicyEntries()
+	for _, rule := range entries.PolicyRule {
+		if rule.SrcAddresses[0].VirtualNetwork == lhsName &&
+			rule.DstAddresses[0].VirtualNetwork == rhsName {
+			return true
+		}
+	}
+	return false
+}
 func TestPodCreate(t *testing.T) {
 	kube := mocks.NewKubeClient()
 
@@ -354,6 +364,12 @@ func TestServiceAddWithPod(t *testing.T) {
 	refList, err := sip.GetVirtualMachineInterfaceRefs()
 	assert.Nil(t, err)
 	assert.NotEmpty(t, refList)
+
+	policy, err := types.NetworkPolicyByName(client, "default-domain:testns:x1")
+	assert.NoError(t, err)
+	if err == nil {
+		assert.Len(t, policy.GetNetworkPolicyEntries().PolicyRule, 0)
+	}
 }
 
 func TestPodAddWithService(t *testing.T) {
@@ -619,6 +635,12 @@ func TestPodUsesService(t *testing.T) {
 	assert.NotEmpty(t, clientRefs)
 	assert.Equal(t, policy.GetUuid(), clientRefs[0].Uuid)
 
+	policy, err = types.NetworkPolicyByName(client, "default-domain:testns:x1")
+	if err == nil {
+		assert.Len(t, policy.GetNetworkPolicyEntries().PolicyRule, 1)
+		assert.True(t, policyHasRule(policy, "default-domain:testns:client", "default-domain:testns:service-x1"))
+	}
+
 	controller.DeleteService(service)
 	time.Sleep(100 * time.Millisecond)
 
@@ -632,6 +654,7 @@ func TestPodUsesService(t *testing.T) {
 		refs, err := policy.GetVirtualNetworkBackRefs()
 		assert.NoError(t, err)
 		assert.Len(t, refs, 1)
+		assert.Len(t, policy.GetNetworkPolicyEntries().PolicyRule, 0)
 	}
 
 	controller.AddService(service)
@@ -644,6 +667,8 @@ func TestPodUsesService(t *testing.T) {
 		refs, err := policy.GetVirtualNetworkBackRefs()
 		assert.NoError(t, err)
 		assert.Len(t, refs, 2)
+		assert.Len(t, policy.GetNetworkPolicyEntries().PolicyRule, 1)
+		assert.True(t, policyHasRule(policy, "default-domain:testns:client", "default-domain:testns:service-x1"))
 	}
 
 	controller.DeleteService(service)
@@ -753,6 +778,13 @@ func TestPodUsesServiceCreatedAfter(t *testing.T) {
 	assert.NotEmpty(t, poRefs)
 	assert.Equal(t, policy.GetUuid(), poRefs[0].Uuid)
 
+	policy, err = types.NetworkPolicyByName(client, "default-domain:testns:x1")
+	assert.NoError(t, err)
+	if err == nil {
+		assert.Len(t, policy.GetNetworkPolicyEntries().PolicyRule, 1)
+		assert.True(t, policyHasRule(policy, "default-domain:testns:client", "default-domain:testns:service-x1"))
+	}
+
 	controller.DeletePod(pod1)
 	controller.DeletePod(pod2)
 	controller.DeleteService(service)
@@ -828,4 +860,160 @@ func TestPodUsesNonExistingService(t *testing.T) {
 	assert.Error(t, err)
 
 	allocator.AssertExpectations(t)
+}
+
+func TestServiceWithMultipleUsers(t *testing.T) {
+	kube := mocks.NewKubeClient()
+
+	client := new(contrail_mocks.ApiClient)
+	client.Init()
+
+	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
+	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
+
+	allocator := new(mocks.AddressAllocator)
+
+	controller := NewTestController(kube, client, allocator, nil)
+
+	pod1 := &api.Pod{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "test-server",
+			Namespace: "testns",
+			UID:       kubetypes.UID(uuid.New()),
+			Labels: map[string]string{
+				"name": "server",
+			},
+		},
+	}
+	pod2 := &api.Pod{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "test-xz1",
+			Namespace: "testns",
+			UID:       kubetypes.UID(uuid.New()),
+			Labels: map[string]string{
+				"name": "client1",
+				"uses": "x1",
+			},
+		},
+	}
+	pod3 := &api.Pod{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "test-xz2",
+			Namespace: "testns",
+			UID:       kubetypes.UID(uuid.New()),
+			Labels: map[string]string{
+				"name": "client1",
+				"uses": "x1",
+			},
+		},
+	}
+	pod4 := &api.Pod{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "test-xz3",
+			Namespace: "testns",
+			UID:       kubetypes.UID(uuid.New()),
+			Labels: map[string]string{
+				"name": "client2",
+				"uses": "x1",
+			},
+		},
+	}
+	service := &api.Service{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "s1",
+			Namespace: "testns",
+			Labels: map[string]string{
+				"name": "x1",
+			},
+		},
+		Spec: api.ServiceSpec{
+			Selector: map[string]string{
+				"name": "server",
+			},
+			ClusterIP: "10.254.42.42",
+		},
+	}
+
+	netnsProject := new(types.Project)
+	netnsProject.SetFQName("", []string{"default-domain", "testns"})
+	client.Create(netnsProject)
+
+	allocator.On("LocateIpAddress", string(pod1.ObjectMeta.UID)).Return("10.0.0.1", nil)
+	allocator.On("LocateIpAddress", string(pod2.ObjectMeta.UID)).Return("10.0.0.2", nil)
+	allocator.On("LocateIpAddress", string(pod3.ObjectMeta.UID)).Return("10.0.0.3", nil)
+	allocator.On("LocateIpAddress", string(pod4.ObjectMeta.UID)).Return("10.0.0.4", nil)
+	allocator.On("ReleaseIpAddress", string(pod1.ObjectMeta.UID)).Return()
+	allocator.On("ReleaseIpAddress", string(pod2.ObjectMeta.UID)).Return()
+	allocator.On("ReleaseIpAddress", string(pod3.ObjectMeta.UID)).Return()
+	allocator.On("ReleaseIpAddress", string(pod4.ObjectMeta.UID)).Return()
+
+	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
+	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
+	kube.PodInterface.On("Update", pod3).Return(pod3, nil)
+	kube.PodInterface.On("Update", pod4).Return(pod4, nil)
+	kube.PodInterface.On("List", mock.Anything, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+
+	shutdown := make(chan struct{})
+	go controller.Run(shutdown)
+
+	controller.AddPod(pod1)
+	controller.AddService(service)
+	controller.AddPod(pod2)
+	controller.AddPod(pod3)
+	controller.AddPod(pod4)
+
+	time.Sleep(100 * time.Millisecond)
+
+	policy, err := types.NetworkPolicyByName(client, "default-domain:testns:x1")
+	assert.NoError(t, err)
+	if err == nil {
+		assert.Len(t, policy.GetNetworkPolicyEntries().PolicyRule, 2)
+		assert.True(t, policyHasRule(policy, "default-domain:testns:client1", "default-domain:testns:service-x1"))
+		assert.True(t, policyHasRule(policy, "default-domain:testns:client2", "default-domain:testns:service-x1"))
+	}
+
+	_, err = types.VirtualNetworkByName(client, "default-domain:testns:client2")
+	assert.NoError(t, err)
+
+	controller.DeletePod(pod3)
+	time.Sleep(100 * time.Millisecond)
+
+	policy, err = types.NetworkPolicyByName(client, "default-domain:testns:x1")
+	assert.NoError(t, err)
+	if err == nil {
+		assert.Len(t, policy.GetNetworkPolicyEntries().PolicyRule, 2)
+	}
+
+	controller.DeletePod(pod4)
+	time.Sleep(100 * time.Millisecond)
+
+	_, err = types.VirtualNetworkByName(client, "default-domain:testns:client2")
+	assert.Error(t, err)
+
+	policy, err = types.NetworkPolicyByName(client, "default-domain:testns:x1")
+	assert.NoError(t, err)
+	if err == nil {
+		assert.Len(t, policy.GetNetworkPolicyEntries().PolicyRule, 1)
+		assert.True(t, policyHasRule(policy, "default-domain:testns:client1", "default-domain:testns:service-x1"))
+	}
+
+	controller.DeletePod(pod2)
+	time.Sleep(100 * time.Millisecond)
+
+	policy, err = types.NetworkPolicyByName(client, "default-domain:testns:x1")
+	assert.NoError(t, err)
+	if err == nil {
+		assert.Len(t, policy.GetNetworkPolicyEntries().PolicyRule, 0)
+	}
+
+	controller.DeletePod(pod1)
+	controller.DeleteService(service)
+	time.Sleep(100 * time.Millisecond)
+
+	type shutdownMsg struct {
+	}
+	shutdown <- shutdownMsg{}
+
+	policy, err = types.NetworkPolicyByName(client, "default-domain:testns:x1")
+	assert.Error(t, err)
 }
