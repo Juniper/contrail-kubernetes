@@ -180,7 +180,6 @@ func (m *ServiceManagerImpl) locatePolicy(tenant, serviceName string) (*types.Ne
 	obj, err := m.client.FindByName("network-policy", strings.Join(fqn, ":"))
 	if err != nil {
 		policy = new(types.NetworkPolicy)
-		policy.SetIdPerms(&types.IdPermsType{Creator: "kubernetes"})
 		policy.SetFQName("project", fqn)
 		err = m.client.Create(policy)
 		if err != nil {
