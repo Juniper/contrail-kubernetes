@@ -130,7 +130,13 @@ def setup(pod_namespace, pod_name, docker_id):
         instance_ifname = 'eth0'
 
     uid, podName = getDockerPod(docker_id)
-    podInfo = getPodInfo(podName)
+    podInfo = None
+    for i in range(0, 120):
+        podInfo = getPodInfo(podName)
+        if 'annotations' in podInfo["metadata"] and \
+           'nic_uuid' in podInfo["metadata"]["annotations"]:
+            break
+        time.sleep(1)
     
     # The lxc_manager uses the mac_address to setup the container interface.
     # Additionally the ip-address, prefixlen and gateway are also used.
@@ -162,6 +168,7 @@ def setup(pod_namespace, pod_name, docker_id):
               (short_id, gateway))
     Shell.run('ip netns exec %s ip link set %s up' %
               (short_id, instance_ifname))
+    Shell.run('nsenter -n -t %d ethtool -K %s tx off' % (pid, instance_ifname))
 
 def vrouter_interface_by_name(vmName):
     r = requests.get('http://localhost:8085/Snh_ItfReq')
