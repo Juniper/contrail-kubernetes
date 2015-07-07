@@ -12,6 +12,7 @@ import requests
 import socket
 import subprocess
 import sys
+import time
 import uuid
 import xml.etree.ElementTree as ElementTree
 
@@ -214,12 +215,16 @@ def main():
 
     args = parser.parse_args()
 
-    if args.action == 'init':
-        plugin_init()
-    elif args.action == 'setup':
-        setup(args.pod_namespace, args.pod_name, args.docker_id)
-    elif args.action == 'teardown':
-        teardown(args.pod_namespace, args.pod_name, args.docker_id)
+    try:
+        if args.action == 'init':
+            plugin_init()
+        elif args.action == 'setup':
+            setup(args.pod_namespace, args.pod_name, args.docker_id)
+        elif args.action == 'teardown':
+            teardown(args.pod_namespace, args.pod_name, args.docker_id)
+    except Exception as ex:
+        logging.error(ex)
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()
