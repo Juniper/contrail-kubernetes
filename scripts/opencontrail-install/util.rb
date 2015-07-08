@@ -19,7 +19,7 @@ def sh(cmd, ignore_exit_code = false, retry_count = 1, delay = 1, bg = false)
         break if $?.to_i == 0
         exit -1 if !ignore_exit_code and i == retry_count - 1
         sleep delay
-        puts "#{i}/#{retry_count}: Retry: #{cmd}"
+        puts "#{i}/#{retry_count}: Retry: #{cmd}" if i != retry_count - 1
     }
     return r
 end

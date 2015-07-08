@@ -14,6 +14,7 @@ def parse_options
     @opt.role = "controller"
     @opt.setup_kubernetes = false
     @opt.controller_host = "localhost"
+    @opt.kubernetes_master = "localhost"
     @opt.controller_ip = ""
     @opt.private_net = "10.0.0.0/16"
     @opt.portal_net = "10.254.0.0/16"
@@ -63,6 +64,10 @@ def parse_options
         o.on("-l", "--portal-net #{@opt.portal_net}",
              "Portal network subnet value") { |net|
             @opt.portal_net = net
+        }
+        o.on("-m", "--kubernetes-master #{@opt.kubernetes_master}",
+             "Name of the kubernetes master host") { |kubernetes_master|
+            @opt.kubernetes_master = kubernetes_master
         }
         o.on("-p", "--private-net #{@opt.private_net}",
              "Private network subnet value") { |net|
@@ -401,8 +406,10 @@ EOF
         sh("service kubelet restart", true)
 
         # Disable kube-proxy monitoring and stop the service.
-        sh("mv /etc/monit/conf.d/kube-proxy /etc/monit/.", true)
-        sh("monit reload", true)
+        if File.file? "/etc/monit/conf.d/kube-proxy"
+            sh("mv /etc/monit/conf.d/kube-proxy /etc/monit/.", true)
+            sh("monit reload", true)
+        end
         sh("service kube-proxy stop", true)
     end
 
@@ -416,12 +423,14 @@ def provision_contrail_controller_kubernetes
     # Start kube web server in background
     # http://localhost:8001/static/app/#/dashboard/
     sh("ln -sf /usr/local/bin/kubectl /usr/bin/kubectl", true)
-    sh("nohup /usr/local/bin/kubectl proxy --www=#{@ws}/build_kubernetes/www 2>&1 > /var/log/kubectl-web-proxy.log", true, 1, 1, true)
+    if File.file "/usr/local/bin/kubectl"
+        sh("nohup /usr/local/bin/kubectl proxy --www=#{@ws}/build_kubernetes/www 2>&1 > /var/log/kubectl-web-proxy.log", true, 1, 1, true)
+    end
 
-    target = @platform =~ /fedora/ ? "/root" : "/home/ubuntu"
+    target = @platform =~ /fedora/ ? "/root" : "/home/#{@opt.user}"
 
     # Start kube-network-manager plugin daemon in background
-    sh(%{nohup #{target}/contrail/kube-network-manager -- --contrail_api=#{@opt.controller_ip} --public_net="#{@opt.public_net}" --portal_net="#{@opt.portal_net}" --private_net="#{@opt.private_net}" 2>&1 > /var/log/contrail/kube-network-manager.log}, true, 1, 1, true) if @platform =~ /ubuntu/
+    sh(%{nohup #{target}/contrail/kube-network-manager --master=http://#{@opt.kubernetes_master}:8080 -- --contrail_api=#{@opt.controller_ip} --public_net="#{@opt.public_net}" --portal_net="#{@opt.portal_net}" --private_net="#{@opt.private_net}" 2>&1 > /var/log/contrail/kube-network-manager.log}, true, 1, 1, true) if @platform =~ /ubuntu/
 end
 
 def build_kube_network_manager (kubernetes_branch = "v0.20.1",
@@ -431,7 +440,7 @@ def build_kube_network_manager (kubernetes_branch = "v0.20.1",
     ENV["CONTRAIL_BRANCH"]=contrail_branch
     ENV["KUBERNETES_BRANCH"]=kubernetes_branch
     ENV["GOPATH"]="#{ENV["TARGET"]}/kubernetes/Godeps/_workspace"
-    target = @platform =~ /fedora/ ? "/root" : "/home/ubuntu"
+    target = @platform =~ /fedora/ ? "/root" : "/home/#{@opt.user}"
 
     sh("rm -rf #{ENV["TARGET"]}")
     sh("mkdir -p #{ENV["TARGET"]}")
