@@ -240,8 +240,4 @@ def main():
         sys.exit(1)
 
 if __name__ == '__main__':
-    try:
         main()
-    except:
-        logging.error("Unexpected error: %s", sys.exc_info()[0])
-        raise
