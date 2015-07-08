@@ -23,6 +23,7 @@ def parse_options
     @opt.setup_ssh = false
     @opt.ssh_key = "/home/#{@opt.user}/.ssh/contrail_rsa"
     @opt.contrail_install = true
+    @opt.provision_vgw = false
 
     if File.directory? "/vagrant" then
         @opt.intf = "eth1"
@@ -40,9 +41,13 @@ def parse_options
              "Name of the contrail controller host") { |controller|
             @opt.controller_host = controller
         }
-        o.on("-f", "--[no-]-fix-docker-fs-issue", "#{@opt.fix_docker_issue}",
+        o.on("-f", "--[no-]fix-docker-fs-issue", "#{@opt.fix_docker_issue}",
              "Fix/work-around docker fs device mapper issue") { |f|
              @opt.fix_docker_issue = f
+        }
+        o.on("-g", "--[no-]provision-vgw", "#{@opt.provision_vgw}",
+             "Provision vgw interface") { |f|
+             @opt.provision_vgw = f
         }
         o.on("-i", "--controller-ip #{@opt.controller_ip}",
              "IP of the contrail controller host") { |ip|
@@ -51,7 +56,7 @@ def parse_options
         o.on("-I", "--intf #{@opt.intf}", "data interface name") { |i|
             @opt.intf = i
         }
-        o.on("-k", "--[no-]-kubernetes-setup", "[#{@opt.setup_kubernetes}",
+        o.on("-k", "--[no-]kubernetes-setup", "[#{@opt.setup_kubernetes}",
              "Setup kubernetes plugin") { |kubernetes|
              @opt.setup_kubernetes = kubernetes
         }
@@ -66,11 +71,11 @@ def parse_options
         o.on("-r", "--role #{@opt.role}", "Configuration role") { |role|
             @opt.role = role
         }
-        o.on("-s", "--[no-]-ssh-setup", "[#{@opt.setup_ssh}",
+        o.on("-s", "--[no-]ssh-setup", "[#{@opt.setup_ssh}",
              "Setup ssh configuration") { |setup|
              @opt.setup_ssh = setup
         }
-        o.on("-t", "--[no-]-contrail-install", "[#{@opt.contrail_install}",
+        o.on("-t", "--[no-]contrail-install", "[#{@opt.contrail_install}",
              "Install and provision contrail software") { |contrail_install|
              @opt.contrail_install = contrail_install
         }
@@ -341,14 +346,14 @@ EOF
     sh("ip route add 0.0.0.0/0 via #{gw}", true, 1, 1, true)
 
     # Setup virtual gateway
-    sh("python #{@utils}/provision_vgw_interface.py --oper create --interface vgw_public --subnets #{@opt.public_net} --routes 0.0.0.0/0 --vrf default-domain:default-project:Public:Public", false, 5, 5)
+    sh("python #{@utils}/provision_vgw_interface.py --oper create --interface vgw_public --subnets #{@opt.public_net} --routes 0.0.0.0/0 --vrf default-domain:default-project:Public:Public", false, 5, 5) if @opt.provision_vgw
 
     verify_compute
 end
 
 # http://www.fedora.hk/linux/yumwei/show_45.html
 def fix_docker_file_system_issue
-    return if !@opt.fix_docker_issue
+    return unless @opt.fix_docker_issue
     return if @platform !~ /ubuntu/
 
     sh("service docker stop", true)
