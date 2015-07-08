@@ -7,6 +7,7 @@ import iniparse
 import json
 import logging
 import os
+import platform
 import re
 import requests
 import socket
@@ -169,7 +170,10 @@ def setup(pod_namespace, pod_name, docker_id):
               (short_id, gateway))
     Shell.run('ip netns exec %s ip link set %s up' %
               (short_id, instance_ifname))
-    Shell.run('nsenter -n -t %d ethtool -K %s tx off' % (pid, instance_ifname))
+    # TX checksum is broken on Fedora 21 testbed.
+    # This may be an issue with kernel 3.17 or veth-pair code.
+    if platform.linux_distribution()[0:2] == ('Fedora', '21'):
+        Shell.run('nsenter -n -t %d ethtool -K %s tx off' % (pid, instance_ifname))
 
 def vrouter_interface_by_name(vmName):
     r = requests.get('http://localhost:8085/Snh_ItfReq')
