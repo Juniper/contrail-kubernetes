@@ -109,9 +109,11 @@ func (a *AddressAllocatorImpl) LocateIpAddress(uid string) (string, error) {
 func (a *AddressAllocatorImpl) ReleaseIpAddress(uid string) {
 	objid, err := a.client.UuidByName("instance-ip", uid)
 	if err != nil {
-		err = a.client.DeleteByUuid("instance-ip", objid)
-		if err != nil {
-			glog.Warningf("Delete instance-ip: %v", err)
-		}
+		glog.V(1).Infof("IP address for %s: %v", uid, err)
+		return
+	}
+	err = a.client.DeleteByUuid("instance-ip", objid)
+	if err != nil {
+		glog.Warningf("Delete instance-ip: %v", err)
 	}
 }
