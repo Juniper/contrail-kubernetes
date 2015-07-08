@@ -1,33 +1,76 @@
 #!/usr/bin/env ruby
 
+require 'optparse'
+require 'ostruct'
+
 # Use this script to install and provision contrail nodes.
 # sudo ruby $PWD/contrail-kubernetes/scripts/opencontrail-install/contrail_install.rb
 
-raise 'Must run with superuser privilages' unless Process.uid == 0
+@opt = OpenStruct.new
 
-#TODO: Add all these through proper command line options
-@controller_host = ARGV[0]
-@role = ARGV[1]
-@setup_kubernetes = true
+def parse_options
+    @opt.fix_docker_issue = false
+    @opt.intf = "eth0"
+    @opt.role = "controller"
+    @opt.setup_kubernetes = false
+    @opt.controller_host = "localhost"
+    @opt.private_net = "10.0.0.0/16"
+    @opt.portal_net = "10.254.0.0/16"
+    @opt.public_net = "10.1.0.0/16"
+    @opt.user = "ubuntu"
+    @opt.setup_ssh = false
 
-@private_net = "10.0.0.0/16"
-@portal_net = "10.254.0.0/16"
-@public_net = "10.1.0.0/16"
+    if File.directory? "/vagrant" then
+        @opt.intf = "eth1"
+        @opt.user = "vagrant"
+        @opt.portal_net = "10.247.0.0/16"
+    end
+
+    opt_parser = OptionParser.new { |o|
+        o.banner = "Usage: #{$0} [options]"
+        o.on("-f", "--[no-]-fix-docker-fs-issue", "#{@opt.fix_docker_issue}",
+             "Fix/work-around docker fs device mapper issue") { |f|
+             @opt.fix_docker_issue = f
+        }
+        o.on("-i", "--intf #{@opt.intf}", "data interface name") { |i|
+            @opt.intf = i
+        }
+        o.on("-r", "--role #{@opt.role}", "Configuration role") { |role|
+            @opt.role = role
+        }
+        o.on("-c", "--controller #{@opt.controller_host}",
+             "Name of the contrail controller host") { |controller|
+            @opt.controller_host = controller
+        }
+        o.on("-p", "--private-net #{@opt.private_net}",
+             "Private network subnet value") { |net|
+            @opt.private_net = net
+        }
+        o.on("-l", "--portal-net #{@opt.portal_net}",
+             "Portal network subnet value") { |net|
+            @opt.portal_net = net
+        }
+        o.on("-b", "--public-net #{@opt.public_net}",
+             "Public network subnet value") { |net|
+            @opt.public_net = net
+        }
+        o.on("-u", "--user #{@opt.user}", "Guest user name") { |user|
+            @opt.user = user
+        }
+        o.on("-k", "--[no-]-kubernetes-setup", "[#{@opt.setup_kubernetes}",
+             "Setup kubernetes plugin") { |kubernetes|
+             @opt.setup_kubernetes = kubernetes
+        }
+        o.on("-s", "--[no-]-ssh-setup", "[#{@opt.setup_ssh}",
+             "Setup ssh configuration") { |setup|
+             @opt.setup_ssh = setup
+        }
+    }
+    opt_parser.parse!(ARGV)
+end
 
 @ws="#{File.dirname($0)}"
 require "#{@ws}/util"
-
-# Initialize default interfaces and user account names
-# TODO Take via command line options
-@intf = "eth0"
-@user = "ubuntu"
-@vagrant = false
-if File.directory? "/vagrant" then
-    @intf = "eth1"
-    @user = "vagrant"
-    @portal_net = "10.247.0.0/16"
-    @vagrant = true
-end
 
 # Find platform OS
 sh(%{\grep -i "ubuntu 14" /etc/issue 2>&1 > /dev/null}, true)
@@ -37,7 +80,8 @@ require "#{@ws}/#{@platform}/install"
                                   "/usr/share/contrail-utils"
 
 # Update ssh configuration
-def ssh_setup
+def setup_ssh
+    return unless @opt.setup_ssh
     conf=<<EOF
 UserKnownHostsFile=/dev/null
 StrictHostKeyChecking=no
@@ -47,31 +91,37 @@ EOF
     File.open("/root/.ssh/config", "a") { |fp| fp.puts(conf) }
     sh("chmod 600 /root/.ssh/config")
 
-    # Add ssh config to ~@user also.
-    sh("mkdir -p /home/#{@user}/.ssh")
-    File.open("/home/#{@user}/.ssh/config", "a") { |fp| fp.puts(conf) }
-    sh("chmod 600 /home/#{@user}/.ssh/config")
-    sh("chown #{@user}.#{@user} /home/#{@user}/.ssh/config")
-    sh("chown #{@user}.#{@user} /home/#{@user}/.ssh/.")
+    # Add ssh config to ~@opt.user also.
+    sh("mkdir -p /home/#{@opt.user}/.ssh")
+    File.open("/home/#{@opt.user}/.ssh/config", "a") { |fp| fp.puts(conf) }
+    sh("chmod 600 /home/#{@opt.user}/.ssh/config")
+    sh("chown #{@opt.user}.#{@opt.user} /home/#{@opt.user}/.ssh/config")
+    sh("chown #{@opt.user}.#{@opt.user} /home/#{@opt.user}/.ssh/.")
 end
 
 # Do initial setup
 def initial_setup
     STDOUT.sync = true
-    @control_node_introspect_port = @controller_host == "aurora" ? 9083 : "8083"
-    ssh_setup
+
+    # Parse command line options.
+    parse_options
+    raise 'Must run with superuser privilages' unless Process.uid == 0
+
+    @control_node_introspect_port =
+        @opt.controller_host == "aurora" ? 9083 : "8083"
+    setup_ssh
 
     sh("service hostname restart", true) if @platform !~ /fedora/
 
     begin
-        @contrail_controller = IPSocket.getaddress(@controller_host)
+        @contrail_controller = IPSocket.getaddress(@opt.controller_host)
     rescue
         # Check in /etc/hosts
         @contrail_controller =
-            sh(%{grep #{@controller_host} /etc/hosts | awk '{print $1}'})
+            sh(%{grep #{@opt.controller_host} /etc/hosts | awk '{print $1}'})
     end
 
-    error "Cannot resolve controller #{@controller_host}" \
+    error "Cannot resolve controller #{@opt.controller_host}" \
         if @contrail_controller.empty?
 
     # Make sure that localhost resolves to 127.0.0.1
@@ -84,15 +134,15 @@ end
 
 def update_controller_etc_hosts
     # Update /etc/hosts with the IP address
-    @controller_ip, mask, gw, prefix_len = get_intf_ip(@intf)
+    @controller_ip, mask, gw, prefix_len = get_intf_ip(@opt.intf)
 
-    rip = sh("\grep #{@controller_host} /etc/hosts | awk '{print $1}'", true)
+    rip = sh("\grep #{@opt.controller_host} /etc/hosts | awk '{print $1}'", true)
     return if rip != "127.0.0.1" and !rip.empty?
 
-    # If @controller_host resolves to 127.0.0.1, take it out of /etc/hosts
-    sh("sed -i '/127.0.0.1 #{@controller_host}/d' /etc/hosts") \
+    # If @opt.controller_host resolves to 127.0.0.1, take it out of /etc/hosts
+    sh("sed -i '/127.0.0.1 #{@opt.controller_host}/d' /etc/hosts") \
         if rip == "127.0.0.1"
-    sh("echo #{@controller_ip} #{@controller_host} >> /etc/hosts")
+    sh("echo #{@controller_ip} #{@opt.controller_host} >> /etc/hosts")
 end
 
 def verify_controller
@@ -197,7 +247,7 @@ def provision_contrail_controller
 
     sh(%{python #{@utils}/provision_control.py --api_server_ip } +
        %{#{@controller_ip} --api_server_port 8082 --router_asn 64512 } +
-       %{--host_name #{@controller_host} --host_ip #{@controller_ip} } +
+       %{--host_name #{@opt.controller_host} --host_ip #{@controller_ip} } +
        %{--oper add })
 end
 
@@ -205,7 +255,7 @@ def verify_compute
     5.times {|i| print "\rWait for #{i}/5 seconds to settle down.. "; sleep 1}
     sh("lsmod |\grep vrouter")
     sh("netstat -anp | \grep -w LISTEN | \grep -w 8085")
-    sh("ping -c 3 #{@controller_host}")
+    sh("ping -c 3 #{@opt.controller_host}")
     sh("ping -c 3 github.com")
 end
 
@@ -213,7 +263,7 @@ end
 def provision_contrail_compute
     sh("ln -sf /bin/openstack-config /opt/contrail/bin/openstack-config") \
         if @platform =~ /fedora/
-    ip, mask, gw, prefix_len = get_intf_ip(@intf)
+    ip, mask, gw, prefix_len = get_intf_ip(@opt.intf)
     create_vhost_interface(ip, mask, gw)
 
     if @platform =~ /fedora/ then
@@ -229,7 +279,7 @@ kmod=#{ko}
 pname=contrail-vrouter-agent
 LIBDIR=/usr/lib64
 DEVICE=vhost0
-dev=#{@intf}
+dev=#{@opt.intf}
 vgw_subnet_ip=__VGW_SUBNET_IP__
 vgw_intf=__VGW_INTF_LIST__
 LOGFILE=--log-file=/var/log/contrail/vrouter.log
@@ -243,7 +293,7 @@ EOF
     sh("/opt/contrail/bin/openstack-config --set /etc/contrail/contrail-vrouter-agent.conf VIRTUAL-HOST-INTERFACE name vhost0")
     sh("/opt/contrail/bin/openstack-config --set /etc/contrail/contrail-vrouter-agent.conf VIRTUAL-HOST-INTERFACE ip #{ip}/#{prefix_len}")
     sh("/opt/contrail/bin/openstack-config --set /etc/contrail/contrail-vrouter-agent.conf VIRTUAL-HOST-INTERFACE gateway #{gw}")
-    sh("/opt/contrail/bin/openstack-config --set /etc/contrail/contrail-vrouter-agent.conf VIRTUAL-HOST-INTERFACE physical_interface #{@intf}")
+    sh("/opt/contrail/bin/openstack-config --set /etc/contrail/contrail-vrouter-agent.conf VIRTUAL-HOST-INTERFACE physical_interface #{@opt.intf}")
     sh("/opt/contrail/bin/openstack-config --del /etc/contrail/contrail-vrouter-agent.conf VIRTUAL-HOST-INTERFACE compute_node_address")
 
     nodemgr_conf = <<EOF
@@ -255,28 +305,28 @@ server_list=#{@contrail_controller}:8086
 EOF
     File.open("/etc/contrail/contrail-vrouter-nodemgr.conf", "w") {|fp| fp.puts nodemgr_conf}
 
-    key_file = "/home/#{@user}/.ssh/contrail_rsa"
+    key_file = "/home/#{@opt.user}/.ssh/contrail_rsa"
     key = File.file?(key_file) ? "-i #{key_file}" : ""
-    sh("sshpass -p #{@user} ssh -t #{key} #{@user}@#{@controller_host} sudo python #{@utils}/provision_vrouter.py --host_name #{sh('hostname')} --host_ip #{ip} --api_server_ip #{@contrail_controller} --oper add", false, 20, 6)
+    sh("sshpass -p #{@opt.user} ssh -t #{key} #{@opt.user}@#{@opt.controller_host} sudo python #{@utils}/provision_vrouter.py --host_name #{sh('hostname')} --host_ip #{ip} --api_server_ip #{@contrail_controller} --oper add", false, 20, 6)
     sh("sync; echo 3 > /proc/sys/vm/drop_caches") if @platform =~ /ubuntu/
     sh("service supervisor-vrouter restart")
     sh("service contrail-vrouter-agent restart")
 
     # Remove ip address from the interface as that is taken over by vhost0
-    sh("ifdown #{@intf}; ifup #{@intf}", true, 1, 1, true)
-    sh("ip addr flush dev #{@intf}", true, 1, 1, true)
+    sh("ifdown #{@opt.intf}; ifup #{@opt.intf}", true, 1, 1, true)
+    sh("ip addr flush dev #{@opt.intf}", true, 1, 1, true)
 
     # Restore default route
     sh("ip route add 0.0.0.0/0 via #{gw}", true, 1, 1, true)
 
     # Setup virtual gateway
-    sh("python #{@utils}/provision_vgw_interface.py --oper create --interface vgw_public --subnets #{@public_net} --routes 0.0.0.0/0 --vrf default-domain:default-project:Public:Public", false, 5, 5)
+    sh("python #{@utils}/provision_vgw_interface.py --oper create --interface vgw_public --subnets #{@opt.public_net} --routes 0.0.0.0/0 --vrf default-domain:default-project:Public:Public", false, 5, 5)
 
     verify_compute
 end
 
 def provision_contrail_controller_kubernetes
-    return unless @setup_kubernetes
+    return unless @opt.setup_kubernetes
 
     # Start kube web server in background
     # http://localhost:8001/static/app/#/dashboard/
@@ -286,10 +336,7 @@ def provision_contrail_controller_kubernetes
     target = @platform =~ /fedora/ ? "/root" : "/home/ubuntu"
 
     # Start kube-network-manager plugin daemon in background
-    sh(%{nohup #{target}/contrail/kube-network-manager -- --public_net="#{@public_net}" --portal_net="#{@portal_net}" --private_net="#{@private_net}" 2>&1 > /var/log/contrail/kube-network-manager.log}, true, 1, 1, true) if @platform =~ /ubuntu/
-
-    # Add public_net route in vagrant setup.
-    sh(%{ip route add #{@public_net} via `grep kubernetes-minion-1 /etc/hosts | awk '{print $1}'`}, true) if @vagrant
+    sh(%{nohup #{target}/contrail/kube-network-manager -- --public_net="#{@opt.public_net}" --portal_net="#{@opt.portal_net}" --private_net="#{@opt.private_net}" 2>&1 > /var/log/contrail/kube-network-manager.log}, true, 1, 1, true) if @platform =~ /ubuntu/
 end
 
 # http://www.fedora.hk/linux/yumwei/show_45.html
@@ -306,12 +353,12 @@ def fix_docker_file_system_issue
 end
 
 def provision_contrail_compute_kubernetes
-    return unless @setup_kubernetes
+    return unless @opt.setup_kubernetes
 
     # Copy kubectl from kubernets-master node
-    key_file = "/home/#{@user}/.ssh/contrail_rsa"
+    key_file = "/home/#{@opt.user}/.ssh/contrail_rsa"
     key = File.file?(key_file) ? "-i #{key_file}" : ""
-    sh("sshpass -p #{@user} scp #{key} #{@user}@#{@controller_host}:/usr/local/bin/kubectl /usr/local/bin/.")
+    sh("sshpass -p #{@opt.user} scp #{key} #{@opt.user}@#{@opt.controller_host}:/usr/local/bin/kubectl /usr/local/bin/.")
     sh("ln -sf /usr/local/bin/kubectl /usr/bin/kubectl", true)
 
     Dir.chdir("#{@ws}/../opencontrail-kubelet")
@@ -358,7 +405,7 @@ end
 
 def install_kube_network_manager (kubernetes_branch = "v0.20.1",
                                   contrail_branch = "master")
-    return unless @setup_kubernetes
+    return unless @opt.setup_kubernetes
     ENV["TARGET"]="#{ENV["HOME"]}/contrail"
     ENV["CONTRAIL_BRANCH"]=contrail_branch
     ENV["KUBERNETES_BRANCH"]=kubernetes_branch
@@ -393,14 +440,14 @@ end
 def main
     initial_setup
     download_contrail_software
-    if @role == "controller" or @role == "all" then
+    if @opt.role == "controller" or @opt.role == "all" then
         install_thirdparty_software_controller
         install_contrail_software_controller
         provision_contrail_controller
         install_kube_network_manager
         provision_contrail_controller_kubernetes
     end
-    if @role == "compute" or @role == "all" then
+    if @opt.role == "compute" or @opt.role == "all" then
         fix_docker_file_system_issue # Work-around docker file system issues
         install_thirdparty_software_compute
         install_contrail_software_compute
