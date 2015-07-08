@@ -19,6 +19,7 @@ def parse_options
     @opt.portal_net = "10.254.0.0/16"
     @opt.public_net = "10.1.0.0/16"
     @opt.user = "ubuntu"
+    @opt.password = "ubuntu"
     @opt.setup_ssh = false
     @opt.ssh_key = "/home/#{@opt.user}/.ssh/contrail_rsa"
     @opt.contrail_install = true
@@ -31,54 +32,57 @@ def parse_options
 
     opt_parser = OptionParser.new { |o|
         o.banner = "Usage: #{$0} [options]"
-        o.on("-f", "--[no-]-fix-docker-fs-issue", "#{@opt.fix_docker_issue}",
-             "Fix/work-around docker fs device mapper issue") { |f|
-             @opt.fix_docker_issue = f
-        }
-        o.on("-I", "--intf #{@opt.intf}", "data interface name") { |i|
-            @opt.intf = i
-        }
-        o.on("-r", "--role #{@opt.role}", "Configuration role") { |role|
-            @opt.role = role
+        o.on("-b", "--public-net #{@opt.public_net}",
+             "Public network subnet value") { |net|
+            @opt.public_net = net
         }
         o.on("-c", "--controller-name #{@opt.controller_host}",
              "Name of the contrail controller host") { |controller|
             @opt.controller_host = controller
         }
+        o.on("-f", "--[no-]-fix-docker-fs-issue", "#{@opt.fix_docker_issue}",
+             "Fix/work-around docker fs device mapper issue") { |f|
+             @opt.fix_docker_issue = f
+        }
         o.on("-i", "--controller-ip #{@opt.controller_ip}",
              "IP of the contrail controller host") { |ip|
             @opt.controller_ip = ip
         }
-        o.on("-p", "--private-net #{@opt.private_net}",
-             "Private network subnet value") { |net|
-            @opt.private_net = net
-        }
-        o.on("-l", "--portal-net #{@opt.portal_net}",
-             "Portal network subnet value") { |net|
-            @opt.portal_net = net
-        }
-        o.on("-b", "--public-net #{@opt.public_net}",
-             "Public network subnet value") { |net|
-            @opt.public_net = net
-        }
-        o.on("-u", "--user #{@opt.user}", "Guest user name") { |user|
-            @opt.user = user
-        }
-        o.on("-y", "--ssh-key #{@opt.ssh_key}",
-             "ssh key for user #{@opt.user} #{@opt.ssh_key}") { |key|
-            @opt.ssh_key = ssh_key
+        o.on("-I", "--intf #{@opt.intf}", "data interface name") { |i|
+            @opt.intf = i
         }
         o.on("-k", "--[no-]-kubernetes-setup", "[#{@opt.setup_kubernetes}",
              "Setup kubernetes plugin") { |kubernetes|
              @opt.setup_kubernetes = kubernetes
         }
-        o.on("-t", "--[no-]-contrail-install", "[#{@opt.contrail_install}",
-             "Install and provision contrail software") { |contrail_install|
-             @opt.contrail_install = contrail_install
+        o.on("-l", "--portal-net #{@opt.portal_net}",
+             "Portal network subnet value") { |net|
+            @opt.portal_net = net
+        }
+        o.on("-p", "--private-net #{@opt.private_net}",
+             "Private network subnet value") { |net|
+            @opt.private_net = net
+        }
+        o.on("-r", "--role #{@opt.role}", "Configuration role") { |role|
+            @opt.role = role
         }
         o.on("-s", "--[no-]-ssh-setup", "[#{@opt.setup_ssh}",
              "Setup ssh configuration") { |setup|
              @opt.setup_ssh = setup
+        }
+        o.on("-t", "--[no-]-contrail-install", "[#{@opt.contrail_install}",
+             "Install and provision contrail software") { |contrail_install|
+             @opt.contrail_install = contrail_install
+        }
+        o.on("-u", "--user #{@opt.user}", "Guest user name") { |user|
+            @opt.user = user
+        }
+        o.on("-w", "--password #{@opt.password}", "Guest user passwd") { |user|
+            @opt.password = password
+        }
+        o.on("-y", "--ssh-key #{@opt.ssh_key}",
+             "ssh key for user #{@opt.user} #{@opt.ssh_key}") { |key|
+            @opt.ssh_key = ssh_key
         }
     }
     opt_parser.parse!(ARGV)
@@ -324,7 +328,7 @@ EOF
     File.open("/etc/contrail/contrail-vrouter-nodemgr.conf", "w") {|fp| fp.puts nodemgr_conf}
 
     key = File.file?(@opt.ssh_key) ? "-i #{@opt.ssh_key}" : ""
-    sh("sshpass -p #{@opt.user} ssh -t #{key} #{@opt.user}@#{@opt.controller_host} sudo python #{@utils}/provision_vrouter.py --host_name #{sh('hostname')} --host_ip #{ip} --api_server_ip #{@opt.controller_ip} --oper add", false, 20, 6)
+    sh("sshpass -p #{@opt.password} ssh -t #{key} #{@opt.user}@#{@opt.controller_host} sudo python #{@utils}/provision_vrouter.py --host_name #{sh('hostname')} --host_ip #{ip} --api_server_ip #{@opt.controller_ip} --oper add", false, 20, 6)
     sh("sync; echo 3 > /proc/sys/vm/drop_caches") if @platform =~ /ubuntu/
     sh("service supervisor-vrouter restart")
     sh("service contrail-vrouter-agent restart")
@@ -344,6 +348,7 @@ end
 
 # http://www.fedora.hk/linux/yumwei/show_45.html
 def fix_docker_file_system_issue
+    return if !@opt.fix_docker_issue
     return if @platform !~ /ubuntu/
 
     sh("service docker stop", true)
@@ -360,7 +365,7 @@ def provision_contrail_compute_kubernetes
 
     # Copy kubectl from kubernets-master node
     key = File.file?(@opt.ssh_key) ? "-i #{@opt.ssh_key}" : ""
-    sh("sshpass -p #{@opt.user} scp #{key} #{@opt.user}@#{@opt.controller_host}:/usr/local/bin/kubectl /usr/local/bin/.")
+    sh("sshpass -p #{@opt.password} scp #{key} #{@opt.user}@#{@opt.controller_host}:/usr/local/bin/kubectl /usr/local/bin/.")
     sh("ln -sf /usr/local/bin/kubectl /usr/bin/kubectl", true)
 
     Dir.chdir("#{@ws}/../opencontrail-kubelet")
