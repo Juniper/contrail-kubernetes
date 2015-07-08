@@ -19,6 +19,7 @@ def parse_options
     @opt.public_net = "10.1.0.0/16"
     @opt.user = "ubuntu"
     @opt.setup_ssh = false
+    @opt.ssh_key = "/home/#{@opt.user}/.ssh/contrail_rsa"
 
     if File.directory? "/vagrant" then
         @opt.intf = "eth1"
@@ -56,6 +57,10 @@ def parse_options
         }
         o.on("-u", "--user #{@opt.user}", "Guest user name") { |user|
             @opt.user = user
+        }
+        o.on("-y", "--ssh-key #{@opt.ssh_key}",
+             "ssh key for user #{@opt.user} #{@opt.ssh_key}") { |key|
+            @opt.ssh_key = ssh_key
         }
         o.on("-k", "--[no-]-kubernetes-setup", "[#{@opt.setup_kubernetes}",
              "Setup kubernetes plugin") { |kubernetes|
@@ -305,8 +310,7 @@ server_list=#{@contrail_controller}:8086
 EOF
     File.open("/etc/contrail/contrail-vrouter-nodemgr.conf", "w") {|fp| fp.puts nodemgr_conf}
 
-    key_file = "/home/#{@opt.user}/.ssh/contrail_rsa"
-    key = File.file?(key_file) ? "-i #{key_file}" : ""
+    key = File.file?(@opt.ssh_key) ? "-i #{@opt.ssh_key}" : ""
     sh("sshpass -p #{@opt.user} ssh -t #{key} #{@opt.user}@#{@opt.controller_host} sudo python #{@utils}/provision_vrouter.py --host_name #{sh('hostname')} --host_ip #{ip} --api_server_ip #{@contrail_controller} --oper add", false, 20, 6)
     sh("sync; echo 3 > /proc/sys/vm/drop_caches") if @platform =~ /ubuntu/
     sh("service supervisor-vrouter restart")
@@ -356,8 +360,7 @@ def provision_contrail_compute_kubernetes
     return unless @opt.setup_kubernetes
 
     # Copy kubectl from kubernets-master node
-    key_file = "/home/#{@opt.user}/.ssh/contrail_rsa"
-    key = File.file?(key_file) ? "-i #{key_file}" : ""
+    key = File.file?(@opt.ssh_key) ? "-i #{@opt.ssh_key}" : ""
     sh("sshpass -p #{@opt.user} scp #{key} #{@opt.user}@#{@opt.controller_host}:/usr/local/bin/kubectl /usr/local/bin/.")
     sh("ln -sf /usr/local/bin/kubectl /usr/bin/kubectl", true)
 
@@ -396,11 +399,6 @@ EOF
 
     # Flush iptable nat entries
     sh("iptables -F -t nat")
-end
-
-def aws_setup
-    # Update /etc/hosts
-    # Allow password based login in ssh
 end
 
 def install_kube_network_manager (kubernetes_branch = "v0.20.1",
@@ -454,9 +452,6 @@ def main
         provision_contrail_compute
         provision_contrail_compute_kubernetes
     end
-
-    # Wait a bit before exiting
-    sleep 10
 end
 
 main
