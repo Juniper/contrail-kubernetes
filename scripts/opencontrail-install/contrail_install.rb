@@ -14,12 +14,14 @@ def parse_options
     @opt.role = "controller"
     @opt.setup_kubernetes = false
     @opt.controller_host = "localhost"
+    @opt.controller_ip = ""
     @opt.private_net = "10.0.0.0/16"
     @opt.portal_net = "10.254.0.0/16"
     @opt.public_net = "10.1.0.0/16"
     @opt.user = "ubuntu"
     @opt.setup_ssh = false
     @opt.ssh_key = "/home/#{@opt.user}/.ssh/contrail_rsa"
+    @opt.contrail_install = true
 
     if File.directory? "/vagrant" then
         @opt.intf = "eth1"
@@ -33,15 +35,19 @@ def parse_options
              "Fix/work-around docker fs device mapper issue") { |f|
              @opt.fix_docker_issue = f
         }
-        o.on("-i", "--intf #{@opt.intf}", "data interface name") { |i|
+        o.on("-I", "--intf #{@opt.intf}", "data interface name") { |i|
             @opt.intf = i
         }
         o.on("-r", "--role #{@opt.role}", "Configuration role") { |role|
             @opt.role = role
         }
-        o.on("-c", "--controller #{@opt.controller_host}",
+        o.on("-c", "--controller-name #{@opt.controller_host}",
              "Name of the contrail controller host") { |controller|
             @opt.controller_host = controller
+        }
+        o.on("-i", "--controller-ip #{@opt.controller_ip}",
+             "IP of the contrail controller host") { |ip|
+            @opt.controller_ip = ip
         }
         o.on("-p", "--private-net #{@opt.private_net}",
              "Private network subnet value") { |net|
@@ -66,6 +72,10 @@ def parse_options
              "Setup kubernetes plugin") { |kubernetes|
              @opt.setup_kubernetes = kubernetes
         }
+        o.on("-t", "--[no-]-contrail-install", "[#{@opt.contrail_install}",
+             "Install and provision contrail software") { |contrail_install|
+             @opt.contrail_install = contrail_install
+        }
         o.on("-s", "--[no-]-ssh-setup", "[#{@opt.setup_ssh}",
              "Setup ssh configuration") { |setup|
              @opt.setup_ssh = setup
@@ -73,6 +83,9 @@ def parse_options
     }
     opt_parser.parse!(ARGV)
 end
+
+# Parse command line options.
+parse_options
 
 @ws="#{File.dirname($0)}"
 require "#{@ws}/util"
@@ -104,12 +117,22 @@ EOF
     sh("chown #{@opt.user}.#{@opt.user} /home/#{@opt.user}/.ssh/.")
 end
 
+def resolve_controller_host_name
+    return if !@opt.controller_ip.empty?
+    begin
+        @opt.controller_ip = IPSocket.getaddress(@opt.controller_host)
+    rescue
+        # Check in /etc/hosts
+        @opt.controller_ip =
+            sh(%{grep #{@opt.controller_host} /etc/hosts | awk '{print $1}'})
+    end
+    error "Cannot resolve controller #{@opt.controller_host}" \
+        if @opt.controller_ip.empty?
+end
+
 # Do initial setup
 def initial_setup
     STDOUT.sync = true
-
-    # Parse command line options.
-    parse_options
     raise 'Must run with superuser privilages' unless Process.uid == 0
 
     @control_node_introspect_port =
@@ -117,17 +140,7 @@ def initial_setup
     setup_ssh
 
     sh("service hostname restart", true) if @platform !~ /fedora/
-
-    begin
-        @contrail_controller = IPSocket.getaddress(@opt.controller_host)
-    rescue
-        # Check in /etc/hosts
-        @contrail_controller =
-            sh(%{grep #{@opt.controller_host} /etc/hosts | awk '{print $1}'})
-    end
-
-    error "Cannot resolve controller #{@opt.controller_host}" \
-        if @contrail_controller.empty?
+    resolve_controller_host_name
 
     # Make sure that localhost resolves to 127.0.0.1
     sh(%{\grep -q "127\.0\.0\.1.*localhost" /etc/hosts}, true)
@@ -294,7 +307,7 @@ EOF
     sh("touch /etc/contrail/default_pmac")
 
     sh("/opt/contrail/bin/openstack-config --set /etc/contrail/contrail-vrouter-agent.conf HYPERVISOR type kvm")
-    sh("/opt/contrail/bin/openstack-config --set /etc/contrail/contrail-vrouter-agent.conf DISCOVERY server #{@contrail_controller}")
+    sh("/opt/contrail/bin/openstack-config --set /etc/contrail/contrail-vrouter-agent.conf DISCOVERY server #{@opt.controller_ip}")
     sh("/opt/contrail/bin/openstack-config --set /etc/contrail/contrail-vrouter-agent.conf VIRTUAL-HOST-INTERFACE name vhost0")
     sh("/opt/contrail/bin/openstack-config --set /etc/contrail/contrail-vrouter-agent.conf VIRTUAL-HOST-INTERFACE ip #{ip}/#{prefix_len}")
     sh("/opt/contrail/bin/openstack-config --set /etc/contrail/contrail-vrouter-agent.conf VIRTUAL-HOST-INTERFACE gateway #{gw}")
@@ -303,15 +316,15 @@ EOF
 
     nodemgr_conf = <<EOF
 [DISCOVERY]
-server=#{@contrail_controller}
+server=#{@opt.controller_ip}
 port=5998
 [COLLECTOR]
-server_list=#{@contrail_controller}:8086
+server_list=#{@opt.controller_ip}:8086
 EOF
     File.open("/etc/contrail/contrail-vrouter-nodemgr.conf", "w") {|fp| fp.puts nodemgr_conf}
 
     key = File.file?(@opt.ssh_key) ? "-i #{@opt.ssh_key}" : ""
-    sh("sshpass -p #{@opt.user} ssh -t #{key} #{@opt.user}@#{@opt.controller_host} sudo python #{@utils}/provision_vrouter.py --host_name #{sh('hostname')} --host_ip #{ip} --api_server_ip #{@contrail_controller} --oper add", false, 20, 6)
+    sh("sshpass -p #{@opt.user} ssh -t #{key} #{@opt.user}@#{@opt.controller_host} sudo python #{@utils}/provision_vrouter.py --host_name #{sh('hostname')} --host_ip #{ip} --api_server_ip #{@opt.controller_ip} --oper add", false, 20, 6)
     sh("sync; echo 3 > /proc/sys/vm/drop_caches") if @platform =~ /ubuntu/
     sh("service supervisor-vrouter restart")
     sh("service contrail-vrouter-agent restart")
@@ -327,20 +340,6 @@ EOF
     sh("python #{@utils}/provision_vgw_interface.py --oper create --interface vgw_public --subnets #{@opt.public_net} --routes 0.0.0.0/0 --vrf default-domain:default-project:Public:Public", false, 5, 5)
 
     verify_compute
-end
-
-def provision_contrail_controller_kubernetes
-    return unless @opt.setup_kubernetes
-
-    # Start kube web server in background
-    # http://localhost:8001/static/app/#/dashboard/
-    sh("ln -sf /usr/local/bin/kubectl /usr/bin/kubectl", true)
-    sh("nohup /usr/local/bin/kubectl proxy --www=#{@ws}/build_kubernetes/www 2>&1 > /var/log/kubectl-web-proxy.log", true, 1, 1, true)
-
-    target = @platform =~ /fedora/ ? "/root" : "/home/ubuntu"
-
-    # Start kube-network-manager plugin daemon in background
-    sh(%{nohup #{target}/contrail/kube-network-manager -- --public_net="#{@opt.public_net}" --portal_net="#{@opt.portal_net}" --private_net="#{@opt.private_net}" 2>&1 > /var/log/contrail/kube-network-manager.log}, true, 1, 1, true) if @platform =~ /ubuntu/
 end
 
 # http://www.fedora.hk/linux/yumwei/show_45.html
@@ -376,7 +375,7 @@ def provision_contrail_compute_kubernetes
     # Generate default plugin configuration file
     plugin_conf = <<EOF
 [DEFAULTS]
-api_server = #{@contrail_controller}
+api_server = #{@opt.controller_ip}
 net_mode = bridge
 EOF
     File.open("/usr/libexec/kubernetes/kubelet-plugins/net/exec/#{plugin}/config", "w") { |fp|
@@ -401,7 +400,21 @@ EOF
     sh("iptables -F -t nat")
 end
 
-def install_kube_network_manager (kubernetes_branch = "v0.20.1",
+def provision_contrail_controller_kubernetes
+    return unless @opt.setup_kubernetes
+
+    # Start kube web server in background
+    # http://localhost:8001/static/app/#/dashboard/
+    sh("ln -sf /usr/local/bin/kubectl /usr/bin/kubectl", true)
+    sh("nohup /usr/local/bin/kubectl proxy --www=#{@ws}/build_kubernetes/www 2>&1 > /var/log/kubectl-web-proxy.log", true, 1, 1, true)
+
+    target = @platform =~ /fedora/ ? "/root" : "/home/ubuntu"
+
+    # Start kube-network-manager plugin daemon in background
+    sh(%{nohup #{target}/contrail/kube-network-manager -- --contrail_api=#{@opt.controller_ip} --public_net="#{@opt.public_net}" --portal_net="#{@opt.portal_net}" --private_net="#{@opt.private_net}" 2>&1 > /var/log/contrail/kube-network-manager.log}, true, 1, 1, true) if @platform =~ /ubuntu/
+end
+
+def build_kube_network_manager (kubernetes_branch = "v0.20.1",
                                   contrail_branch = "master")
     return unless @opt.setup_kubernetes
     ENV["TARGET"]="#{ENV["HOME"]}/contrail"
@@ -437,19 +450,19 @@ end
 
 def main
     initial_setup
-    download_contrail_software
+    download_contrail_software if @opt.contrail_install
     if @opt.role == "controller" or @opt.role == "all" then
-        install_thirdparty_software_controller
-        install_contrail_software_controller
-        provision_contrail_controller
-        install_kube_network_manager
+        install_thirdparty_software_controller if @opt.contrail_install
+        install_contrail_software_controller if @opt.contrail_install
+        provision_contrail_controller if @opt.contrail_install
+        build_kube_network_manager
         provision_contrail_controller_kubernetes
     end
     if @opt.role == "compute" or @opt.role == "all" then
         fix_docker_file_system_issue # Work-around docker file system issues
-        install_thirdparty_software_compute
-        install_contrail_software_compute
-        provision_contrail_compute
+        install_thirdparty_software_compute if @opt.contrail_install
+        install_contrail_software_compute if @opt.contrail_install
+        provision_contrail_compute if @opt.contrail_install
         provision_contrail_compute_kubernetes
     end
 end
