@@ -107,7 +107,7 @@ def getDockerPod(docker_id):
 def getPodInfo(podName):
     kubeapi = kubelet_get_api()
 
-    data = Shell.run('kubectl --server=%s:7080 get -o json pod %s' % (
+    data = Shell.run('kubectl --server=%s:8080 get -o json pod %s' % (
                      kubeapi, podName), True)
     return json.loads(data)
     

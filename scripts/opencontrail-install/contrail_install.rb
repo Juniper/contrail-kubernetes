@@ -10,8 +10,8 @@ raise 'Must run with superuser privilages' unless Process.uid == 0
 @role = ARGV[1]
 @setup_kubernetes = true
 
-@private_net = "10.10.0.0/16"
-@portal_net = "10.0.0.0/16"
+@private_net = "10.0.0.0/16"
+@portal_net = "10.254.0.0/16"
 @public_net = "10.1.0.0/16"
 
 @ws="#{File.dirname($0)}"
@@ -356,8 +356,9 @@ def aws_setup
     # Allow password based login in ssh
 end
 
-def install_kube_network_manager (kubernetes_branch = "release-0.17",
+def install_kube_network_manager (kubernetes_branch = "v0.20.1",
                                   contrail_branch = "master")
+    return unless @setup_kubernetes
     ENV["TARGET"]="#{ENV["HOME"]}/contrail"
     ENV["CONTRAIL_BRANCH"]=contrail_branch
     ENV["KUBERNETES_BRANCH"]=kubernetes_branch
@@ -382,8 +383,6 @@ mkdir -p ./kubernetes/Godeps/_workspace/src/github.com/Juniper/
 ln -sf #{target}/contrail-kubernetes ./kubernetes/Godeps/_workspace/src/github.com/Juniper/contrail-kubernetes
 mkdir -p #{ENV["GOPATH"]}/src/github.com/GoogleCloudPlatform
 ln -sf #{ENV["TARGET"]}/kubernetes #{ENV["GOPATH"]}/src/github.com/GoogleCloudPlatform/kubernetes
-sed -i 's/ClusterIP/PortalIP/' ./kubernetes/Godeps/_workspace/src/github.com/Juniper/contrail-kubernetes/pkg/network/opencontrail/controller.go
-sed -i 's/DeprecatedPublicIPs/PublicIPs/' ./kubernetes/Godeps/_workspace/src/github.com/Juniper/contrail-kubernetes/pkg/network/opencontrail/controller.go
 go build github.com/Juniper/contrail-go-api/cli
 go build github.com/Juniper/contrail-kubernetes/pkg/network
 go build github.com/Juniper/contrail-kubernetes/cmd/kube-network-manager
@@ -395,8 +394,6 @@ def main
     initial_setup
     download_contrail_software
     if @role == "controller" or @role == "all" then
-        # Make sure that kubeapi is up and running
-        sh("netstat -anp | \grep LISTEN | \grep -w 8080", false, 60, 10)
         install_thirdparty_software_controller
         install_contrail_software_controller
         provision_contrail_controller
