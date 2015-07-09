@@ -123,9 +123,15 @@ func (m *InstanceManager) ReleaseInterface(tenant, podName string) {
 	refs, err := vmi.GetFloatingIpBackRefs()
 	if err == nil {
 		for _, ref := range refs {
-			err = m.client.DeleteByUuid("floating-ip", ref.Uuid)
+			fip, err := types.FloatingIpByUuid(m.client, ref.Uuid)
 			if err != nil {
-				glog.Errorf("Delete floating-ip %s: %v", ref.Uuid, err)
+				glog.Errorf("Get floating-ip %s: %v", ref.Uuid, err)
+				continue
+			}
+			fip.DeleteVirtualMachineInterface(vmi.GetUuid())
+			err = m.client.Update(fip)
+			if err != nil {
+				glog.Errorf("Remove floating-ip reference %s: %v", ref.Uuid, err)
 			}
 		}
 	} else {

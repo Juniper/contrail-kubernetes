@@ -1017,3 +1017,136 @@ func TestServiceWithMultipleUsers(t *testing.T) {
 	policy, err = types.NetworkPolicyByName(client, "default-domain:testns:x1")
 	assert.Error(t, err)
 }
+
+func TestServiceWithMultipleBackends(t *testing.T) {
+	kube := mocks.NewKubeClient()
+
+	client := new(contrail_mocks.ApiClient)
+	client.Init()
+
+	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
+	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
+	client.AddInterceptor("instance-ip", &IpInterceptor{})
+
+	controller := NewTestController(kube, client, nil, nil)
+
+	pod1 := &api.Pod{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "test-sv1",
+			Namespace: "testns",
+			UID:       kubetypes.UID(uuid.New()),
+			Labels: map[string]string{
+				"name": "backend",
+			},
+		},
+	}
+	pod2 := &api.Pod{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "test-sv2",
+			Namespace: "testns",
+			UID:       kubetypes.UID(uuid.New()),
+			Labels: map[string]string{
+				"name": "backend",
+			},
+		},
+	}
+
+	service := &api.Service{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "service",
+			Namespace: "testns",
+			Labels: map[string]string{
+				"name": "svc",
+			},
+		},
+		Spec: api.ServiceSpec{
+			Selector: map[string]string{
+				"name": "backend",
+			},
+			ClusterIP: "10.254.42.42",
+		},
+	}
+
+	netnsProject := new(types.Project)
+	netnsProject.SetFQName("", []string{"default-domain", "testns"})
+	client.Create(netnsProject)
+
+	store := new(mocks.Store)
+	controller.SetServiceStore(store)
+
+	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
+	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
+	kube.PodInterface.On("List", mock.Anything, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+	store.On("List").Return([]interface{}{service})
+
+	shutdown := make(chan struct{})
+	go controller.Run(shutdown)
+
+	controller.AddPod(pod1)
+	controller.AddService(service)
+	time.Sleep(100 * time.Millisecond)
+
+	controller.AddPod(pod2)
+	time.Sleep(100 * time.Millisecond)
+
+	fip, err := types.FloatingIpByName(client, "default-domain:testns:service-svc:service-svc:service")
+	assert.NoError(t, err)
+	if err == nil {
+		refs, err := fip.GetVirtualMachineInterfaceRefs()
+		assert.NoError(t, err)
+		assert.Len(t, refs, 2)
+	}
+
+	controller.DeletePod(pod1)
+	time.Sleep(100 * time.Millisecond)
+
+	fip, err = types.FloatingIpByName(client, "default-domain:testns:service-svc:service-svc:service")
+	assert.NoError(t, err)
+	if err == nil {
+		refs, err := fip.GetVirtualMachineInterfaceRefs()
+		assert.NoError(t, err)
+		assert.Len(t, refs, 1)
+		var uids []string
+		for _, ref := range refs {
+			uids = append(uids, ref.Uuid)
+		}
+		vmi, err := types.VirtualMachineInterfaceByName(client, "default-domain:testns:test-sv2")
+		assert.NoError(t, err)
+		if err == nil {
+			assert.Contains(t, uids, vmi.GetUuid())
+		}
+	}
+
+	controller.AddPod(pod1)
+	time.Sleep(100 * time.Millisecond)
+
+	fip, err = types.FloatingIpByName(client, "default-domain:testns:service-svc:service-svc:service")
+	assert.NoError(t, err)
+	if err == nil {
+		refs, err := fip.GetVirtualMachineInterfaceRefs()
+		assert.NoError(t, err)
+		assert.Len(t, refs, 2)
+	}
+
+	controller.DeletePod(pod1)
+	controller.DeletePod(pod2)
+	time.Sleep(100 * time.Millisecond)
+
+	fip, err = types.FloatingIpByName(client, "default-domain:testns:service-svc:service-svc:service")
+	assert.NoError(t, err)
+	if err == nil {
+		refs, err := fip.GetVirtualMachineInterfaceRefs()
+		assert.NoError(t, err)
+		assert.Len(t, refs, 0)
+	}
+
+	controller.DeleteService(service)
+	time.Sleep(100 * time.Millisecond)
+
+	type shutdownMsg struct {
+	}
+	shutdown <- shutdownMsg{}
+
+	_, err = types.FloatingIpByName(client, "default-domain:testns:service-svc:service-svc:service")
+	assert.Error(t, err)
+}

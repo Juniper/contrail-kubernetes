@@ -17,6 +17,7 @@ limitations under the License.
 package opencontrail
 
 import (
+	"fmt"
 	"testing"
 
 	"code.google.com/p/go-uuid/uuid"
@@ -28,12 +29,16 @@ import (
 	"github.com/Juniper/contrail-go-api/types"
 )
 
-type IpInterceptor struct{}
+type IpInterceptor struct {
+	count int
+}
 
 func (i *IpInterceptor) Put(ptr contrail.IObject) {
 	ip := ptr.(*types.InstanceIp)
-	ip.SetInstanceIpAddress("100.64.0.1")
+	i.count += 1
+	ip.SetInstanceIpAddress(fmt.Sprintf("10.254.%d.%d", i.count/256, i.count&0xff))
 }
+
 func (i *IpInterceptor) Get(ptr contrail.IObject) {
 }
 
@@ -47,7 +52,7 @@ func TestAllocator(t *testing.T) {
 	id := uuid.New()
 	addr, err := allocator.LocateIpAddress(id)
 	assert.NoError(t, err)
-	assert.Equal(t, "100.64.0.1", addr)
+	assert.Equal(t, "10.254.0.1", addr)
 
 	ipObj, err := types.InstanceIpByName(client, id)
 	assert.NoError(t, err)
