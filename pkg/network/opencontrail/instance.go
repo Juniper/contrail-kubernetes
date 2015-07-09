@@ -168,6 +168,7 @@ func (m *InstanceManager) LocateInstanceIp(
 	ipObj.AddVirtualNetwork(network)
 	ipObj.AddVirtualMachineInterface(nic)
 	ipObj.SetInstanceIpAddress(address)
+	ipObj.SetInstanceIpMode("active-active")
 	err = m.client.Create(ipObj)
 	if err != nil {
 		glog.Errorf("Create instance-ip %s: %v", nic.GetName())
