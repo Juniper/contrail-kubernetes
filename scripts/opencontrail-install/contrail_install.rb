@@ -434,7 +434,7 @@ def provision_contrail_controller_kubernetes
     # http://localhost:8001/static/app/#/dashboard/
     sh("ln -sf /usr/local/bin/kubectl /usr/bin/kubectl", true)
     if File.file? "/usr/local/bin/kubectl"
-        sh("nohup /usr/local/bin/kubectl proxy --www=#{@ws}/build_kubernetes/www 2>&1 > /var/log/kubectl-web-proxy.log", true, 1, 1, true)
+        sh("nohup /usr/local/bin/kubectl proxy --www=#{ENV["HOME"]}/contrail/kubernetes/www 2>&1 > /var/log/kubectl-web-proxy.log", true, 1, 1, true)
     end
 
     target = @platform =~ /fedora/ ? "/root" : "/home/#{@opt.user}"
