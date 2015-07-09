@@ -61,7 +61,7 @@ func (c *Config) Parse(args []string) {
 		"OpenContrail API port.")
 	fs.StringVar(&c.PublicNetwork, "public_name", c.PublicNetwork,
 		"External network name.")
-	fs.StringVar(&c.PublicSubnet, "public_net", "",
+	fs.StringVar(&c.PublicSubnet, "public_net", c.PublicSubnet,
 		"External network subnet prefix used when provisioning the cluster.")
 	fs.StringVar(&c.PrivateSubnet, "private_net", c.PrivateSubnet,
 		"Address range to use for private IP addresses.")

@@ -76,11 +76,19 @@ def docker_get_pid(docker_id):
     pid_str = Shell.run('docker inspect -f \'{{.State.Pid}}\' %s' % docker_id)
     return int(pid_str)
 
-
+# kubelet config is at different places in different envs, unfortunately
 def kubelet_get_api():
-    fp = open('/etc/kubernetes/kubelet', 'r')
+    fp = None
+    try:
+        fp = open('/etc/sysconfig/kubelet', 'r')
+    except:
+        try:
+            fp = open('/etc/default/kubelet', 'r')
+        except:
+            fp = open('/etc/kubernetes/kubelet', 'r')
+
     for line in fp.readlines():
-        m = re.search(r'KUBELET_API_SERVER=\"--api_servers=http://(.*)\"', line)
+        m = re.search(r'--api_servers=http[s]?://(\d+\.\d+\.\d+\.\d+)', line)
         if m:
             return m.group(1)
     return None
@@ -100,8 +108,8 @@ def getDockerPod(docker_id):
 def getPodInfo(podName):
     kubeapi = kubelet_get_api()
 
-    data = Shell.run('kubectl --server=%s get -o json pod %s' % (
-        kubeapi, podName))
+    data = Shell.run('kubectl --server=%s:8080 get -o json pod %s' % (
+                     kubeapi, podName), True)
     return json.loads(data)
     
 def setup(pod_namespace, pod_name, docker_id):
@@ -142,9 +150,10 @@ def setup(pod_namespace, pod_name, docker_id):
     
     # The lxc_manager uses the mac_address to setup the container interface.
     # Additionally the ip-address, prefixlen and gateway are also used.
-    if not 'annotations' in podInfo['metadata']:
+    if not 'annotations' in podInfo["metadata"] or not 'nic_uuid' in podInfo["metadata"]["annotations"]:
         logging.error('No annotations in pod %s', podInfo["metadata"]["name"])
         sys.exit(1)
+
 
     podAnnotations = podInfo["metadata"]["annotations"]
     nic_uuid = podAnnotations["nic_uuid"]
