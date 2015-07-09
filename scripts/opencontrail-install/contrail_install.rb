@@ -25,6 +25,7 @@ def parse_options
     @opt.ssh_key = "/home/#{@opt.user}/.ssh/contrail_rsa"
     @opt.contrail_install = true
     @opt.provision_vgw = false
+    @opt.wait_for_kube_api = false
 
     if File.directory? "/vagrant" then
         @opt.intf = "eth1"
@@ -41,6 +42,9 @@ def parse_options
         o.on("-c", "--controller-name #{@opt.controller_host}",
              "Name of the contrail controller host") { |controller|
             @opt.controller_host = controller
+        }
+        o.on("-d", "--password #{@opt.password}", "Guest user passwd") { |pass|
+            @opt.password = pass
         }
         o.on("-f", "--[no-]fix-docker-fs-issue", "#{@opt.fix_docker_issue}",
              "Fix/work-around docker fs device mapper issue") { |f|
@@ -87,8 +91,9 @@ def parse_options
         o.on("-u", "--user #{@opt.user}", "Guest user name") { |user|
             @opt.user = user
         }
-        o.on("-w", "--password #{@opt.password}", "Guest user passwd") { |user|
-            @opt.password = password
+        o.on("-w", "--[no-]wait-for-kube-api", "[#{@opt.setup_ssh}",
+             "Wait until kubernetes api server is up") { |wait_for_kube_api|
+             @opt.wait_for_kube_api = wait_for_kube_api
         }
         o.on("-y", "--ssh-key #{@opt.ssh_key}",
              "ssh key for user #{@opt.user} #{@opt.ssh_key}") { |key|
@@ -423,7 +428,7 @@ def provision_contrail_controller_kubernetes
     # Start kube web server in background
     # http://localhost:8001/static/app/#/dashboard/
     sh("ln -sf /usr/local/bin/kubectl /usr/bin/kubectl", true)
-    if File.file "/usr/local/bin/kubectl"
+    if File.file? "/usr/local/bin/kubectl"
         sh("nohup /usr/local/bin/kubectl proxy --www=#{@ws}/build_kubernetes/www 2>&1 > /var/log/kubectl-web-proxy.log", true, 1, 1, true)
     end
 
@@ -464,10 +469,20 @@ EOF
     commands.split(/\n/).each { |cmd| sh(cmd) }
 end
 
+def wait_for_kupe_api
+    return unless @opt.wait_for_kube_api
+    # Make sure that kubeapi is up and running
+    key = File.file?(@opt.ssh_key) ? "-i #{@opt.ssh_key}" : ""
+    sh("sshpass -p #{@opt.password} ssh -t #{key} " +
+       "#{@opt.user}@#{@opt.kubernetes_master} " +
+       "netstat -anp | \grep LISTEN | \grep -w 8080", false, 60, 10)
+end
+
 def main
     initial_setup
     download_contrail_software if @opt.contrail_install
     if @opt.role == "controller" or @opt.role == "all" then
+        wait_for_kupe_api
         install_thirdparty_software_controller if @opt.contrail_install
         install_contrail_software_controller if @opt.contrail_install
         provision_contrail_controller if @opt.contrail_install
