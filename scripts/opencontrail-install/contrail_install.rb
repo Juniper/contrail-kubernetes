@@ -26,6 +26,7 @@ def parse_options
     @opt.contrail_install = true
     @opt.provision_vgw = false
     @opt.wait_for_kube_api = false
+    @opt.kubernetes_branch = "v0.20.1"
 
     if File.directory? "/vagrant" then
         @opt.intf = "eth1"
@@ -72,6 +73,10 @@ def parse_options
         o.on("-m", "--kubernetes-master #{@opt.kubernetes_master}",
              "Name of the kubernetes master host") { |kubernetes_master|
             @opt.kubernetes_master = kubernetes_master
+        }
+        o.on("-n", "--kubernetes-branch #{@opt.kubernetes_branch}",
+             "Name of the kubernetes branch") { |branch|
+            @opt.kubernetes_branch = branch
         }
         o.on("-p", "--private-net #{@opt.private_net}",
              "Private network subnet value") { |net|
@@ -438,12 +443,11 @@ def provision_contrail_controller_kubernetes
     sh(%{nohup #{target}/contrail/kube-network-manager --master=http://#{@opt.kubernetes_master}:8080 -- --contrail_api=#{@opt.controller_ip} --public_net="#{@opt.public_net}" --portal_net="#{@opt.portal_net}" --private_net="#{@opt.private_net}" 2>&1 > /var/log/contrail/kube-network-manager.log}, true, 1, 1, true) if @platform =~ /ubuntu/
 end
 
-def build_kube_network_manager (kubernetes_branch = "v0.20.1",
-                                  contrail_branch = "master")
+def build_kube_network_manager
     return unless @opt.setup_kubernetes
     ENV["TARGET"]="#{ENV["HOME"]}/contrail"
-    ENV["CONTRAIL_BRANCH"]=contrail_branch
-    ENV["KUBERNETES_BRANCH"]=kubernetes_branch
+    ENV["CONTRAIL_BRANCH"]="master"
+    ENV["KUBERNETES_BRANCH"]=@opt.kubernetes_branch
     ENV["GOPATH"]="#{ENV["TARGET"]}/kubernetes/Godeps/_workspace"
     target = @platform =~ /fedora/ ? "/root" : "/home/#{@opt.user}"
 
