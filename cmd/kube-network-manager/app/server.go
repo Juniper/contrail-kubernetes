@@ -109,32 +109,32 @@ func (m *NetworkManager) start(args []string) {
 		},
 	)
 
-	// m.NamespaceStore, m.NamespaceInformer = framework.NewInformer(
-	// 	cache.NewListWatchFromClient(
-	// 		m.Client,
-	// 		"namespaces",
-	// 		api.NamespaceAll,
-	// 		fields.Everything(),
-	// 	),
-	// 	&api.Namespace{},
-	// 	m.config.ResyncPeriod,
-	// 	framework.ResourceEventHandlerFuncs{
-	// 		AddFunc: func(obj interface{}) {
-	// 			m.Controller.AddNamespace(
-	// 				obj.(*api.Namespace))
-	// 		},
-	// 		UpdateFunc: func(oldObj, newObj interface{}) {
-	// 			m.Controller.UpdateNamespace(
-	// 				oldObj.(*api.Namespace),
-	// 				newObj.(*api.Namespace))
-	// 		},
-	// 		DeleteFunc: func(obj interface{}) {
-	// 			if namespace, ok := obj.(*api.Namespace); ok {
-	// 				m.Controller.DeleteNamespace(namespace)
-	// 			}
-	// 		},
-	// 	},
-	// )
+	m.NamespaceStore, m.NamespaceInformer = framework.NewInformer(
+		cache.NewListWatchFromClient(
+			m.Client,
+			"namespaces",
+			api.NamespaceAll,
+			fields.Everything(),
+		),
+		&api.Namespace{},
+		m.config.ResyncPeriod,
+		framework.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				m.Controller.AddNamespace(
+					obj.(*api.Namespace))
+			},
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				m.Controller.UpdateNamespace(
+					oldObj.(*api.Namespace),
+					newObj.(*api.Namespace))
+			},
+			DeleteFunc: func(obj interface{}) {
+				if namespace, ok := obj.(*api.Namespace); ok {
+					m.Controller.DeleteNamespace(namespace)
+				}
+			},
+		},
+	)
 
 	m.RCStore, m.RCInformer = framework.NewInformer(
 		cache.NewListWatchFromClient(
@@ -199,7 +199,7 @@ func (m *NetworkManager) start(args []string) {
 func (m *NetworkManager) Run(args []string) error {
 	m.start(args)
 	go m.PodInformer.Run(m.Shutdown)
-	// go m.NamespaceInformer.Run(m.Shutdown)
+	go m.NamespaceInformer.Run(m.Shutdown)
 	go m.RCInformer.Run(m.Shutdown)
 	go m.ServiceInformer.Run(m.Shutdown)
 	go m.Controller.Run(m.Shutdown)
