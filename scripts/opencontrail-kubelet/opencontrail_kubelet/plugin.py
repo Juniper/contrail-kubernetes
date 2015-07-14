@@ -105,11 +105,12 @@ def getDockerPod(docker_id):
     uid = fields[4]
     return uid, podName
 
-def getPodInfo(podName):
+def getPodInfo(namespace, podName):
     kubeapi = kubelet_get_api()
 
-    data = Shell.run('kubectl --server=%s:8080 get -o json pod %s' % (
-                     kubeapi, podName), True)
+    data = Shell.run(
+        'kubectl --server=%s:8080 get --namespace=%s -o json pod %s' % (
+            kubeapi, namespace, podName), True)
     return json.loads(data)
     
 def setup(pod_namespace, pod_name, docker_id):
@@ -142,7 +143,7 @@ def setup(pod_namespace, pod_name, docker_id):
     uid, podName = getDockerPod(docker_id)
     podInfo = None
     for i in range(0, 120):
-        podInfo = getPodInfo(podName)
+        podInfo = getPodInfo(pod_namespace, podName)
         if 'annotations' in podInfo["metadata"] and \
            'nic_uuid' in podInfo["metadata"]["annotations"]:
             break
