@@ -255,6 +255,7 @@ def provision_contrail_controller
 
     # Reduce analytics cassandra db ttl
     sh(%{/opt/contrail/bin/openstack-config --set /etc/contrail/contrail-collector.conf DEFAULT analytics_data_ttl 1})
+    sh(%{sed -i 's/# commitlog_total_space_in_mb:.*/commitlog_total_space_in_mb: 1024/' /etc/cassandra/cassandra.yaml})
 
     # Fix webui config
     if !File.file? "/usr/bin/node" then
