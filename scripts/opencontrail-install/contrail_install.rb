@@ -267,23 +267,20 @@ def provision_contrail_controller
 
     if @platform =~ /fedora/
         fix_nodemgr_config_files
-        sh("service cassandra restart")
         sh("service zookeeper restart")
         sh("service redis restart")
+        sh("service supervisor-webui restart")
+        sh("service supervisor-database restart")
     else
+        sh("restart zookeeper")
         sh("service redis-server restart")
+        sh("restart contrail-webui-webserver")
     end
+    sh("service cassandra restart")
     sh("service rabbitmq-server restart")
-    sh("service supervisor-database restart") if @platform =~ /fedora/
     sh("service supervisor-control restart")
     sh("service supervisor-config restart")
     sh("service supervisor-analytics restart")
-
-    if @platform =~ /ubuntu/
-        sh("restart contrail-webui-webserver", true)
-    else
-        sh("service supervisor-webui restart", true)
-    end
 
     60.times {|i| print "\rWait for #{i}/60 seconds to settle down.. "; sleep 1}
     verify_controller
