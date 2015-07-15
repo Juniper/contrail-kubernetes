@@ -294,7 +294,7 @@ end
 def verify_compute
     5.times {|i| print "\rWait for #{i}/5 seconds to settle down.. "; sleep 1}
     sh("lsmod |\grep vrouter")
-    sh("netstat -anp | \grep -w LISTEN | \grep -w 8085")
+    sh("netstat -anp | \grep -w LISTEN | \grep -w 8085", false, 10, 3) # agent
     sh("ping -c 3 #{@opt.controller_host}")
     sh("ping -c 3 github.com")
 end
@@ -498,6 +498,7 @@ def main
         provision_contrail_compute if @opt.contrail_install
         provision_contrail_compute_kubernetes
     end
+    sh("chown -R #{@opt.user}.#{@opt.user} /home/#{@opt.user}")
 end
 
 main
