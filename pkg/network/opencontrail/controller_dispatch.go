@@ -17,11 +17,11 @@ limitations under the License.
 package opencontrail
 
 import (
+	"reflect"
+
 	"github.com/golang/glog"
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/fields"
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/labels"
 )
 
 func EqualTags(m1, m2 map[string]string, tags []string) bool {
@@ -79,24 +79,41 @@ func (c *Controller) AddService(service *api.Service) {
 	if len(service.Spec.Selector) == 0 {
 		return
 	}
-	pods, err := c.kube.Pods(service.Namespace).List(
-		labels.Set(service.Spec.Selector).AsSelector(), fields.Everything())
-	if err != nil {
-		glog.Errorf("List pods by service %s: %v", service.Name, err)
-		return
-	}
-
-	if len(pods.Items) == 0 {
-		return
-	}
 
 	c.eventChannel <- notification{evAddService, service}
 }
 
 func (c *Controller) UpdateService(oldObj, newObj *api.Service) {
-	// Propagate the update if the IP address objects associated with
-	// the service are not associated with the pods that are members of
-	// the service.
+	update := false
+
+	nLabel, nExists := newObj.Labels[c.config.NetworkTag]
+	oLabel, oExists := oldObj.Labels[c.config.NetworkTag]
+
+	if nExists != oExists || (nExists && nLabel != oLabel) {
+		glog.V(3).Infof("Service %s: network-tag changed", newObj.Name)
+		c.eventChannel <- notification{evDeleteService, oldObj}
+		update = true
+	} else if !reflect.DeepEqual(newObj.Spec.Selector, oldObj.Spec.Selector) {
+		glog.V(3).Infof("Service %s: selector changed", newObj.Name)
+		update = true
+	} else if len(newObj.Spec.Selector) == 0 {
+		return
+	}
+
+	if newObj.Spec.ClusterIP != oldObj.Spec.ClusterIP {
+		update = true
+	}
+	if !reflect.DeepEqual(newObj.Spec.DeprecatedPublicIPs, oldObj.Spec.DeprecatedPublicIPs) {
+		update = true
+	}
+	if newObj.Spec.Type != oldObj.Spec.Type {
+		update = true
+	} else if newObj.Spec.Type == api.ServiceTypeLoadBalancer && len(newObj.Status.LoadBalancer.Ingress) == 0 {
+		update = true
+	}
+	if update {
+		c.eventChannel <- notification{evUpdateService, newObj}
+	}
 }
 
 func (c *Controller) DeleteService(service *api.Service) {

@@ -17,15 +17,32 @@ limitations under the License.
 package opencontrail
 
 import (
+	"fmt"
 	"testing"
 
 	"code.google.com/p/go-uuid/uuid"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/Juniper/contrail-go-api"
 	"github.com/Juniper/contrail-go-api/types"
 
 	contrail_mocks "github.com/Juniper/contrail-go-api/mocks"
 )
+
+type FloatingIpInterceptor struct {
+	count int
+}
+
+func (i *FloatingIpInterceptor) Put(ptr contrail.IObject) {
+}
+
+func (i *FloatingIpInterceptor) Get(ptr contrail.IObject) {
+	fip := ptr.(*types.FloatingIp)
+	if fip.GetFloatingIpAddress() == "" {
+		i.count += 1
+		fip.SetFloatingIpAddress(fmt.Sprintf("100.64.%d.%d", i.count/256, i.count&0xff))
+	}
+}
 
 func TestNetworkLocate(t *testing.T) {
 	client := new(contrail_mocks.ApiClient)

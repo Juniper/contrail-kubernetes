@@ -23,12 +23,14 @@ import (
 )
 
 type KubeClient struct {
-	PodInterface *KubePodInterface
+	PodInterface     *KubePodInterface
+	ServiceInterface *KubeServiceInterface
 }
 
 func NewKubeClient() *KubeClient {
 	client := new(KubeClient)
 	client.PodInterface = new(KubePodInterface)
+	client.ServiceInterface = new(KubeServiceInterface)
 	return client
 }
 
@@ -39,7 +41,7 @@ func (m *KubeClient) ReplicationControllers(namespace string) client.Replication
 	return nil
 }
 func (m *KubeClient) Services(namespace string) client.ServiceInterface {
-	return nil
+	return m.ServiceInterface
 }
 
 func (m *KubeClient) Endpoints(namespace string) client.EndpointsInterface {

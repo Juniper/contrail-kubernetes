@@ -17,6 +17,8 @@ limitations under the License.
 package opencontrail
 
 import (
+	"reflect"
+
 	"github.com/golang/glog"
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
@@ -84,6 +86,8 @@ func (c *Controller) Run(shutdown chan struct{}) {
 				c.deletePod(event.object.(*api.Pod))
 			case evAddService:
 				c.addService(event.object.(*api.Service))
+			case evUpdateService:
+				c.updateService(event.object.(*api.Service))
 			case evDeleteService:
 				c.deleteService(event.object.(*api.Service))
 			case evAddNamespace:
@@ -199,11 +203,16 @@ func (c *Controller) updatePodServiceIp(service *api.Service, pod *api.Pod) {
 }
 
 func (c *Controller) updatePodPublicIp(service *api.Service, pod *api.Pod) {
-	if service.Spec.DeprecatedPublicIPs == nil {
+	var publicIp *types.FloatingIp
+	var err error
+	if service.Spec.DeprecatedPublicIPs != nil {
+		publicIp, err = c.networkMgr.LocateFloatingIp(c.networkMgr.GetPublicNetwork(), service.Name,
+			service.Spec.DeprecatedPublicIPs[0])
+	} else if service.Spec.Type == api.ServiceTypeLoadBalancer {
+		publicIp, err = c.networkMgr.LocateFloatingIp(c.networkMgr.GetPublicNetwork(), service.Name, "")
+	} else {
 		return
 	}
-	publicIp, err := c.networkMgr.LocateFloatingIp(c.networkMgr.GetPublicNetwork(), service.Name,
-		service.Spec.DeprecatedPublicIPs[0])
 	if err != nil {
 		return
 	}
@@ -284,6 +293,33 @@ func (c *Controller) deletePod(pod *api.Pod) {
 	}
 }
 
+func (c *Controller) updateServicePublicIP(service *api.Service) (*types.FloatingIp, error) {
+	var publicIp *types.FloatingIp = nil
+	var err error
+
+	if service.Spec.DeprecatedPublicIPs != nil {
+		// Allocate a floating-ip from the public pool.
+		publicIp, err = c.networkMgr.LocateFloatingIp(
+			c.networkMgr.GetPublicNetwork(), service.Name, service.Spec.DeprecatedPublicIPs[0])
+	} else if service.Spec.Type == api.ServiceTypeLoadBalancer {
+		publicIp, err = c.networkMgr.LocateFloatingIp(c.networkMgr.GetPublicNetwork(), service.Name, "")
+		if err == nil {
+			status := api.LoadBalancerStatus{Ingress: []api.LoadBalancerIngress{
+				api.LoadBalancerIngress{IP: publicIp.GetFloatingIpAddress()},
+			}}
+			if !reflect.DeepEqual(service.Status.LoadBalancer, status) {
+				service.Status.LoadBalancer = status
+				_, err := c.kube.Services(service.Namespace).Update(service)
+				if err != nil {
+					glog.Infof("Update service %s LB status: %v", service.Name, err)
+				}
+			}
+		}
+	}
+
+	return publicIp, err
+}
+
 // Services can specify "publicIPs", these are mapped to floating-ip
 // addresses. By default a service implies a mapping from a service address
 // to the backends.
@@ -316,12 +352,7 @@ func (c *Controller) addService(service *api.Service) {
 		}
 	}
 
-	var publicIp *types.FloatingIp = nil
-	if service.Spec.DeprecatedPublicIPs != nil {
-		// Allocate a floating-ip from the public pool.
-		publicIp, err = c.networkMgr.LocateFloatingIp(
-			c.networkMgr.GetPublicNetwork(), service.Name, service.Spec.DeprecatedPublicIPs[0])
-	}
+	publicIp, err := c.updateServicePublicIP(service)
 
 	if serviceIp == nil && publicIp == nil {
 		return
@@ -338,6 +369,100 @@ func (c *Controller) addService(service *api.Service) {
 	}
 }
 
+func (c *Controller) purgeStaleServiceRefs(fip *types.FloatingIp, refs contrail.ReferenceList, podIdMap map[string]*api.Pod) {
+	update := false
+	for _, ref := range refs {
+		vmi, err := types.VirtualMachineInterfaceByUuid(c.client, ref.Uuid)
+		if err != nil {
+			glog.Errorf("%v", err)
+			continue
+		}
+		instanceRefs, err := vmi.GetVirtualMachineRefs()
+		if err != nil {
+			glog.Errorf("%v", err)
+			continue
+		}
+		if len(instanceRefs) == 0 {
+			continue
+		}
+		if _, ok := podIdMap[instanceRefs[0].Uuid]; ok {
+			continue
+		}
+		glog.V(3).Infof("Delete reference from pod %s to %s", ref.Uuid, fip.GetFloatingIpAddress())
+		fip.DeleteVirtualMachineInterface(vmi.GetUuid())
+		update = true
+	}
+
+	if update {
+		err := c.client.Update(fip)
+		if err != nil {
+			glog.Errorf("%v", err)
+		}
+	}
+}
+
+func (c *Controller) updateService(service *api.Service) {
+	glog.Infof("Update Service %s", service.Name)
+	serviceName := c.serviceName(service.Labels)
+	err := c.serviceMgr.Create(service.Namespace, serviceName)
+	if err != nil {
+		return
+	}
+
+	pods, err := c.kube.Pods(service.Namespace).List(
+		labels.Set(service.Spec.Selector).AsSelector(), fields.Everything())
+	if err != nil {
+		glog.Errorf("List pods by service %s: %v", service.Name, err)
+		return
+	}
+
+	var serviceIp *types.FloatingIp = nil
+	if service.Spec.ClusterIP != "" {
+		serviceNetwork, err := c.serviceMgr.LocateServiceNetwork(service.Namespace, serviceName)
+		if err == nil {
+			serviceIp, err = c.networkMgr.LocateFloatingIp(
+				serviceNetwork, service.Name, service.Spec.ClusterIP)
+		}
+	} else {
+		serviceNetwork, err := c.serviceMgr.LookupServiceNetwork(service.Namespace, serviceName)
+		if err == nil {
+			c.networkMgr.DeleteFloatingIp(serviceNetwork, service.Name)
+		}
+	}
+
+	publicIp, err := c.updateServicePublicIP(service)
+	if err == nil && publicIp == nil {
+		c.networkMgr.DeleteFloatingIp(c.networkMgr.GetPublicNetwork(), service.Name)
+	}
+
+	podIdMap := make(map[string]*api.Pod)
+	for _, pod := range pods.Items {
+		podIdMap[string(pod.UID)] = &pod
+		if serviceIp != nil {
+			// Connect serviceIp to VMI.
+			c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, serviceIp)
+		}
+		if publicIp != nil {
+			c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, publicIp)
+		}
+	}
+
+	// Detach the VIPs from pods which are no longer selected.
+	if serviceIp != nil {
+		refs, err := serviceIp.GetVirtualMachineInterfaceRefs()
+		if err == nil {
+			c.purgeStaleServiceRefs(serviceIp, refs, podIdMap)
+		}
+	}
+
+	if publicIp != nil {
+		refs, err := publicIp.GetVirtualMachineInterfaceRefs()
+		if err == nil {
+			c.purgeStaleServiceRefs(publicIp, refs, podIdMap)
+		}
+	}
+}
+
 func (c *Controller) deleteService(service *api.Service) {
 	glog.Infof("Delete Service %s", service.Name)
 	serviceName := c.serviceName(service.Labels)
@@ -345,7 +470,7 @@ func (c *Controller) deleteService(service *api.Service) {
 	if err == nil {
 		c.networkMgr.DeleteFloatingIp(serviceNetwork, service.Name)
 	}
-	if service.Spec.DeprecatedPublicIPs != nil {
+	if service.Spec.DeprecatedPublicIPs != nil || service.Spec.Type == api.ServiceTypeLoadBalancer {
 		c.networkMgr.DeleteFloatingIp(c.networkMgr.GetPublicNetwork(), service.Name)
 	}
 
