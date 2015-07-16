@@ -258,7 +258,7 @@ def provision_contrail_controller
 
     # In certain instances such as aws, extra storage disk is at a different
     # mount point
-    if File.dir? "/mnt/master-pd/"
+    if File.directory? "/mnt/master-pd/"
         old_cassandra_dir = "\\/var\\/lib\\/cassandra\\/"
         new_cassandra_dir = "\\/mnt\\/master-pd\\/contrail\\/cassandra\\/"
         sh(%{sed -i 's/#{old_cassandra_dir}/#{new_cassandra_dir}/' /etc/cassandra/cassandra.yaml})
