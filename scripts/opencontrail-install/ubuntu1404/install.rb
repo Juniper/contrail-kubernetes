@@ -38,8 +38,20 @@ def install_contrail_software_controller
     sh("add-apt-repository -y ppa:opencontrail/ppa")
     sh("add-apt-repository -y ppa:anantha-l/opencontrail-#{@version}")
     sh("apt-get -y --allow-unauthenticated update")
-    sh("apt-get -y --allow-unauthenticated install contrail-analytics contrail-config contrail-control contrail-web-controller contrail-dns contrail-utils cassandra zookeeperd rabbitmq-server ifmap-server", true)
-    sh("apt-get -y --allow-unauthenticated install contrail-analytics contrail-config contrail-control contrail-web-controller contrail-dns contrail-utils cassandra zookeeperd rabbitmq-server ifmap-server")
+    sh("apt-get -y --allow-unauthenticated install cassandra", true)
+
+    # In certain instances such as aws, extra storage disk is at a different
+    # mount point
+    if File.directory? "/mnt/master-pd/"
+        old_cassandra_dir = "\\/var\\/lib\\/cassandra\\/"
+        new_cassandra_dir = "\\/mnt\\/master-pd\\/contrail\\/cassandra\\/"
+        sh("mkdir -p /mnt/master-pd/contrail/cassandra")
+        sh("chown -R cassandra.cassandra /mnt/master-pd/contrail/cassandra")
+        sh(%{sed -i 's/#{old_cassandra_dir}/#{new_cassandra_dir}/' /etc/cassandra/cassandra.yaml})
+        sh("service cassandra restart")
+    end
+
+    sh("apt-get -y --allow-unauthenticated install contrail-analytics contrail-config contrail-control contrail-web-controller contrail-dns contrail-utils zookeeperd rabbitmq-server ifmap-server")
     sh("gdebi -n contrail-setup_*.deb")
 
     # Update time-zone
