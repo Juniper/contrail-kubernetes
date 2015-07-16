@@ -480,6 +480,7 @@ def wait_for_kupe_api
     if @opt.kubernetes_master == "localhost"
         sh("sed -i s/address=127.0.0.1/address=0.0.0.0/i /etc/kubernetes/manifests/kube-apiserver.manifest", true)
         sh("service kube-addons restart")
+    end
 
     sh("sshpass -p #{@opt.password} ssh -t #{key} " +
        "#{@opt.user}@#{@opt.kubernetes_master} " +
