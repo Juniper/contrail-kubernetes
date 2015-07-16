@@ -475,6 +475,12 @@ def wait_for_kupe_api
     return unless @opt.wait_for_kube_api
     # Make sure that kubeapi is up and running
     key = File.file?(@opt.ssh_key) ? "-i #{@opt.ssh_key}" : ""
+
+    # XXX Relax kubeserer-api 8080 to listen on 0.0.0.0
+    if @opt.kubernetes_master == "localhost"
+        sh("sed -i s/address=127.0.0.1/address=0.0.0.0/i /etc/kubernetes/manifests/kube-apiserver.manifest", true)
+        sh("service kube-addons restart")
+
     sh("sshpass -p #{@opt.password} ssh -t #{key} " +
        "#{@opt.user}@#{@opt.kubernetes_master} " +
        "netstat -anp | \grep LISTEN | \grep -w 8080", false, 60, 10)
