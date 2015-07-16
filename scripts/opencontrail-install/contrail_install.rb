@@ -255,6 +255,7 @@ def provision_contrail_controller
 
     # Reduce analytics cassandra db ttl
     sh(%{/opt/contrail/bin/openstack-config --set /etc/contrail/contrail-collector.conf DEFAULT analytics_data_ttl 1})
+    sh(%{sed -i 's/# commitlog_total_space_in_mb:.*/commitlog_total_space_in_mb: 1024/' /etc/cassandra/cassandra.yaml})
 
     # Fix webui config
     if !File.file? "/usr/bin/node" then
@@ -266,23 +267,20 @@ def provision_contrail_controller
 
     if @platform =~ /fedora/
         fix_nodemgr_config_files
-        sh("service cassandra restart")
         sh("service zookeeper restart")
         sh("service redis restart")
+        sh("service supervisor-webui restart")
+        sh("service supervisor-database restart")
     else
+        sh("restart zookeeper")
         sh("service redis-server restart")
+        sh("restart contrail-webui-webserver")
     end
+    sh("service cassandra restart")
     sh("service rabbitmq-server restart")
-    sh("service supervisor-database restart") if @platform =~ /fedora/
     sh("service supervisor-control restart")
     sh("service supervisor-config restart")
     sh("service supervisor-analytics restart")
-
-    if @platform =~ /ubuntu/
-        sh("restart contrail-webui-webserver", true)
-    else
-        sh("service supervisor-webui restart", true)
-    end
 
     60.times {|i| print "\rWait for #{i}/60 seconds to settle down.. "; sleep 1}
     verify_controller
@@ -296,7 +294,7 @@ end
 def verify_compute
     5.times {|i| print "\rWait for #{i}/5 seconds to settle down.. "; sleep 1}
     sh("lsmod |\grep vrouter")
-    sh("netstat -anp | \grep -w LISTEN | \grep -w 8085")
+    sh("netstat -anp | \grep -w LISTEN | \grep -w 8085", false, 10, 3) # agent
     sh("ping -c 3 #{@opt.controller_host}")
     sh("ping -c 3 github.com")
 end
@@ -434,7 +432,7 @@ def provision_contrail_controller_kubernetes
     # http://localhost:8001/static/app/#/dashboard/
     sh("ln -sf /usr/local/bin/kubectl /usr/bin/kubectl", true)
     if File.file? "/usr/local/bin/kubectl"
-        sh("nohup /usr/local/bin/kubectl proxy --www=#{@ws}/build_kubernetes/www 2>&1 > /var/log/kubectl-web-proxy.log", true, 1, 1, true)
+        sh("nohup /usr/local/bin/kubectl proxy --www=#{ENV["HOME"]}/contrail/kubernetes/www 2>&1 > /var/log/kubectl-web-proxy.log", true, 1, 1, true)
     end
 
     target = @platform =~ /fedora/ ? "/root" : "/home/#{@opt.user}"
@@ -477,6 +475,12 @@ def wait_for_kupe_api
     return unless @opt.wait_for_kube_api
     # Make sure that kubeapi is up and running
     key = File.file?(@opt.ssh_key) ? "-i #{@opt.ssh_key}" : ""
+
+    # XXX Relax kubeserer-api 8080 to listen on 0.0.0.0
+    if @opt.kubernetes_master == "localhost"
+        sh("sed -i s/address=127.0.0.1/address=0.0.0.0/i /etc/kubernetes/manifests/kube-apiserver.manifest", true)
+        sh("service kube-addons restart")
+
     sh("sshpass -p #{@opt.password} ssh -t #{key} " +
        "#{@opt.user}@#{@opt.kubernetes_master} " +
        "netstat -anp | \grep LISTEN | \grep -w 8080", false, 60, 10)
@@ -500,6 +504,7 @@ def main
         provision_contrail_compute if @opt.contrail_install
         provision_contrail_compute_kubernetes
     end
+    sh("chown -R #{@opt.user}.#{@opt.user} /home/#{@opt.user}")
 end
 
 main
