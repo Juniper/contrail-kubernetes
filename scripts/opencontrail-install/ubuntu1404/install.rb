@@ -46,10 +46,9 @@ def install_contrail_software_controller
     if File.directory? "/mnt/master-pd/"
         old_cassandra_dir = "\\/var\\/lib\\/cassandra\\/"
         new_cassandra_dir = "/mnt/master-pd/contrail/cassandra/"
-        new_cassandra_dir = "\\/mnt\\/master-pd\\/contrail\\/cassandra\\/"
         sh("mkdir -p #{new_cassandra_dir}")
         sh("chown -R cassandra.cassandra #{new_cassandra_dir}")
-        new_cassandra_dir.gsub!(/\//, '\\/')
+        new_cassandra_dir.gsub!(/\//, '\/')
         sh(%{sed -i 's/#{old_cassandra_dir}/#{new_cassandra_dir}/' /etc/cassandra/cassandra.yaml})
         sh("service cassandra restart")
     end
