@@ -255,7 +255,14 @@ def provision_contrail_controller
 
     # Reduce analytics cassandra db ttl
     sh(%{/opt/contrail/bin/openstack-config --set /etc/contrail/contrail-collector.conf DEFAULT analytics_data_ttl 1})
-#   sh(%{sed -i 's/# commitlog_total_space_in_mb:.*/commitlog_total_space_in_mb: 1024/' /etc/cassandra/cassandra.yaml})
+
+    # In certain instances such as aws, extra storage disk is at a different
+    # mount point
+    if File.dir? "/mnt/master-pd/"
+        old_cassandra_dir = "\\/var\\/lib\\/cassandra\\/"
+        new_cassandra_dir = "\\/mnt\\/master-pd\\/contrail\\/cassandra\\/"
+        sh(%{sed -i 's/#{old_cassandra_dir}/#{new_cassandra_dir}/' /etc/cassandra/cassandra.yaml})
+    end
 
     # Fix webui config
     if !File.file? "/usr/bin/node" then
