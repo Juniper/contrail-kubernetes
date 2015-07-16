@@ -261,6 +261,8 @@ def provision_contrail_controller
     if File.directory? "/mnt/master-pd/"
         old_cassandra_dir = "\\/var\\/lib\\/cassandra\\/"
         new_cassandra_dir = "\\/mnt\\/master-pd\\/contrail\\/cassandra\\/"
+        sh("mkdir -p /mnt/master-pd/contrail/cassandra")
+        sh("chown -R cassandra.cassandra /mnt/master-pd/contrail/cassandra")
         sh(%{sed -i 's/#{old_cassandra_dir}/#{new_cassandra_dir}/' /etc/cassandra/cassandra.yaml})
     end
 
