@@ -221,7 +221,7 @@ func (m *NetworkManagerImpl) ReleaseNetworkIfEmpty(namespace, name string) (bool
 	return false, nil
 }
 
-func (m *NetworkManagerImpl) LocateFloatingIp(network *types.VirtualNetwork, resourceName, address string) (*types.FloatingIp, error) {
+func (m *NetworkManagerImpl) LocateFloatingIp(network *types.VirtualNetwork, resourceName, targetAddress string) (*types.FloatingIp, error) {
 	obj, err := m.client.FindByName("floating-ip-pool", makePoolName(network))
 	if err != nil {
 		glog.Errorf("Get floating-ip-pool %s: %v", network.GetName(), err)
@@ -233,8 +233,8 @@ func (m *NetworkManagerImpl) LocateFloatingIp(network *types.VirtualNetwork, res
 	obj, err = m.client.FindByName("floating-ip", strings.Join(fqn, ":"))
 	if err == nil {
 		fip := obj.(*types.FloatingIp)
-		if fip.GetFloatingIpAddress() != address {
-			fip.SetFloatingIpAddress(address)
+		if targetAddress != "" && fip.GetFloatingIpAddress() != targetAddress {
+			fip.SetFloatingIpAddress(targetAddress)
 			err = m.client.Update(fip)
 			if err != nil {
 				glog.Errorf("Update floating-ip %s: %v", resourceName, err)
@@ -255,14 +255,19 @@ func (m *NetworkManagerImpl) LocateFloatingIp(network *types.VirtualNetwork, res
 	fip := new(types.FloatingIp)
 	fip.SetParent(pool)
 	fip.SetName(resourceName)
-	fip.SetFloatingIpAddress(address)
+	if targetAddress != "" {
+		fip.SetFloatingIpAddress(targetAddress)
+	}
 	fip.AddProject(project)
 	err = m.client.Create(fip)
 	if err != nil {
 		glog.Errorf("Create floating-ip %s: %v", resourceName, err)
 		return nil, err
 	}
-	return fip, nil
+	if targetAddress == "" {
+		fip, err = types.FloatingIpByUuid(m.client, fip.GetUuid())
+	}
+	return fip, err
 }
 
 func (m *NetworkManagerImpl) DeleteFloatingIp(network *types.VirtualNetwork, resourceName string) error {
