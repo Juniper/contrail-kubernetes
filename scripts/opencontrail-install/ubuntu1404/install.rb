@@ -43,9 +43,9 @@ def install_contrail_software_controller
 
     # In certain instances such as aws, extra storage disk is at a different
     # mount point
-    if File.directory? "/mnt/ephemeral/docker"
-        old_cassandra_dir = "\\/var\\/lib\\/cassandra\\/"
-        new_cassandra_dir = "/mnt/ephemeral/docker/contrail/cassandra/"
+    if @opt.cassandra_db_path != "/var/lib/cassandra"
+        old_cassandra_dir = "/var/lib/cassandra/".gsub(/\//, '\/')
+        new_cassandra_dir = "#{@opt.cassandra_db_path}/"
         sh("mkdir -p #{new_cassandra_dir}")
         sh("chown -R cassandra.cassandra #{new_cassandra_dir}")
         new_cassandra_dir.gsub!(/\//, '\/')
