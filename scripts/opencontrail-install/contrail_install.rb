@@ -303,6 +303,10 @@ def provision_contrail_controller
        %{#{@controller_ip} --api_server_port 8082 --router_asn 64512 } +
        %{--host_name #{@opt.controller_host} --host_ip #{@controller_ip} } +
        %{--oper add })
+
+    # Provision kube-api access to DNS via link-local service
+    sh(%{python provision_linklocal.py --api_server_ip #{@controller_ip} --api_server_port 8082 --linklocal_service_name kubernetes --linklocal_service_ip 10.254.0.1 --linklocal_service_port 8080 --ipfabric_service_ip #{@controller_ip} --ipfabric_service_port 8080 --oper add}, true)
+
 end
 
 def verify_compute
