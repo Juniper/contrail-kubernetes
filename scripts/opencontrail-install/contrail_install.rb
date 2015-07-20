@@ -245,6 +245,16 @@ EOF
     }
 end
 
+def provision_linklocal_service
+    # Get the service gateway IP
+
+    return if @opt.portal_net.split(/\//)[0] !~ /(\d+)\.(\d+)\.(\d+)\.(\d+)/
+    portal_gw = "#{$1}.#{$2}.#{$3}.#{($4.to_i) | 1}"
+
+    # Provision kube-api access to DNS via link-local service
+    sh(%{python provision_linklocal.py --api_server_ip #{@controller_ip} --api_server_port 8082 --linklocal_service_name kubernetes --linklocal_service_ip #{portal_gw} --linklocal_service_port 8080 --ipfabric_service_ip #{@controller_ip} --ipfabric_service_port 8080 --oper add}, true)
+end
+
 # Provision contrail-controller
 def provision_contrail_controller
     update_controller_etc_hosts
@@ -304,8 +314,7 @@ def provision_contrail_controller
        %{--host_name #{@opt.controller_host} --host_ip #{@controller_ip} } +
        %{--oper add })
 
-    # Provision kube-api access to DNS via link-local service
-    sh(%{python provision_linklocal.py --api_server_ip #{@controller_ip} --api_server_port 8082 --linklocal_service_name kubernetes --linklocal_service_ip 10.254.0.1 --linklocal_service_port 8080 --ipfabric_service_ip #{@controller_ip} --ipfabric_service_port 8080 --oper add}, true)
+    provision_linklocal_service
 
 end
 
