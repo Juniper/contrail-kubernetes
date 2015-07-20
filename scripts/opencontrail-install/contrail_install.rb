@@ -15,8 +15,6 @@ def parse_options
     @opt.setup_kubernetes = false
     @opt.controller_host = "localhost"
     @opt.kubernetes_master = "localhost"
-    @opt.kubernetes_domain = "kubernetes.io"
-    @opt.kubernetes_dns_ip = "10.1.4.53" # From public IP pool.
     @opt.controller_ip = ""
     @opt.private_net = "10.0.0.0/16"
     @opt.portal_net = "10.254.0.0/16"
@@ -80,14 +78,6 @@ def parse_options
         o.on("-m", "--kubernetes-master #{@opt.kubernetes_master}",
              "Name of the kubernetes master host") { |kubernetes_master|
             @opt.kubernetes_master = kubernetes_master
-        }
-        o.on("-m", "--kubernetes-domain #{@opt.kubernetes_domain}",
-             "Name of the kubernetes domain") { |kubernetes_domain|
-            @opt.kubernetes_domain = kubernetes_domain
-        }
-        o.on("-m", "--kubernetes-dns-ip #{@opt.kubernetes_dns_ip}",
-             "IP of the kubernetes dns server") { |kubernetes_dns_ip|
-            @opt.kubernetes_dns_ip = kubernetes_dns_ip
         }
         o.on("-n", "--kubernetes-branch #{@opt.kubernetes_branch}",
              "Name of the kubernetes branch") { |branch|
@@ -433,11 +423,11 @@ EOF
     }
 
     if @platform =~ /fedora/
-        sh(%{sed -i 's/DAEMON_ARGS=" /DAEMON_ARGS=" --network_plugin=#{plugin} --cluster_dns=#{@opt.kubernetes_dns_ip} --cluster_domain=#{@opt.kubernetes_domain} /' /etc/sysconfig/kubelet})
+        sh(%{sed -i 's/DAEMON_ARGS=" /DAEMON_ARGS=" --network_plugin=#{plugin} /' /etc/sysconfig/kubelet})
         sh("systemctl restart kubelet", true)
         sh("systemctl stop kube-proxy", true)
     else
-        sh(%{sed -i 's/DAEMON_ARGS /DAEMON_ARGS --network_plugin=#{plugin} --cluster_dns=#{@opt.kubernetes_dns_ip} --cluster_domain=#{@opt.kubernetes_domain} /' /etc/default/kubelet})
+        sh(%{sed -i 's/DAEMON_ARGS /DAEMON_ARGS --network_plugin=#{plugin} /' /etc/default/kubelet})
         sh("service kubelet restart", true)
 
         # Disable kube-proxy monitoring and stop the service.
