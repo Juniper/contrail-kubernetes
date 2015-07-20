@@ -242,7 +242,7 @@ def provision_linklocal_service
     portal_gw = "#{$1}.#{$2}.#{$3}.#{($4.to_i) | 1}"
 
     # Provision kube-api access to DNS via link-local service
-    sh(%{python provision_linklocal.py --api_server_ip #{@controller_ip} --api_server_port 8082 --linklocal_service_name kubernetes --linklocal_service_ip #{portal_gw} --linklocal_service_port 8080 --ipfabric_service_ip #{@controller_ip} --ipfabric_service_port 8080 --oper add}, true)
+    sh(%{python #{@utils}/provision_linklocal.py --api_server_ip #{@controller_ip} --api_server_port 8082 --linklocal_service_name kubernetes --linklocal_service_ip #{portal_gw} --linklocal_service_port 8080 --ipfabric_service_ip #{@controller_ip} --ipfabric_service_port 8080 --oper add}, true)
 end
 
 # Provision contrail-controller
