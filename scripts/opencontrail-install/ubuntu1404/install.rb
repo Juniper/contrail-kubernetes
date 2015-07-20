@@ -50,8 +50,9 @@ def install_contrail_software_controller
         sh("chown -R cassandra.cassandra #{new_cassandra_dir}")
         new_cassandra_dir.gsub!(/\//, '\/')
         sh(%{sed -i 's/#{old_cassandra_dir}/#{new_cassandra_dir}/' /etc/cassandra/cassandra.yaml})
-        sh("service cassandra restart")
     end
+    sh(%{sed -i 's/start_rpc: false/start_rpc: true/' /etc/cassandra/cassandra.yaml})
+    sh("service cassandra restart")
 
     sh("apt-get -y --allow-unauthenticated install contrail-analytics contrail-config contrail-control contrail-web-controller contrail-dns contrail-utils zookeeperd rabbitmq-server ifmap-server")
     sh("gdebi -n contrail-setup_*.deb")
