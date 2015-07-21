@@ -38,8 +38,23 @@ def install_contrail_software_controller
     sh("add-apt-repository -y ppa:opencontrail/ppa")
     sh("add-apt-repository -y ppa:anantha-l/opencontrail-#{@version}")
     sh("apt-get -y --allow-unauthenticated update")
-    sh("apt-get -y --allow-unauthenticated install contrail-analytics contrail-config contrail-control contrail-web-controller contrail-dns contrail-utils cassandra zookeeperd rabbitmq-server ifmap-server", true)
-    sh("apt-get -y --allow-unauthenticated install contrail-analytics contrail-config contrail-control contrail-web-controller contrail-dns contrail-utils cassandra zookeeperd rabbitmq-server ifmap-server")
+    sh("apt-get -y --allow-unauthenticated install openjdk-7-jre cassandra",
+       true)
+
+    # In certain instances such as aws, extra storage disk is at a different
+    # mount point
+    if @opt.cassandra_db_path != "/var/lib/cassandra"
+        old_cassandra_dir = "/var/lib/cassandra/".gsub(/\//, '\/')
+        new_cassandra_dir = "#{@opt.cassandra_db_path}/"
+        sh("mkdir -p #{new_cassandra_dir}")
+        sh("chown -R cassandra.cassandra #{new_cassandra_dir}")
+        new_cassandra_dir.gsub!(/\//, '\/')
+        sh(%{sed -i 's/#{old_cassandra_dir}/#{new_cassandra_dir}/' /etc/cassandra/cassandra.yaml})
+    end
+    sh(%{sed -i 's/start_rpc: false/start_rpc: true/' /etc/cassandra/cassandra.yaml})
+    sh("service cassandra restart")
+
+    sh("apt-get -y --allow-unauthenticated install contrail-analytics contrail-config contrail-control contrail-web-controller contrail-dns contrail-utils zookeeperd rabbitmq-server ifmap-server")
     sh("gdebi -n contrail-setup_*.deb")
 
     # Update time-zone

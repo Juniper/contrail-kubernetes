@@ -27,6 +27,7 @@ def parse_options
     @opt.provision_vgw = false
     @opt.wait_for_kube_api = false
     @opt.kubernetes_branch = "v0.20.1"
+    @opt.cassandra_db_path = "/var/lib/cassandra"
 
     if File.directory? "/vagrant" then
         @opt.intf = "eth1"
@@ -46,6 +47,10 @@ def parse_options
         }
         o.on("-d", "--password #{@opt.password}", "Guest user passwd") { |pass|
             @opt.password = pass
+        }
+        o.on("--cassandra-db-path #{@opt.cassandra_db_path}",
+             "Contrail cassandra db path") { |db_path|
+            @opt.cassandra_db_path = db_path
         }
         o.on("-f", "--[no-]fix-docker-fs-issue", "#{@opt.fix_docker_issue}",
              "Fix/work-around docker fs device mapper issue") { |f|
@@ -230,6 +235,16 @@ EOF
     }
 end
 
+def provision_linklocal_service
+    # Get the service gateway IP
+
+    return if @opt.portal_net.split(/\//)[0] !~ /(\d+)\.(\d+)\.(\d+)\.(\d+)/
+    portal_gw = "#{$1}.#{$2}.#{$3}.#{($4.to_i) | 1}"
+
+    # Provision kube-api access to DNS via link-local service
+    sh(%{python #{@utils}/provision_linklocal.py --api_server_ip #{@controller_ip} --api_server_port 8082 --linklocal_service_name kubernetes --linklocal_service_ip #{portal_gw} --linklocal_service_port 8080 --ipfabric_service_ip #{@controller_ip} --ipfabric_service_port 8080 --oper add}, true)
+end
+
 # Provision contrail-controller
 def provision_contrail_controller
     update_controller_etc_hosts
@@ -255,7 +270,6 @@ def provision_contrail_controller
 
     # Reduce analytics cassandra db ttl
     sh(%{/opt/contrail/bin/openstack-config --set /etc/contrail/contrail-collector.conf DEFAULT analytics_data_ttl 1})
-    sh(%{sed -i 's/# commitlog_total_space_in_mb:.*/commitlog_total_space_in_mb: 1024/' /etc/cassandra/cassandra.yaml})
 
     # Fix webui config
     if !File.file? "/usr/bin/node" then
@@ -289,6 +303,9 @@ def provision_contrail_controller
        %{#{@controller_ip} --api_server_port 8082 --router_asn 64512 } +
        %{--host_name #{@opt.controller_host} --host_ip #{@controller_ip} } +
        %{--oper add })
+
+    provision_linklocal_service
+
 end
 
 def verify_compute
@@ -431,10 +448,6 @@ def provision_contrail_controller_kubernetes
     # Start kube web server in background
     # http://localhost:8001/static/app/#/dashboard/
     sh("ln -sf /usr/local/bin/kubectl /usr/bin/kubectl", true)
-    if File.file? "/usr/local/bin/kubectl"
-        sh("nohup /usr/local/bin/kubectl proxy --www=#{ENV["HOME"]}/contrail/kubernetes/www 2>&1 > /var/log/kubectl-web-proxy.log", true, 1, 1, true)
-    end
-
     target = @platform =~ /fedora/ ? "/root" : "/home/#{@opt.user}"
 
     # Start kube-network-manager plugin daemon in background
