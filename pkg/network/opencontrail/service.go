@@ -33,6 +33,7 @@ type ServiceManager interface {
 	Disconnect(tenant, serviceName, netname string) error
 	LocateServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error)
 	LookupServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error)
+	IsEmpty(tenant, serviceName string) (bool, []string)
 }
 
 type ServiceManagerImpl struct {
@@ -171,6 +172,37 @@ func (m *ServiceManagerImpl) LocateServiceNetwork(tenant, serviceName string) (*
 func (m *ServiceManagerImpl) LookupServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error) {
 	networkName := fmt.Sprintf(ServiceNetworkFmt, serviceName)
 	return m.networkMgr.LookupNetwork(tenant, networkName)
+}
+
+func (m *ServiceManagerImpl) IsEmpty(tenant, serviceName string) (bool, []string) {
+	empty := []string{}
+	network, err := m.LookupServiceNetwork(tenant, serviceName)
+	if err != nil {
+		return true, empty
+	}
+	pool, err := m.networkMgr.LookupFloatingIpPool(network)
+	if err != nil {
+		return true, empty
+	}
+	refs, err := pool.GetFloatingIps()
+	if err != nil {
+		return true, empty
+	}
+	existMap := make(map[string]bool)
+	for _, ref := range refs {
+		name := ref.To[len(ref.To)-1]
+		if _, ok := existMap[name]; !ok {
+			existMap[name] = true
+		}
+	}
+	if len(existMap) == 0 {
+		return true, empty
+	}
+	existing := make([]string, 0, len(existMap))
+	for key, _ := range existMap {
+		existing = append(existing, key)
+	}
+	return false, existing
 }
 
 func (m *ServiceManagerImpl) locatePolicy(tenant, serviceName string) (*types.NetworkPolicy, error) {
