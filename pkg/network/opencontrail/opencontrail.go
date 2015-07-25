@@ -17,6 +17,8 @@ limitations under the License.
 package opencontrail
 
 import (
+	"time"
+
 	kubeclient "github.com/GoogleCloudPlatform/kubernetes/pkg/client"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/client/cache"
 
@@ -53,6 +55,7 @@ func NewController(kube *kubeclient.Client, args []string) *Controller {
 	controller.networkMgr = NewNetworkManager(client, config)
 	controller.serviceMgr = NewServiceManager(client, config, controller.networkMgr)
 	controller.namespaceMgr = NewNamespaceManager(client)
+	controller.consistencyPeriod = time.Duration(1) * time.Minute
 	return controller
 }
 
@@ -61,7 +64,7 @@ func (c *Controller) SetNamespaceStore(store cache.Store) {
 }
 
 func (c *Controller) SetPodStore(store cache.Store) {
-	//	c.PodStore = store
+	c.podStore = store
 }
 
 func (c *Controller) SetReplicationControllerStore(store cache.Store) {

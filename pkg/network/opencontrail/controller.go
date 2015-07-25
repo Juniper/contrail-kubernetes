@@ -49,7 +49,9 @@ type Controller struct {
 
 	eventChannel chan notification
 
+	podStore     cache.Store
 	serviceStore cache.Store
+
 	instanceMgr  *InstanceManager
 	networkMgr   NetworkManager
 	serviceMgr   ServiceManager
@@ -84,6 +86,7 @@ func (c *Controller) Run(shutdown chan struct{}) {
 
 	if c.consistencyPeriod != 0 {
 		timerChan = time.NewTicker(c.consistencyPeriod * time.Second).C
+		c.consistencyWorker = NewConsistencyChecker(c.client, c.podStore, c.serviceStore)
 	}
 
 	for {
