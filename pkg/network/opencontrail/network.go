@@ -29,6 +29,7 @@ import (
 
 type NetworkManager interface {
 	LocateFloatingIpPool(network *types.VirtualNetwork, subnet string) (*types.FloatingIpPool, error)
+	LookupFloatingIpPool(network *types.VirtualNetwork) (*types.FloatingIpPool, error)
 	DeleteFloatingIpPool(network *types.VirtualNetwork, cascade bool) error
 	LookupNetwork(projectName, networkName string) (*types.VirtualNetwork, error)
 	LocateNetwork(project, name, subnet string) (*types.VirtualNetwork, error)
@@ -87,6 +88,11 @@ func (m *NetworkManagerImpl) LocateFloatingIpPool(
 		return nil, err
 	}
 	return pool, nil
+}
+
+func (m *NetworkManagerImpl) LookupFloatingIpPool(network *types.VirtualNetwork) (*types.FloatingIpPool, error) {
+	pool, err := types.FloatingIpPoolByName(m.client, makePoolName(network))
+	return pool, err
 }
 
 func (m *NetworkManagerImpl) floatingIpPoolDeleteChildren(pool *types.FloatingIpPool) error {

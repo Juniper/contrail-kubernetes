@@ -19,6 +19,17 @@ func (m *NetworkManager) LocateFloatingIpPool(network *types.VirtualNetwork, sub
 
 	return r0, r1
 }
+func (m *NetworkManager) LookupFloatingIpPool(network *types.VirtualNetwork) (*types.FloatingIpPool, error) {
+	ret := m.Called(network)
+
+	var r0 *types.FloatingIpPool
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).(*types.FloatingIpPool)
+	}
+	r1 := ret.Error(1)
+
+	return r0, r1
+}
 func (m *NetworkManager) DeleteFloatingIpPool(network *types.VirtualNetwork, cascade bool) error {
 	ret := m.Called(network, cascade)
 

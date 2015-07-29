@@ -17,7 +17,10 @@ limitations under the License.
 package opencontrail
 
 import (
+	"encoding/json"
+	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/golang/glog"
 
@@ -46,12 +49,17 @@ type Controller struct {
 
 	eventChannel chan notification
 
+	podStore     cache.Store
 	serviceStore cache.Store
+
 	instanceMgr  *InstanceManager
 	networkMgr   NetworkManager
 	serviceMgr   ServiceManager
 	namespaceMgr *NamespaceManager
 	allocator    AddressAllocator
+
+	consistencyPeriod time.Duration
+	consistencyWorker ConsistencyChecker
 }
 
 type eventType string
@@ -74,6 +82,13 @@ type notification struct {
 }
 
 func (c *Controller) Run(shutdown chan struct{}) {
+	var timerChan <-chan time.Time
+
+	if c.consistencyPeriod != 0 {
+		timerChan = time.NewTicker(c.consistencyPeriod * time.Second).C
+		c.consistencyWorker = NewConsistencyChecker(c.client, c.podStore, c.serviceStore)
+	}
+
 	for {
 		select {
 		case event := <-c.eventChannel:
@@ -95,6 +110,8 @@ func (c *Controller) Run(shutdown chan struct{}) {
 			case evDeleteNamespace:
 				c.deleteNamespace(event.object.(*api.Namespace))
 			}
+		case <-timerChan:
+			c.consistencyWorker.Check()
 		case <-shutdown:
 			return
 		}
@@ -219,6 +236,15 @@ func (c *Controller) updatePodPublicIp(service *api.Service, pod *api.Pod) {
 	c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, publicIp)
 }
 
+func decodeAccessTag(tag string) []string {
+	var strList []string
+	err := json.Unmarshal([]byte(tag), &strList)
+	if err == nil {
+		return strList
+	}
+	return []string{tag}
+}
+
 func (c *Controller) updatePod(pod *api.Pod) {
 	glog.Infof("Pod %s", pod.Name)
 
@@ -245,7 +271,10 @@ func (c *Controller) updatePod(pod *api.Pod) {
 
 	policyTag, ok := pod.Labels[c.config.NetworkAccessTag]
 	if ok {
-		c.serviceMgr.Connect(pod.Namespace, policyTag, network)
+		serviceList := decodeAccessTag(policyTag)
+		for _, srv := range serviceList {
+			c.serviceMgr.Connect(pod.Namespace, srv, network)
+		}
 	}
 	// TODO(prm): Disconnect from any policy that the network is associated with other than the
 	// policies above.
@@ -288,7 +317,10 @@ func (c *Controller) deletePod(pod *api.Pod) {
 	if deleted {
 		policyTag, ok := pod.Labels[c.config.NetworkAccessTag]
 		if ok {
-			c.serviceMgr.Disconnect(pod.Namespace, policyTag, netname)
+			serviceList := decodeAccessTag(policyTag)
+			for _, srv := range serviceList {
+				c.serviceMgr.Disconnect(pod.Namespace, srv, netname)
+			}
 		}
 	}
 }
@@ -474,7 +506,18 @@ func (c *Controller) deleteService(service *api.Service) {
 		c.networkMgr.DeleteFloatingIp(c.networkMgr.GetPublicNetwork(), service.Name)
 	}
 
-	c.serviceMgr.Delete(service.Namespace, serviceName)
+	empty, remaining := c.serviceMgr.IsEmpty(service.Namespace, serviceName)
+	if empty {
+		c.serviceMgr.Delete(service.Namespace, serviceName)
+	} else {
+		for _, name := range remaining {
+			key := fmt.Sprintf("%s/%s", service.Namespace, name)
+			_, exists, _ := c.serviceStore.GetByKey(key)
+			if !exists {
+				glog.Warningf("Service network %s has floating-ip addresses for service %s (NOT in cache)", serviceName, name)
+			}
+		}
+	}
 }
 
 func (c *Controller) addNamespace(namespace *api.Namespace) {
