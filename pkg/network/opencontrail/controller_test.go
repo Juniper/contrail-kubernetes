@@ -17,6 +17,7 @@ limitations under the License.
 package opencontrail
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -1229,7 +1230,7 @@ func TestServiceWithLoadBalancer(t *testing.T) {
 
 	fqn := strings.Split(controller.config.PublicNetwork, ":")
 	fqn = append(fqn, fqn[len(fqn)-1])
-	fqn = append(fqn, service.Name)
+	fqn = append(fqn, fmt.Sprintf("%s_%s", service.Namespace, service.Name))
 	fip, err := types.FloatingIpByName(client, strings.Join(fqn, ":"))
 	assert.NoError(t, err)
 	if err == nil {
@@ -1374,7 +1375,7 @@ func TestServiceUpdateSelector(t *testing.T) {
 
 	fqn := strings.Split(controller.config.PublicNetwork, ":")
 	fqn = append(fqn, fqn[len(fqn)-1])
-	fqn = append(fqn, service.Name)
+	fqn = append(fqn, fmt.Sprintf("%s_%s", service.Namespace, service.Name))
 	publicIp, err := types.FloatingIpByName(client, strings.Join(fqn, ":"))
 	assert.NoError(t, err)
 	if err == nil {
@@ -1663,7 +1664,7 @@ func TestServiceUpdatePublicIp(t *testing.T) {
 
 	fqn := strings.Split(controller.config.PublicNetwork, ":")
 	fqn = append(fqn, fqn[len(fqn)-1])
-	fqn = append(fqn, service.Name)
+	fqn = append(fqn, fmt.Sprintf("%s_%s", service.Namespace, service.Name))
 	fip, err := types.FloatingIpByName(client, strings.Join(fqn, ":"))
 	assert.NoError(t, err)
 	if err == nil {

@@ -189,6 +189,11 @@ func (c *Controller) serviceName(labels map[string]string) string {
 	return name
 }
 
+// Include the namespace in the resource name so one can deploy the same service in different namespaces.
+func publicIpResourceName(service *api.Service) string {
+	return fmt.Sprintf("%s_%s", service.Namespace, service.Name)
+}
+
 func (c *Controller) ensureNamespace(namespaceName string) {
 	project := c.namespaceMgr.LookupNamespace(namespaceName)
 	if project != nil {
@@ -222,11 +227,12 @@ func (c *Controller) updatePodServiceIp(service *api.Service, pod *api.Pod) {
 func (c *Controller) updatePodPublicIp(service *api.Service, pod *api.Pod) {
 	var publicIp *types.FloatingIp
 	var err error
+	resourceName := publicIpResourceName(service)
 	if service.Spec.DeprecatedPublicIPs != nil {
-		publicIp, err = c.networkMgr.LocateFloatingIp(c.networkMgr.GetPublicNetwork(), service.Name,
+		publicIp, err = c.networkMgr.LocateFloatingIp(c.networkMgr.GetPublicNetwork(), resourceName,
 			service.Spec.DeprecatedPublicIPs[0])
 	} else if service.Spec.Type == api.ServiceTypeLoadBalancer {
-		publicIp, err = c.networkMgr.LocateFloatingIp(c.networkMgr.GetPublicNetwork(), service.Name, "")
+		publicIp, err = c.networkMgr.LocateFloatingIp(c.networkMgr.GetPublicNetwork(), resourceName, "")
 	} else {
 		return
 	}
@@ -329,12 +335,13 @@ func (c *Controller) updateServicePublicIP(service *api.Service) (*types.Floatin
 	var publicIp *types.FloatingIp = nil
 	var err error
 
+	resourceName := publicIpResourceName(service)
 	if service.Spec.DeprecatedPublicIPs != nil {
 		// Allocate a floating-ip from the public pool.
 		publicIp, err = c.networkMgr.LocateFloatingIp(
-			c.networkMgr.GetPublicNetwork(), service.Name, service.Spec.DeprecatedPublicIPs[0])
+			c.networkMgr.GetPublicNetwork(), resourceName, service.Spec.DeprecatedPublicIPs[0])
 	} else if service.Spec.Type == api.ServiceTypeLoadBalancer {
-		publicIp, err = c.networkMgr.LocateFloatingIp(c.networkMgr.GetPublicNetwork(), service.Name, "")
+		publicIp, err = c.networkMgr.LocateFloatingIp(c.networkMgr.GetPublicNetwork(), resourceName, "")
 		if err == nil {
 			status := api.LoadBalancerStatus{Ingress: []api.LoadBalancerIngress{
 				api.LoadBalancerIngress{IP: publicIp.GetFloatingIpAddress()},
@@ -464,7 +471,8 @@ func (c *Controller) updateService(service *api.Service) {
 
 	publicIp, err := c.updateServicePublicIP(service)
 	if err == nil && publicIp == nil {
-		c.networkMgr.DeleteFloatingIp(c.networkMgr.GetPublicNetwork(), service.Name)
+		resourceName := publicIpResourceName(service)
+		c.networkMgr.DeleteFloatingIp(c.networkMgr.GetPublicNetwork(), resourceName)
 	}
 
 	podIdMap := make(map[string]*api.Pod)
@@ -503,7 +511,8 @@ func (c *Controller) deleteService(service *api.Service) {
 		c.networkMgr.DeleteFloatingIp(serviceNetwork, service.Name)
 	}
 	if service.Spec.DeprecatedPublicIPs != nil || service.Spec.Type == api.ServiceTypeLoadBalancer {
-		c.networkMgr.DeleteFloatingIp(c.networkMgr.GetPublicNetwork(), service.Name)
+		resourceName := publicIpResourceName(service)
+		c.networkMgr.DeleteFloatingIp(c.networkMgr.GetPublicNetwork(), resourceName)
 	}
 
 	empty, remaining := c.serviceMgr.IsEmpty(service.Namespace, serviceName)
