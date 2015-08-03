@@ -38,8 +38,8 @@ def install_contrail_software_controller
     sh("add-apt-repository -y ppa:opencontrail/ppa")
     sh("add-apt-repository -y ppa:anantha-l/opencontrail-#{@version}")
     sh("apt-get -y --allow-unauthenticated update")
-    sh("apt-get -y --allow-unauthenticated install openjdk-7-jre cassandra",
-       true)
+    sh("apt-get -y --allow-unauthenticated openjdk-7-jre-headless=7u79-2.5.5-0ubuntu0.14.04.2M-BM-2", true) # openjdk-7-jre
+    sh("apt-get -y --allow-unauthenticated install cassandra", true)
 
     # In certain instances such as aws, extra storage disk is at a different
     # mount point
