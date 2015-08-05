@@ -11,6 +11,7 @@ install:
   - mkdir -p ${GOPATH}/src/github.com/GoogleCloudPlatform
   - (cd ${GOPATH}/src/github.com/GoogleCloudPlatform && git clone https://github.com/GoogleCloudPlatform/kubernetes.git -b v1.0.2)
   - go get golang.org/x/tools/cmd/cover
+  - go get github.com/axw/gocov/gocov
   - go get github.com/mattn/goveralls
 
 script:
