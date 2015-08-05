@@ -1,6 +1,7 @@
 language: go
 
-secure: "ACCvHWBVKddlUM5+fpTPsIM14At90jTXkUdhqDWJ8HKQvdQA33nBz1s6fq684S+/d1o1pPyhOTyqC3JVmMeOI8Dd07i+5ujAd/e5P7Zd3Bw1N/ZMO+rJylx73t+aYPJRog7sz4BAUPJS2Kn1/VZY4q6iS4Vx90kmgLNeTgkwwHo="
+env:
+  - secure: "ACCvHWBVKddlUM5+fpTPsIM14At90jTXkUdhqDWJ8HKQvdQA33nBz1s6fq684S+/d1o1pPyhOTyqC3JVmMeOI8Dd07i+5ujAd/e5P7Zd3Bw1N/ZMO+rJylx73t+aYPJRog7sz4BAUPJS2Kn1/VZY4q6iS4Vx90kmgLNeTgkwwHo="
 
 install:
   - mkdir -p ${GOPATH}/src/github.com/Juniper
@@ -13,5 +14,5 @@ install:
   - go get github.com/mattn/goveralls
 
 script:
-  - GOPATH=${GOPATH}:${GOPATH}/src/github.com/GoogleCloudPlatform/kubernetes/Godeps/_workspace go test -v -covermode=count -coverprofile=coverage.out ./...
+  - GOPATH=${GOPATH}:${GOPATH}/src/github.com/GoogleCloudPlatform/kubernetes/Godeps/_workspace go test -v -covermode=count -coverprofile=coverage.out github.com/Juniper/contrail-kubernetes/pkg/network/opencontrail
   - ${GOPATH}/bin/goveralls -service=travis-ci -repotoken ${COVERALLS_TOKEN}
