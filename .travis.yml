@@ -9,7 +9,7 @@ install:
   - tar -zxvf contrail-go-api-generated-types-r2.20.tar.gz -C ${GOPATH}/src
   - mkdir -p ${GOPATH}/src/github.com/GoogleCloudPlatform
   - (cd ${GOPATH}/src/github.com/GoogleCloudPlatform && git clone https://github.com/GoogleCloudPlatform/kubernetes.git -b v1.0.2)
-  - go get code.google.com/p/go.tools/cmd/cover
+  - go get golang.org/x/tools/cmd/cover
   - go get github.com/mattn/goveralls
 
 script:
