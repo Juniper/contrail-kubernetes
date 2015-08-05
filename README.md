@@ -1,14 +1,13 @@
 # contrail-kubernetes
+![Build Status](https://travis-ci.org/Juniper/contrail-kubernetes.svg)
+
 OpenContrail Kubernetes integration
 
-Proof of concept.
-
-The command kube-network-manager uses the user labels{'name', 'uses'} in order to create a network per pod/RC/service and create connectivity between networks.
+The daemon kube-network-manager uses the kubernetes controller framework to watch k8s api objects. It isolates pods in virtual-networks (according to the label['name']) and connects pods with services (according to the label['uses']).
 
 Build:
 ```
 GOPATH=$GOPATH:${GOROOT}/src/github.com/GoogleCloudPlatform/kubernetes/Godeps/_workspace
 
-go build github.com/Juniper/contrail-kubernetes/pkg/network
 go build github.com/Juniper/contrail-kubernetes/cmd/kube-network-manager
 ```
