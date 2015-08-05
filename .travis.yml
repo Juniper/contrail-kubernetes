@@ -1,5 +1,7 @@
 language: go
 
+secure: "ACCvHWBVKddlUM5+fpTPsIM14At90jTXkUdhqDWJ8HKQvdQA33nBz1s6fq684S+/d1o1pPyhOTyqC3JVmMeOI8Dd07i+5ujAd/e5P7Zd3Bw1N/ZMO+rJylx73t+aYPJRog7sz4BAUPJS2Kn1/VZY4q6iS4Vx90kmgLNeTgkwwHo="
+
 install:
   - mkdir -p ${GOPATH}/src/github.com/Juniper
   - (cd ${GOPATH}/src/github.com/Juniper && git clone https://github.com/Juniper/contrail-go-api -b 1.0.0)
@@ -7,5 +9,9 @@ install:
   - tar -zxvf contrail-go-api-generated-types-r2.20.tar.gz -C ${GOPATH}/src
   - mkdir -p ${GOPATH}/src/github.com/GoogleCloudPlatform
   - (cd ${GOPATH}/src/github.com/GoogleCloudPlatform && git clone https://github.com/GoogleCloudPlatform/kubernetes.git -b v1.0.2)
+  - go get code.google.com/p/go.tools/cmd/cover
+  - go get github.com/mattn/goveralls
 
-script: GOPATH=${GOPATH}:${GOPATH}/src/github.com/GoogleCloudPlatform/kubernetes/Godeps/_workspace go test ./...
+script:
+  - GOPATH=${GOPATH}:${GOPATH}/src/github.com/GoogleCloudPlatform/kubernetes/Godeps/_workspace go test -v -covermode=count -coverprofile=coverage.out ./...
+  - ${GOPATH}/bin/goveralls -service=travis-ci -repotoken ${COVERALLS_TOKEN}
