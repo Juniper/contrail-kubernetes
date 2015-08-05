@@ -1,5 +1,6 @@
 # contrail-kubernetes
 ![Build Status](https://travis-ci.org/Juniper/contrail-kubernetes.svg)
+[![Coverage Status](https://coveralls.io/repos/Juniper/contrail-kubernetes/badge.svg?branch=master&service=github)](https://coveralls.io/github/Juniper/contrail-kubernetes?branch=master)
 
 OpenContrail Kubernetes integration
 
