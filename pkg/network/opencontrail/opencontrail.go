@@ -19,26 +19,30 @@ package opencontrail
 import (
 	"time"
 
-	kubeclient "github.com/GoogleCloudPlatform/kubernetes/pkg/client"
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/client/cache"
+	kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
+	"k8s.io/kubernetes/pkg/client/unversioned/cache"
 
 	"github.com/Juniper/contrail-go-api"
+)
+
+const (
+	MetadataAnnotationTag = "opencontrail.org/pod-state"
 )
 
 // InstanceMetadata contains the information required in the kubernetes minion to
 // connect the Pod interface to the network.
 type InstanceMetadata struct {
 	// Interface uuid
-	Uuid string
+	Uuid string `json:"uuid"`
 
 	// The OpenContrail vrouter verifies the source-mac of the virtual interface.
-	MacAddress string
+	MacAddress string `json:"macAddress"`
 
 	// Private IP address
-	IpAddress string
+	IpAddress string `json:"ipAddress"`
 
 	// Default gateway (VRouter address)
-	Gateway string
+	Gateway string `json:"gateway"`
 }
 
 func NewController(kube *kubeclient.Client, args []string) *Controller {

@@ -1,11 +1,14 @@
 package mocks
 
-import "github.com/stretchr/testify/mock"
+import (
+	"github.com/stretchr/testify/mock"
 
-import "github.com/GoogleCloudPlatform/kubernetes/pkg/api"
-import "github.com/GoogleCloudPlatform/kubernetes/pkg/fields"
-import "github.com/GoogleCloudPlatform/kubernetes/pkg/labels"
-import "github.com/GoogleCloudPlatform/kubernetes/pkg/watch"
+	"k8s.io/kubernetes/pkg/api"
+	kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
+	"k8s.io/kubernetes/pkg/fields"
+	"k8s.io/kubernetes/pkg/labels"
+	"k8s.io/kubernetes/pkg/watch"
+)
 
 type KubeServiceInterface struct {
 	mock.Mock
@@ -69,4 +72,11 @@ func (m *KubeServiceInterface) Watch(label labels.Selector, field fields.Selecto
 	r1 := ret.Error(1)
 
 	return r0, r1
+}
+
+func (m *KubeServiceInterface) ProxyGet(name, path string, params map[string]string) kubeclient.ResponseWrapper {
+	ret := m.Called(name, path, params)
+
+	r0 := ret.Get(0).(kubeclient.ResponseWrapper)
+	return r0
 }
