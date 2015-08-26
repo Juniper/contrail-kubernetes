@@ -18,7 +18,7 @@ package network
 
 import (
 	"github.com/Juniper/contrail-kubernetes/pkg/network/opencontrail"
-	"k8s.io/kubernetes/pkg/client"
+	client "k8s.io/kubernetes/pkg/client/unversioned"
 )
 
 // Placeholder class that constructs a NetworkController
