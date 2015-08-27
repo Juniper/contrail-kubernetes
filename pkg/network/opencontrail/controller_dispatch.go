@@ -21,7 +21,7 @@ import (
 
 	"github.com/golang/glog"
 
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
+	"k8s.io/kubernetes/pkg/api"
 )
 
 func EqualTags(m1, m2 map[string]string, tags []string) bool {
@@ -44,7 +44,7 @@ func (c *Controller) podAnnotationsCheck(pod *api.Pod) bool {
 	if pod.Annotations == nil {
 		return false
 	}
-	id, ok := pod.Annotations["nic_uuid"]
+	id, ok := pod.Annotations[MetadataAnnotationTag]
 	if !ok {
 		return false
 	}
@@ -103,7 +103,7 @@ func (c *Controller) UpdateService(oldObj, newObj *api.Service) {
 	if newObj.Spec.ClusterIP != oldObj.Spec.ClusterIP {
 		update = true
 	}
-	if !reflect.DeepEqual(newObj.Spec.DeprecatedPublicIPs, oldObj.Spec.DeprecatedPublicIPs) {
+	if !reflect.DeepEqual(newObj.Spec.ExternalIPs, oldObj.Spec.ExternalIPs) {
 		update = true
 	}
 	if newObj.Spec.Type != oldObj.Spec.Type {

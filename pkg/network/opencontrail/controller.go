@@ -24,12 +24,12 @@ import (
 
 	"github.com/golang/glog"
 
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
-	kubeclient "github.com/GoogleCloudPlatform/kubernetes/pkg/client"
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/client/cache"
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/fields"
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/labels"
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/runtime"
+	"k8s.io/kubernetes/pkg/api"
+	kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
+	"k8s.io/kubernetes/pkg/client/unversioned/cache"
+	"k8s.io/kubernetes/pkg/fields"
+	"k8s.io/kubernetes/pkg/labels"
+	"k8s.io/kubernetes/pkg/runtime"
 
 	"github.com/Juniper/contrail-go-api"
 	"github.com/Juniper/contrail-go-api/types"
@@ -118,15 +118,6 @@ func (c *Controller) Run(shutdown chan struct{}) {
 	}
 }
 
-func updateElement(m map[string]string, tag, value string) bool {
-	current, ok := m[tag]
-	if ok && current == value {
-		return false
-	}
-	m[tag] = value
-	return true
-}
-
 func (c *Controller) updateInstanceMetadata(
 	pod *api.Pod, nic *types.VirtualMachineInterface, address, gateway string) {
 	doUpdate := false
@@ -136,9 +127,12 @@ func (c *Controller) updateInstanceMetadata(
 		doUpdate = true
 	}
 
-	if updateElement(pod.Annotations, "nic_uuid", nic.GetUuid()) {
-		doUpdate = true
+	var newValue, oldValue InstanceMetadata
+	if data, ok := pod.Annotations[MetadataAnnotationTag]; ok {
+		json.Unmarshal([]byte(data), &oldValue)
 	}
+
+	newValue.Uuid = nic.GetUuid()
 	var mac_address string
 	addressArr := nic.GetVirtualMachineInterfaceMacAddresses()
 	if len(addressArr.MacAddress) > 0 {
@@ -146,20 +140,21 @@ func (c *Controller) updateInstanceMetadata(
 	} else {
 		glog.Errorf("interface %s: no mac-addresses", nic.GetName())
 	}
-	if updateElement(pod.Annotations, "mac_address", mac_address) {
-		doUpdate = true
-	}
-	if updateElement(pod.Annotations, "ip_address", address) {
-		doUpdate = true
-	}
-	if updateElement(pod.Annotations, "gateway", gateway) {
-		doUpdate = true
-	}
-	if !doUpdate {
+	newValue.MacAddress = mac_address
+	newValue.IpAddress = address
+	newValue.Gateway = gateway
+
+	if !doUpdate && reflect.DeepEqual(newValue, oldValue) {
 		return
 	}
 
-	_, err := c.kube.Pods(pod.Namespace).Update(pod)
+	encoded, err := json.Marshal(&newValue)
+	if err != nil {
+		glog.Errorf("JSON encode: %v", err)
+		return
+	}
+	pod.Annotations[MetadataAnnotationTag] = string(encoded)
+	_, err = c.kube.Pods(pod.Namespace).Update(pod)
 	if err != nil {
 		// Update will return an error if the pod object that we are
 		// working with is stale.
@@ -228,9 +223,9 @@ func (c *Controller) updatePodPublicIp(service *api.Service, pod *api.Pod) {
 	var publicIp *types.FloatingIp
 	var err error
 	resourceName := publicIpResourceName(service)
-	if service.Spec.DeprecatedPublicIPs != nil {
+	if service.Spec.ExternalIPs != nil {
 		publicIp, err = c.networkMgr.LocateFloatingIp(c.networkMgr.GetPublicNetwork(), resourceName,
-			service.Spec.DeprecatedPublicIPs[0])
+			service.Spec.ExternalIPs[0])
 	} else if service.Spec.Type == api.ServiceTypeLoadBalancer {
 		publicIp, err = c.networkMgr.LocateFloatingIp(c.networkMgr.GetPublicNetwork(), resourceName, "")
 	} else {
@@ -336,10 +331,10 @@ func (c *Controller) updateServicePublicIP(service *api.Service) (*types.Floatin
 	var err error
 
 	resourceName := publicIpResourceName(service)
-	if service.Spec.DeprecatedPublicIPs != nil {
+	if service.Spec.ExternalIPs != nil {
 		// Allocate a floating-ip from the public pool.
 		publicIp, err = c.networkMgr.LocateFloatingIp(
-			c.networkMgr.GetPublicNetwork(), resourceName, service.Spec.DeprecatedPublicIPs[0])
+			c.networkMgr.GetPublicNetwork(), resourceName, service.Spec.ExternalIPs[0])
 	} else if service.Spec.Type == api.ServiceTypeLoadBalancer {
 		publicIp, err = c.networkMgr.LocateFloatingIp(c.networkMgr.GetPublicNetwork(), resourceName, "")
 		if err == nil {
@@ -510,7 +505,7 @@ func (c *Controller) deleteService(service *api.Service) {
 	if err == nil {
 		c.networkMgr.DeleteFloatingIp(serviceNetwork, service.Name)
 	}
-	if service.Spec.DeprecatedPublicIPs != nil || service.Spec.Type == api.ServiceTypeLoadBalancer {
+	if service.Spec.ExternalIPs != nil || service.Spec.Type == api.ServiceTypeLoadBalancer {
 		resourceName := publicIpResourceName(service)
 		c.networkMgr.DeleteFloatingIp(c.networkMgr.GetPublicNetwork(), resourceName)
 	}

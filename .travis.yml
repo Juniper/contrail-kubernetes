@@ -8,12 +8,12 @@ install:
   - (cd ${GOPATH}/src/github.com/Juniper && git clone https://github.com/Juniper/contrail-go-api -b 1.0.0)
   - wget https://github.com/Juniper/contrail-go-api/releases/download/1.0.0/contrail-go-api-generated-types-r2.20.tar.gz
   - tar -zxvf contrail-go-api-generated-types-r2.20.tar.gz -C ${GOPATH}/src
-  - mkdir -p ${GOPATH}/src/github.com/GoogleCloudPlatform
-  - (cd ${GOPATH}/src/github.com/GoogleCloudPlatform && git clone https://github.com/GoogleCloudPlatform/kubernetes.git -b v1.0.2)
+  - mkdir -p ${GOPATH}/src/k8s.io
+  - (cd ${GOPATH}/src/k8s.io && git clone https://k8s.io/kubernetes.git -b v1.0.2)
   - go get golang.org/x/tools/cmd/cover
   - go get github.com/axw/gocov/gocov
   - go get github.com/mattn/goveralls
-  - GOPATH=${GOPATH}:${GOPATH}/src/github.com/GoogleCloudPlatform/kubernetes/Godeps/_workspace
+  - GOPATH=${GOPATH}:${GOPATH}/src/k8s.io/kubernetes/Godeps/_workspace
 
 script:
   - go test -v -covermode=count -coverprofile=coverage.out github.com/Juniper/contrail-kubernetes/pkg/network/opencontrail

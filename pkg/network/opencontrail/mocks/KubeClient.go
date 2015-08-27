@@ -17,9 +17,9 @@ limitations under the License.
 package mocks
 
 import (
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/client"
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/version"
+	"k8s.io/kubernetes/pkg/api"
+	kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
+	"k8s.io/kubernetes/pkg/version"
 )
 
 type KubeClient struct {
@@ -34,47 +34,51 @@ func NewKubeClient() *KubeClient {
 	return client
 }
 
-func (m *KubeClient) Pods(namespace string) client.PodInterface {
+func (m *KubeClient) Pods(namespace string) kubeclient.PodInterface {
 	return m.PodInterface
 }
-func (m *KubeClient) ReplicationControllers(namespace string) client.ReplicationControllerInterface {
+func (m *KubeClient) ReplicationControllers(namespace string) kubeclient.ReplicationControllerInterface {
 	return nil
 }
-func (m *KubeClient) Services(namespace string) client.ServiceInterface {
+func (m *KubeClient) Services(namespace string) kubeclient.ServiceInterface {
 	return m.ServiceInterface
 }
 
-func (m *KubeClient) Endpoints(namespace string) client.EndpointsInterface {
+func (m *KubeClient) Endpoints(namespace string) kubeclient.EndpointsInterface {
 	return nil
 }
 
-func (m *KubeClient) Events(namespace string) client.EventInterface {
-	return nil
-}
-func (c *KubeClient) Nodes() client.NodeInterface {
-	return nil
-}
-func (c *KubeClient) LimitRanges(namespace string) client.LimitRangeInterface {
+func (m *KubeClient) Daemons(namespace string) kubeclient.DaemonInterface {
 	return nil
 }
 
-func (c *KubeClient) ResourceQuotas(namespace string) client.ResourceQuotaInterface {
+func (m *KubeClient) Events(namespace string) kubeclient.EventInterface {
+	return nil
+}
+func (c *KubeClient) Nodes() kubeclient.NodeInterface {
+	return nil
+}
+func (c *KubeClient) LimitRanges(namespace string) kubeclient.LimitRangeInterface {
 	return nil
 }
 
-func (c *KubeClient) Secrets(namespace string) client.SecretsInterface {
+func (c *KubeClient) ResourceQuotas(namespace string) kubeclient.ResourceQuotaInterface {
 	return nil
 }
 
-func (c *KubeClient) Namespaces() client.NamespaceInterface {
+func (c *KubeClient) Secrets(namespace string) kubeclient.SecretsInterface {
 	return nil
 }
 
-func (c *KubeClient) PersistentVolumes() client.PersistentVolumeInterface {
+func (c *KubeClient) Namespaces() kubeclient.NamespaceInterface {
 	return nil
 }
 
-func (c *KubeClient) PersistentVolumeClaims(namespace string) client.PersistentVolumeClaimInterface {
+func (c *KubeClient) PersistentVolumes() kubeclient.PersistentVolumeInterface {
+	return nil
+}
+
+func (c *KubeClient) PersistentVolumeClaims(namespace string) kubeclient.PersistentVolumeClaimInterface {
 	return nil
 }
 func (c *KubeClient) ServerVersion() (*version.Info, error) {
@@ -83,12 +87,12 @@ func (c *KubeClient) ServerVersion() (*version.Info, error) {
 func (c *KubeClient) ServerAPIVersions() (*api.APIVersions, error) {
 	return nil, nil
 }
-func (c *KubeClient) ComponentStatuses() client.ComponentStatusInterface {
+func (c *KubeClient) ComponentStatuses() kubeclient.ComponentStatusInterface {
 	return nil
 }
-func (c *KubeClient) PodTemplates(namespace string) client.PodTemplateInterface {
+func (c *KubeClient) PodTemplates(namespace string) kubeclient.PodTemplateInterface {
 	return nil
 }
-func (c *KubeClient) ServiceAccounts(namespace string) client.ServiceAccountsInterface {
+func (c *KubeClient) ServiceAccounts(namespace string) kubeclient.ServiceAccountsInterface {
 	return nil
 }

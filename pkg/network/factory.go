@@ -17,8 +17,8 @@ limitations under the License.
 package network
 
 import (
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/client"
 	"github.com/Juniper/contrail-kubernetes/pkg/network/opencontrail"
+	client "k8s.io/kubernetes/pkg/client/unversioned"
 )
 
 // Placeholder class that constructs a NetworkController

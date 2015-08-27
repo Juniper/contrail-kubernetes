@@ -25,13 +25,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/labels"
+	"k8s.io/kubernetes/pkg/api"
+	"k8s.io/kubernetes/pkg/labels"
 
-	kubetypes "github.com/GoogleCloudPlatform/kubernetes/pkg/types"
 	"github.com/Juniper/contrail-go-api"
 	contrail_mocks "github.com/Juniper/contrail-go-api/mocks"
 	"github.com/Juniper/contrail-go-api/types"
+	kubetypes "k8s.io/kubernetes/pkg/types"
 
 	"github.com/Juniper/contrail-kubernetes/pkg/network/opencontrail/mocks"
 )

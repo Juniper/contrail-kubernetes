@@ -10,7 +10,7 @@ The daemon kube-network-manager uses the kubernetes controller framework to watc
 
 Build:
 ```
-GOPATH=$GOPATH:${GOROOT}/src/github.com/GoogleCloudPlatform/kubernetes/Godeps/_workspace
+GOPATH=$GOPATH:${GOROOT}/src/k8s.io/kubernetes/Godeps/_workspace
 
 go build github.com/Juniper/contrail-kubernetes/cmd/kube-network-manager
 ```

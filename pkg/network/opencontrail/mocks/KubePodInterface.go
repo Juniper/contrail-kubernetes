@@ -2,10 +2,10 @@ package mocks
 
 import "github.com/stretchr/testify/mock"
 
-import "github.com/GoogleCloudPlatform/kubernetes/pkg/api"
-import "github.com/GoogleCloudPlatform/kubernetes/pkg/fields"
-import "github.com/GoogleCloudPlatform/kubernetes/pkg/labels"
-import "github.com/GoogleCloudPlatform/kubernetes/pkg/watch"
+import "k8s.io/kubernetes/pkg/api"
+import "k8s.io/kubernetes/pkg/fields"
+import "k8s.io/kubernetes/pkg/labels"
+import "k8s.io/kubernetes/pkg/watch"
 
 type KubePodInterface struct {
 	mock.Mock
