@@ -7,14 +7,11 @@ import iniparse
 import json
 import logging
 import os
-import platform
 import re
 import requests
 import socket
-import subprocess
 import sys
 import time
-import uuid
 import xml.etree.ElementTree as ElementTree
 
 import vnc_api.vnc_api as opencontrail
@@ -22,6 +19,7 @@ import vnc_api.vnc_api as opencontrail
 from contrail_vrouter_api.vrouter_api import ContrailVRouterApi
 from lxc_manager import LxcManager
 from shell import Shell
+
 
 class ContrailClient(object):
     def __init__(self):
@@ -76,6 +74,7 @@ def docker_get_pid(docker_id):
     pid_str = Shell.run('docker inspect -f \'{{.State.Pid}}\' %s' % docker_id)
     return int(pid_str)
 
+
 # kubelet config is at different places in different envs, unfortunately
 def kubelet_get_api():
     fp = None
@@ -88,14 +87,15 @@ def kubelet_get_api():
             fp = open('/etc/kubernetes/kubelet', 'r')
 
     for line in fp.readlines():
-        m = re.search(r'--api_servers=http[s]?://(\d+\.\d+\.\d+\.\d+)', line)
+        m = re.search(r'--api-servers=http[s]?://(\d+\.\d+\.\d+\.\d+)', line)
         if m:
             return m.group(1)
     return None
 
+
 def getDockerPod(docker_id):
     name = Shell.run('docker inspect -f \'{{.Name}}\' %s' % docker_id)
-    
+
     # Name
     # See: pkg/kubelet/dockertools/docker.go:ParseDockerName
     # name_namespace_uid
@@ -105,6 +105,7 @@ def getDockerPod(docker_id):
     uid = fields[4]
     return uid, podName
 
+
 def getPodInfo(namespace, podName):
     kubeapi = kubelet_get_api()
 
@@ -112,7 +113,8 @@ def getPodInfo(namespace, podName):
         'kubectl --server=%s:8080 get --namespace=%s -o json pod %s' % (
             kubeapi, namespace, podName), True)
     return json.loads(data)
-    
+
+
 def setup(pod_namespace, pod_name, docker_id):
     """
     project: pod_namespace
@@ -142,23 +144,25 @@ def setup(pod_namespace, pod_name, docker_id):
 
     uid, podName = getDockerPod(docker_id)
     podInfo = None
+    podState = None
     for i in range(0, 120):
         podInfo = getPodInfo(pod_namespace, podName)
         if 'annotations' in podInfo["metadata"] and \
-           'nic_uuid' in podInfo["metadata"]["annotations"]:
+           'opencontrail.org/pod-state' in podInfo["metadata"]["annotations"]:
+            podState = json.loads(
+                podInfo["metadata"]["annotations"]
+                ["opencontrail.org/pod-state"])
             break
         time.sleep(1)
-    
+
     # The lxc_manager uses the mac_address to setup the container interface.
     # Additionally the ip-address, prefixlen and gateway are also used.
-    if not 'annotations' in podInfo["metadata"] or not 'nic_uuid' in podInfo["metadata"]["annotations"]:
+    if podState is None:
         logging.error('No annotations in pod %s', podInfo["metadata"]["name"])
         sys.exit(1)
 
-
-    podAnnotations = podInfo["metadata"]["annotations"]
-    nic_uuid = podAnnotations["nic_uuid"]
-    mac_address = podAnnotations["mac_address"]
+    nic_uuid = podState["uuid"]
+    mac_address = podState["macAddress"]
     if client._net_mode == 'none':
         ifname = manager.create_interface(short_id, instance_ifname,
                                           mac_address)
@@ -172,18 +176,15 @@ def setup(pod_namespace, pod_name, docker_id):
                  display_name=podName,
                  hostname=podName+'.'+pod_namespace)
 
-    ip_address = podAnnotations["ip_address"]
-    gateway = podAnnotations["gateway"]
-    Shell.run('ip netns exec %s ip addr add %s/32 peer %s dev %s' % \
+    ip_address = podState["ipAddress"]
+    gateway = podState["gateway"]
+    Shell.run('ip netns exec %s ip addr add %s/32 peer %s dev %s' %
               (short_id, ip_address, gateway, instance_ifname))
-    Shell.run('ip netns exec %s ip route add default via %s' % \
+    Shell.run('ip netns exec %s ip route add default via %s' %
               (short_id, gateway))
     Shell.run('ip netns exec %s ip link set %s up' %
               (short_id, instance_ifname))
-    # TX checksum is broken on Fedora 21 testbed.
-    # This may be an issue with kernel 3.17 or veth-pair code.
-    if platform.linux_distribution()[0:2] == ('Fedora', '21'):
-        Shell.run('nsenter -n -t %d ethtool -K %s tx off' % (pid, instance_ifname))
+
 
 def vrouter_interface_by_name(vmName):
     r = requests.get('http://localhost:8085/Snh_ItfReq')
@@ -192,23 +193,45 @@ def vrouter_interface_by_name(vmName):
         vm = interface.find('vm_name')
         if vm is not None and vm.text == vmName:
             vmi = interface.find('uuid')
-            return vmi.text
-    return None
+            return vmi.text, interface
+    return None, None
+
 
 def teardown(pod_namespace, pod_name, docker_id):
-    client = ContrailClient()
     manager = LxcManager()
     short_id = docker_id[0:11]
 
     api = ContrailVRouterApi()
 
-    _, podName = getDockerPod(docker_id)
-    vmi = vrouter_interface_by_name(podName)
+    uid, podName = getDockerPod(docker_id)
+    vmi, _ = vrouter_interface_by_name(podName)
     if vmi is not None:
         api.delete_port(vmi)
 
     manager.clear_interfaces(short_id)
     Shell.run('ip netns delete %s' % short_id)
+
+
+class PodNetworkStatus(object):
+    def __init__(self):
+        self.kind = 'PodNetworkStatus'
+        self.apiVersion = 'v1beta1'
+        self.ip = None
+
+
+def status(pod_namespace, pod_name, docker_id):
+    status = PodNetworkStatus()
+    uid, podName = getDockerPod(docker_id)
+    vmi, data = vrouter_interface_by_name(podName)
+    if vmi is None:
+        setup(pod_namespace, pod_name, docker_id)
+        return
+
+    localaddr = data.find('mdata_ip_addr')
+    if localaddr is not None:
+        status.ip = localaddr.text
+    print json.dumps(status.__dict__)
+
 
 def main():
     logging.basicConfig(filename='/var/log/contrail/kubelet-driver.log',
@@ -217,15 +240,16 @@ def main():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(title="action", dest='action')
 
-    init_parser = subparsers.add_parser('init')
+    subparsers.add_parser('init')
 
     cmd_parser = argparse.ArgumentParser(add_help=False)
     cmd_parser.add_argument('pod_namespace')
     cmd_parser.add_argument('pod_name')
     cmd_parser.add_argument('docker_id')
 
-    setup_parser = subparsers.add_parser('setup', parents=[cmd_parser])
-    teardown_parser = subparsers.add_parser('teardown', parents=[cmd_parser])
+    subparsers.add_parser('setup', parents=[cmd_parser])
+    subparsers.add_parser('teardown', parents=[cmd_parser])
+    subparsers.add_parser('status', parents=[cmd_parser])
 
     args = parser.parse_args()
 
@@ -236,6 +260,8 @@ def main():
             setup(args.pod_namespace, args.pod_name, args.docker_id)
         elif args.action == 'teardown':
             teardown(args.pod_namespace, args.pod_name, args.docker_id)
+        elif args.action == 'status':
+            status(args.pod_namespace, args.pod_name, args.docker_id)
     except Exception as ex:
         logging.error(ex)
         sys.exit(1)
