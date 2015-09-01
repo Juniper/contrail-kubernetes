@@ -1,0 +1,85 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {"name":"contrail-control"},
+    "spec":{
+	"hostNetwork": true,
+	"containers":[{
+	    "name": "contrail-vrouter-agent",
+	    "image": "opencontrail/vrouter-agent:2.20",
+            "privileged": "true"
+	    "command": ["/bin/bash", "-c", "source /etc/contrail/opencontrail-rc && /usr/bin/contrail-vrouter-agent --DEFAULT.log_file=/var/log/contrail/contrail-vrouter-agent.log --HYPERVISOR.type=docker --DEFAULT.tunnel_type=MPLSoUDP --DISCOVERY.server=$OPENCONTRAIL_CONTROLLER_IP --DISCOVERY.port=5998 >>/var/log/contrail/contrail-vrouter-agent-stdout.log 2>/var/log/contrail/contrail-vrouter-agent.err"],
+	    "securityContext": {
+	    	"capabilities": {
+		    "add": ["NET_BIND_SERVICE"]
+		}
+	    },
+	    "ports": [{
+		"name": "vrouter-api",
+		"containerPort": 9090,
+		"hostPort": 9090
+	    }, {
+		"name": "ipc",
+		"containerPort": 9091,
+		"hostPort":9091 
+	    }, {
+		"name": "control-ui",
+		"containerPort": 8085,
+		"hostPort": 8085
+	    }],
+	    "volumeMounts": [
+		{
+		    "name": "config",
+		    "mountPath": "/etc"
+		},
+		{
+		    "name": "logs",
+		    "mountPath": "/var",
+		    "readOnly": false
+		},
+                {
+                    "name": "bin",
+                    "mountPath": "/opt",
+                    "readOnly": false
+                },
+                {
+                    "name": "lib",
+                    "mountPath": "/opt",
+                    "readOnly": false
+                },
+                {
+                    "name": "dev",
+                    "mountPath": "/opt",
+                    "readOnly": false
+                },
+                {
+                    "name": "root",
+                    "mountPath": "/",
+                    "readOnly": false
+                }]
+	}],
+	"volumes": [{
+	    "name": "config",
+	    "hostPath": {"path": "/etc"}
+	},{
+	    "name": "logs",
+	    "hostPath": {"path": "/var"}
+	},
+        {
+            "name": "bin",
+            "hostPath": {"path": "/opt"}
+        },
+        {
+            "name": "lib",
+            "hostPath": {"path": "/lib"}
+        },
+        {
+            "name": "dev",
+            "hostPath": {"path": "/dev"}
+        },
+        {
+            "name": "root",
+            "hostPath": {"path": "/host"}
+        }]
+    }
+}
