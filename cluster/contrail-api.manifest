@@ -7,7 +7,7 @@
 	"containers":[{
 	    "name": "contrail-api",
 	    "image": "opencontrail/config:2.20",
-	    "command": ["/bin/sh", "-c", "/usr/bin/contrail-api --conf_file=/etc/contrail/contrail-api.conf 1>>/var/log/contrail/contrail-api.stdout 2>>/var/log/contrail/contrail-api.err"],
+	    "command": ["/bin/sh", "-c", "/usr/bin/contrail-api --conf_file=/etc/contrail/contrail-api.conf --disc_server_ip=127.0.0.1 1>>/var/log/contrail/contrail-api.stdout 2>>/var/log/contrail/contrail-api.err"],
 	    "ports": [{
 		"name": "contrail-api",
 		"containerPort": 8082,

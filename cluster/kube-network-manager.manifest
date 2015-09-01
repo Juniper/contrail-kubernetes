@@ -7,15 +7,24 @@
 	"containers":[{
 	    "name": "kube-network-manager",
 	    "image": "opencontrail/kube-network-manager",
-	    "args": ["--", "--public_net=10.1.4.0/24"],
+	    "command": ["/bin/sh", "-c", "/go/kube-network-manager -- --private_net=10.10.0.0/16 --portal_net=10.0.0.0/16 --public_net=10.1.0.0/16 1>>/var/log/contrail/kube-network-manager.stdout 2>>/var/log/contrail/kube-network-manager.err"],
 	    "volumeMounts": [{
 		    "name": "config",
 		    "mountPath": "/etc/kubernetes"
-	    }]
+	    },
+		{
+		    "name": "logs",
+		    "mountPath": "/var/log/contrail",
+		    "readOnly": false
+        }]
 	}],
-	"volumes": [{
-	    "name": "config",
-	    "hostPath": {"path": "/etc/contrail"}
+    "volumes": [{
+        "name": "config",
+        "hostPath": {"path": "/etc/contrail"}
+    },
+	{
+        "name": "logs",
+        "hostPath": {"path": "/var/log/contrail"}
 	}]
-    } 
+    }
 }

@@ -7,7 +7,7 @@
 	"containers":[{
 	    "name": "contrail-schema",
 	    "image": "opencontrail/config:2.20",
-	    "command": ["/bin/sh", "-c", "/usr/bin/contrail-schema 1>>/var/log/contrail/contrail-schema.stdout 2>/var/log/contrail/contrail-schema.err"],
+	    "command": ["/bin/sh", "-c", "/usr/bin/contrail-schema --disc_server_ip 127.0.0.1 --disc_server_port 5998 1>>/var/log/contrail/contrail-schema.stdout 2>/var/log/contrail/contrail-schema.err"],
 	    "volumeMounts": [{
 		"name": "config",
 		"mountPath": "/etc/contrail"

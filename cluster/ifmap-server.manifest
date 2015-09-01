@@ -14,20 +14,12 @@
 	    }],
 	    "volumeMounts": [
 		{
-		    "name": "config",
-		    "mountPath": "/etc/ifmap-server"
-		},
-		{
 		    "name": "logs",
 		    "mountPath": "/var/log/contrail",
 		    "readOnly": false
 		}]
 	}],
 	"volumes": [
-	    {
-		"name": "config",
-		"hostPath": {"path": "/etc/ifmap-server"}
-	    },
 	    {
 		"name": "logs",
 		"hostPath": {"path": "/var/log/ifmap-server"}
