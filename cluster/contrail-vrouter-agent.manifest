@@ -30,26 +30,26 @@
 	    "volumeMounts": [
 		{
 		    "name": "config",
-		    "mountPath": "/etc"
+		    "mountPath": "/etc/contrail"
 		},
 		{
 		    "name": "logs",
-		    "mountPath": "/var",
+		    "mountPath": "/var/log/contrail",
 		    "readOnly": false
 		},
                 {
                     "name": "bin",
-                    "mountPath": "/opt",
+                    "mountPath": "/opt/contrail",
                     "readOnly": false
                 },
                 {
                     "name": "lib",
-                    "mountPath": "/opt",
+                    "mountPath": "/lib",
                     "readOnly": false
                 },
                 {
                     "name": "dev",
-                    "mountPath": "/opt",
+                    "mountPath": "/dev",
                     "readOnly": false
                 },
                 {
@@ -60,14 +60,14 @@
 	}],
 	"volumes": [{
 	    "name": "config",
-	    "hostPath": {"path": "/etc"}
+	    "hostPath": {"path": "/etc/contrail"}
 	},{
 	    "name": "logs",
-	    "hostPath": {"path": "/var"}
+	    "hostPath": {"path": "/var/log/contrail"}
 	},
         {
             "name": "bin",
-            "hostPath": {"path": "/opt"}
+            "hostPath": {"path": "/opt/contrail"}
         },
         {
             "name": "lib",
