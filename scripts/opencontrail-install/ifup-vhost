@@ -1,0 +1,115 @@
+#!/bin/bash
+source /etc/contrail/opencontrail-rc
+
+if [ -e /lib/lsb/init-functions ]; then
+    . /lib/lsb/init-functions
+fi
+
+if [ -f /etc/sysconfig/network-scripts ]; then
+    . /etc/sysconfig/network-scripts/network-functions
+fi
+
+[ -f ../network ] && . ../network
+
+LOGFILE=/var/log/vhost.log
+
+timestamp() {
+    date
+}
+
+log_error_msg() {
+    msg=$1
+    echo "$(timestamp): ERROR: $msg" >> $LOGFILE
+}
+
+log_warn_msg() {
+    msg=$1
+    echo "$(timestamp): WARNING: $msg" >> $LOGFILE
+}
+
+log_info_msg() {
+    msg=$1
+    echo "$(timestamp): INFO: $msg" >> $LOGFILE
+}
+
+function pre-checks()
+{
+   vrouter=$(cat /proc/modules |grep vrouter | awk '{print $1}')
+   if [ "$vrouter" != "vrouter" ]; then
+     log_info_msg "vrouter not found. Initializing now.."
+     modprobe vrouter
+     if [ $? != 0 ]; then
+       log_info_msg "vrouter kernel module probe - Error"
+       exit
+     fi
+   fi
+
+   if [ "$IFACE" != "vhost0" ]; then
+      log_info_msg "Event not for vhost0"
+      exit
+   fi
+}
+
+function get_hwaddr ()
+{
+    if [ -f /sys/class/net/${1}/address ]; then
+        awk '{ print toupper($0) }' < /sys/class/net/${1}/address
+    elif [ -d "/sys/class/net/${1}" ]; then
+        LC_ALL= LANG= ip -o link show ${1} 2>/dev/null | \
+            awk '{ print toupper(gensub(/.*link\/[^ ]* ([[:alnum:]:]*).*/,
+                                        "\\1", 1)); }'
+    fi
+}
+
+function pkt_setup () {
+    for f in /sys/class/net/$1/queues/rx-*
+    do
+        q="$(echo $f | cut -d '-' -f2)"
+        r=$(($q%32))
+        s=$(($q/32))
+        ((mask=1<<$r))
+        str=(`printf "%x" $mask`)
+        if [ $s -gt 0 ]; then
+            for ((i=0; i < $s; i++))
+            do
+                str+=,00000000
+            done
+        fi
+        echo $str > $f/rps_cpus
+    done
+}
+
+function pkt_bitmap_setup()
+{
+   if [ -f /sys/class/net/pkt1/queues/rx-0/rps_cpus ]; then
+        pkt_setup pkt1
+   fi
+   if [ -f /sys/class/net/pkt2/queues/rx-0/rps_cpus ]; then
+        pkt_setup pkt2
+   fi
+   if [ -f /sys/class/net/pkt3/queues/rx-0/rps_cpus ]; then
+        pkt_setup pkt3
+   fi
+}
+
+function vif_create()
+{
+   vif="/usr/bin/vif"
+   if [ ! -L /sys/class/net/${IFACE} ]; then
+        log_info_msg "Creating vhost interface"
+        $vif --create ${IFACE} --mac $(get_hwaddr ${OPENCONTRAIL_VROUTER_INTF})
+        $vif --add ${OPENCONTRAIL_VROUTER_INTF} --mac $(get_hwaddr ${OPENCONTRAIL_VROUTER_INTF}) --vrf 0 --vhost-phys --type physical
+        $vif --add ${IFACE} --mac $(get_hwaddr ${OPENCONTRAIL_VROUTER_INTF}) --vrf 0 --type vhost --xconnect ${OPENCONTRAIL_VROUTER_INTF}
+        ip link set dev ${IFACE} up
+   fi
+   log_info_msg "vhost0 interface successfully instantiated"
+}
+
+function main()
+{
+  pre-checks
+  pkt_bitmap_setup
+  vif_create
+}
+
+main

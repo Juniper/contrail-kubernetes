@@ -1,7 +1,7 @@
 {
     "apiVersion": "v1",
     "kind": "Pod",
-    "metadata": {"name":"contrail-control"},
+    "metadata": {"name":"contrail-vrouter-agent"},
     "spec":{
 	"hostNetwork": true,
 	"containers":[{
@@ -36,27 +36,8 @@
 		    "name": "logs",
 		    "mountPath": "/var/log/contrail",
 		    "readOnly": false
-		},
-                {
-                    "name": "bin",
-                    "mountPath": "/opt/contrail",
-                    "readOnly": false
-                },
-                {
-                    "name": "lib",
-                    "mountPath": "/lib",
-                    "readOnly": false
-                },
-                {
-                    "name": "dev",
-                    "mountPath": "/dev",
-                    "readOnly": false
-                },
-                {
-                    "name": "root",
-                    "mountPath": "/",
-                    "readOnly": false
-                }]
+		}
+              ]
 	}],
 	"volumes": [{
 	    "name": "config",
@@ -64,22 +45,7 @@
 	},{
 	    "name": "logs",
 	    "hostPath": {"path": "/var/log/contrail"}
-	},
-        {
-            "name": "bin",
-            "hostPath": {"path": "/opt/contrail"}
-        },
-        {
-            "name": "lib",
-            "hostPath": {"path": "/lib"}
-        },
-        {
-            "name": "dev",
-            "hostPath": {"path": "/dev"}
-        },
-        {
-            "name": "root",
-            "hostPath": {"path": "/host"}
-        }]
+	}
+       ]
     }
 }
