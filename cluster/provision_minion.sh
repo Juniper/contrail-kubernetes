@@ -140,7 +140,6 @@ function setup_vhost()
   phy_itf=$(ip a |grep $MINION_OVERLAY_NET_IP | awk '{print $7}')
   mask=$(ifconfig $phy_itf | grep -i '\(netmask\|mask\)' | awk '{print $4}' | cut -d ":" -f 2)
   mac=$(ifconfig $phy_itf | grep HWaddr | awk '{print $5}')
-  echo $mac >> /etc/contrail/default_pmac
   if [ "$OS_TYPE" == $REDHAT ]; then
     if [ "$phy_itf" != $VHOST ]; then
       intf="/etc/sysconfig/network-scripts/ifcfg-$phy_itf"
@@ -181,7 +180,6 @@ function setup_vhost()
         # create and configure vhost0
         grep -q 'auto vhost0' $itf || echo "auto vhost0" >> $itf
         grep -q 'iface vhost0 inet static' $itf || echo "iface vhost0 inet static" >> $itf
-        grep -q 'pre-up' $itf || echo "    pre-up /opt/contrail/bin/if-vhost0" >> $itf
         grep -q 'netmask $mask' $itf || echo "    netmask $mask" >> $itf
         grep -q 'address $MINION_OVERLAY_NET_IP' $itf || echo "    address $MINION_OVERLAY_NET_IP" >> $itf
         grep -q 'network_name application' $itf || echo "    network_name application" >> $itf
@@ -291,6 +289,14 @@ function update_vhost_pre_up()
 
 function vrouter_agent_startup()
 {
+  rm -rf ~/vragent
+  mkdir vragent
+  cd ~/vragent  && `git clone -b $ocver https://github.com/Juniper/contrail-controller` && cd 
+  etcc="/etc/contrail"
+  if [ ! -f $etcc ]; then
+       mkdir -p $etcc
+  fi
+  cp ~/vragent/contrail-controller/src/vnsw/agent/contrail-vrouter-agent.conf $etcc
   if [ ! -f /etc/kubernetes/manifests ]; then
      mkdir -p /etc/kubernetes/manifests
   fi
@@ -298,6 +304,17 @@ function vrouter_agent_startup()
   vrimg=$(cat $vragent | grep image | awk -F, '{print $1}' | awk '{print $2}')
   `docker pull $vrimg`
   cp ~/ockube/contrail-kubernetes/cluster/contrail-vrouter-agent.manifest /etc/kubernetes/manifests
+}
+
+function verify_setup()
+{
+  ifup $VHOST
+  status=$(ping -c 1 -w 1 -W 1 -n $OPENCONTRAIL_CONTROLLER_IP | grep packet | awk '{print $6}' | cut -c1)
+  if [ $status == 0 ]; then
+    log_info_msg "Vrouter kernel module and network successfuly setup"
+  else
+    log_info_msg "Vrouter kernel module and network - Error"
+  fi
 }
 
 function cleanup()
@@ -309,6 +326,7 @@ function cleanup()
   fi
   rm -rf ~/vrouter-build
   rm -rf ~/ockube
+  rm -rf ~/vragent
 }
 
 
@@ -324,6 +342,7 @@ function main()
    stop_kube_svcs
    update_vhost_pre_up
    vrouter_agent_startup
+   verify_setup
    cleanup
 }
 
