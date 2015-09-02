@@ -7,7 +7,7 @@
 	"containers":[{
 	    "name": "contrail-vrouter-agent",
 	    "image": "opencontrail/vrouter-agent:2.20",
-            "privileged": "true"
+        "privileged": "true",
 	    "command": ["/bin/bash", "-c", "source /etc/contrail/opencontrail-rc && /usr/bin/contrail-vrouter-agent --DEFAULT.log_file=/var/log/contrail/contrail-vrouter-agent.log --HYPERVISOR.type=docker --DEFAULT.tunnel_type=MPLSoUDP --DISCOVERY.server=$OPENCONTRAIL_CONTROLLER_IP --DISCOVERY.port=5998 >>/var/log/contrail/contrail-vrouter-agent-stdout.log 2>/var/log/contrail/contrail-vrouter-agent.err"],
 	    "securityContext": {
 	    	"capabilities": {
