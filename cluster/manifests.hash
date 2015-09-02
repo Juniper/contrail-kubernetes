@@ -12,3 +12,4 @@ zookeeper.manifest              md5=c665836b3d5fe7b535d2c91a5efbb824
 redis.manifest                  md5=d5489945201a847f8bfeabdfccdc68ce
 kube-network-manager.manifest   md5=f7b50f2b02ebcbbf9c64167c2558f827
 contrail-vrouter-agent.manifest md5=51074219d8fc2b3625a3b30610495d6c
+provision_master.sh             md5=f458148ce47d135a7de6af22c372a442
