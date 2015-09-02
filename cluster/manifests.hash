@@ -11,3 +11,4 @@ rabbitmq.manifest               md5=fe26b2f66c2adfd94c85c1971be50267
 zookeeper.manifest              md5=c665836b3d5fe7b535d2c91a5efbb824
 redis.manifest                  md5=d5489945201a847f8bfeabdfccdc68ce
 kube-network-manager.manifest   md5=f7b50f2b02ebcbbf9c64167c2558f827
+contrail-vrouter-agent.manifest md5=decd900f4a82798f723eac17f801a485
