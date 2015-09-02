@@ -1,0 +1,38 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {"name":"contrail-coll"},
+    "spec":{
+        "hostNetwork": true,
+        "containers":[{
+            "name": "contrail-coll",
+            "image": "opencontrail/analytics:2.20",
+            "command": ["/bin/sh", "-c", "/usr/bin/contrail-collector 1>>/var/log/contrail/contrail-collector.stdout 2>>/var/log/contrail/contrail-collector.err"],
+            "ports": [{
+                "name": "contrail-coll",
+                "containerPort": 8086,
+                "hostPort": 8086
+            }],
+            "volumeMounts": [
+                {
+                    "name": "config",
+                    "mountPath": "/etc/contrail"
+                },
+                {
+                    "name": "logs",
+                    "mountPath": "/var/log/contrail",
+                    "readOnly": false
+                }]
+        }],
+        "volumes": [
+            {
+                "name": "config",
+                "hostPath": {"path": "/etc/contrail"}
+            },
+            {
+                "name": "logs",
+                "hostPath": {"path": "/var/log/contrail"}
+            }
+        ]
+    }
+}

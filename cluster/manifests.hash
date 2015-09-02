@@ -1,0 +1,12 @@
+cassandra.manifest              md5=2193a46160758f71c933c46c880125b5
+contrail-api.manifest           md5=de60a8e96c7b6ea2be959ce3b3d780a4
+contrail-collector.manifest     md5=7f12316fc891b0e49f6299fcd949ffc6
+contrail-control.manifest       md5=27fbdf14e983912aae02ae17d9ca5143
+contrail-analytics-api.manifest md5=0b4993f8989ba92ac78b2232312a280f
+contrail-schema.manifest        md5=494f796f276d0cff719f414734a7b476
+contrail-query-engine.manifest  md5=7f2964575e071cf0bc25e19a07fb4c87
+contrail-web.manifest           md5=edbc2fd05888321df4540e3470b77ec4
+ifmap-server.manifest           md5=f27327ed74c803a53809aad5e26cbc45
+rabbitmq.manifest               md5=fe26b2f66c2adfd94c85c1971be50267
+zookeeper.manifest              md5=c665836b3d5fe7b535d2c91a5efbb824
+redis.manifest                  md5=d5489945201a847f8bfeabdfccdc68ce
