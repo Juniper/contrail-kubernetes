@@ -36,7 +36,18 @@ func EqualTags(m1, m2 map[string]string, tags []string) bool {
 	return true
 }
 
+// Return true if this pod uses host networking.
+func ignorePod(pod *api.Pod) bool {
+	if pod.Spec.HostNetwork {
+		return true
+	}
+	return false
+}
+
 func (c *Controller) AddPod(pod *api.Pod) {
+	if ignorePod(pod) {
+		return
+	}
 	c.eventChannel <- notification{evAddPod, pod}
 }
 
@@ -56,6 +67,13 @@ func (c *Controller) podAnnotationsCheck(pod *api.Pod) bool {
 }
 
 func (c *Controller) UpdatePod(oldPod, newPod *api.Pod) {
+	if ignorePod(newPod) {
+		if !ignorePod(oldPod) {
+			c.eventChannel <- notification{evDeletePod, oldPod}
+		}
+		return
+	}
+
 	watchTags := []string{
 		c.config.NetworkTag,
 		c.config.NetworkAccessTag,
