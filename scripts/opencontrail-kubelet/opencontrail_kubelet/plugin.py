@@ -3,7 +3,6 @@
 #
 
 import argparse
-import iniparse
 import json
 import logging
 import os
@@ -14,61 +13,11 @@ import sys
 import time
 import xml.etree.ElementTree as ElementTree
 
-import vnc_api.vnc_api as opencontrail
-
-from contrail_vrouter_api.vrouter_api import ContrailVRouterApi
+from vrouter_api import ContrailVRouterApi
 from lxc_manager import LxcManager
 from shell import Shell
 
-
-class ContrailClient(object):
-    def __init__(self):
-        self._server = None
-        self._net_mode = "bridge"
-        self._readconfig()
-        self._client = opencontrail.VncApi(api_server_host=self._server)
-
-    def _readconfig(self):
-        """ Expects a configuration file in the same directory as the
-        executable.
-        """
-        path = os.path.normpath(sys.argv[0])
-        filename = os.path.join(os.path.dirname(path), 'config')
-        config = iniparse.INIConfig(open(filename))
-        self._server = config['DEFAULTS']['api_server']
-        self._net_mode = config['DEFAULTS']['net_mode']
-
-    def local_address(self):
-        output = Shell.run('ip addr show vhost0')
-        expr = re.compile(r'inet ((([0-9]{1,3})\.){3}([0-9]{1,3}))/(\d+)')
-        m = expr.search(output)
-        if not m:
-            raise Exception('Unable to determine local IP address')
-        return m.group(1)
-
-    def LocateRouter(self, hostname, localip):
-        try:
-            fqn = ['default-global-system-config', hostname]
-            vrouter = self._client.virtual_router_read(fq_name=fqn)
-            return vrouter
-        except opencontrail.NoIdError:
-            pass
-
-        logging.debug('Creating virtual-router for %s:%s' %
-                      (hostname, localip))
-        vrouter = opencontrail.VirtualRouter(
-            hostname,
-            virtual_router_ip_address=localip)
-        self._client.virtual_router_create(vrouter)
-
-# end class ContrailClient
-
-
-def plugin_init():
-    client = ContrailClient()
-    client.LocateRouter(socket.gethostname(), client.local_address())
-# end plugin_init
-
+opt_net_mode = "bridge"
 
 def docker_get_pid(docker_id):
     pid_str = Shell.run('docker inspect -f \'{{.State.Pid}}\' %s' % docker_id)
@@ -121,7 +70,6 @@ def setup(pod_namespace, pod_name, docker_id):
     network: pod_name
     netns: docker_id{12}
     """
-    client = ContrailClient()
 
     # Kubelet::createPodInfraContainer ensures that State.Pid is set
     pid = docker_get_pid(docker_id)
@@ -137,7 +85,7 @@ def setup(pod_namespace, pod_name, docker_id):
 
     manager = LxcManager()
 
-    if client._net_mode == 'none':
+    if opt_net_mode == 'none':
         instance_ifname = 'veth0'
     else:
         instance_ifname = 'eth0'
@@ -163,7 +111,7 @@ def setup(pod_namespace, pod_name, docker_id):
 
     nic_uuid = podState["uuid"]
     mac_address = podState["macAddress"]
-    if client._net_mode == 'none':
+    if opt_net_mode == 'none':
         ifname = manager.create_interface(short_id, instance_ifname,
                                           mac_address)
     else:
@@ -255,7 +203,7 @@ def main():
 
     try:
         if args.action == 'init':
-            plugin_init()
+            pass
         elif args.action == 'setup':
             setup(args.pod_namespace, args.pod_name, args.docker_id)
         elif args.action == 'teardown':
