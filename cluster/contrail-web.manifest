@@ -1,0 +1,41 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {"name":"contrail-web"},
+    "spec":{
+	"hostNetwork": true,
+	"containers":[{
+	    "name": "contrail-web",
+	    "image": "opencontrail/web:2.20",
+	    "command": ["/bin/bash", "-c", "cd /var/lib/contrail-webui/contrail-web-core && /usr/bin/node webServerStart.js >>/var/log/contrail/contrail-web.stdout 2>/var/log/contrail/contrail-web.err"],
+	    "securityContext": {
+            "capabilities": {
+		    "add": ["NET_BIND_SERVICE"]
+		}
+	    },
+	    "ports": [{
+		"name": "web-http",
+		"containerPort": 8070,
+		"hostPort": 8070
+	    }, {
+		"name": "web-https",
+		"containerPort": 8143,
+		"hostPort": 8143
+	    }, {
+		"name": "web-jobs",
+		"containerPort": 3000,
+		"hostPort": 3000
+	    }],
+	    "volumeMounts": [
+		{
+		    "name": "logs",
+		    "mountPath": "/var/log/contrail",
+		    "readOnly": false
+		}]
+	}],
+	"volumes": [{
+	    "name": "logs",
+	    "hostPath": {"path": "/var/log/contrail"}
+	}]
+    }
+}
