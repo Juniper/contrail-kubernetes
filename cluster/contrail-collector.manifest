@@ -1,15 +1,15 @@
 {
     "apiVersion": "v1",
     "kind": "Pod",
-    "metadata": {"name":"contrail-coll"},
+    "metadata": {"name":"contrail-collector"},
     "spec":{
         "hostNetwork": true,
         "containers":[{
-            "name": "contrail-coll",
+            "name": "contrail-collector",
             "image": "opencontrail/analytics:2.20",
             "command": ["/bin/sh", "-c", "/usr/bin/contrail-collector 1>>/var/log/contrail/contrail-collector.stdout 2>>/var/log/contrail/contrail-collector.err"],
             "ports": [{
-                "name": "contrail-coll",
+                "name": "contrail-collector",
                 "containerPort": 8086,
                 "hostPort": 8086
             }],

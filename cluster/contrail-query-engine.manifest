@@ -1,15 +1,15 @@
 {
     "apiVersion": "v1",
     "kind": "Pod",
-    "metadata": {"name":"contrail-qe"},
+    "metadata": {"name":"contrail-query-engine"},
     "spec":{
         "hostNetwork": true,
         "containers":[{
-            "name": "contrail-qe",
+            "name": "contrail-query-engine",
             "image": "opencontrail/analytics:2.20",
             "command": ["/bin/sh", "-c", "/usr/bin/contrail-query-engine 1>>/var/log/contrail/contrail-query-engine.stdout 2>>/var/log/contrail/contrail-query-engine.err"],
             "ports": [{
-                "name": "contrail-qe",
+                "name": "contrail-query-engine",
                 "containerPort": 8091,
                 "hostPort": 8091
             }],

@@ -51,7 +51,7 @@ function verify_contrail_listen_services() {
     retry master 'netstat -anp | grep LISTEN | grep -w 2181' # ZooKeeper
     retry master 'netstat -anp | grep LISTEN | grep -w 9160' # Cassandra
     retry master 'netstat -anp | grep LISTEN | grep -w 5269' # XMPP Server
-    retry master 'netstat -anp | grep LISTEN | grep -w 8083' # Control-Node Introspect
+    retry master 'netstat -anp | grep LISTEN | grep -w 8083' # Control-Node
     retry master 'netstat -anp | grep LISTEN | grep -w 8443' # IFMAP
     retry master 'netstat -anp | grep LISTEN | grep -w 8082' # API-Server
     retry master 'netstat -anp | grep LISTEN | grep -w 8087' # Schema
@@ -64,7 +64,7 @@ function verify_contrail_listen_services() {
     retry master 'netstat -anp | grep LISTEN | grep -w 3000' # WebUI
 #   retry master 'netstat -anp | grep LISTEN | grep -w 5998' # discovery
 #   retry master 'netstat -anp | grep LISTEN | grep -w 8094' # dns
-#   retry master 'netstat -anp | grep LISTEN | grep -w 53' # named
+#   retry master 'netstat -anp | grep LISTEN | grep -w 53'   # named
 }
 
 # Provision controller
@@ -102,10 +102,6 @@ function setup_contrail_manifest_files() {
     retry master $cmd
     cmd='mv /etc/contrail/manifests/* /etc/kubernetes/manifests/'
     master $cmd
-
-#   cmd='grep source: /srv/salt/contrail-*/* | awk "{print $4}" | xargs -n 1 wget -qO - | grep \"image\": | cut -d "\"" -f 4 | xargs -n1 sudo docker pull'
-#   master $cmd
-#   master grep source: /srv/salt/contrail-*/* | awk '{print $4}' | xargs -n1 wget -q --directory-prefix=/etc/kubernetes/manifests
 }
 
 # Setup contrail-controller components
