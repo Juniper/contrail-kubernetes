@@ -7,7 +7,7 @@
 	"containers":[{
 	    "name": "contrail-web",
 	    "image": "opencontrail/web:2.20",
-	    "command": ["/bin/bash", "-c", "cd /var/lib/contrail-webui/contrail-web-core && /usr/bin/node webServerStart.js >>/var/log/contrail/contrail-web.stdout 2>/var/log/contrail/contrail-web.err"],
+	    "command": ["/usr/bin/contrail-webui-start.sh"],
 	    "securityContext": {
             "capabilities": {
 		    "add": ["NET_BIND_SERVICE"]

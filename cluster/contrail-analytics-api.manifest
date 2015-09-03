@@ -7,9 +7,9 @@
         "containers":[{
             "name": "contrail-analytics-api",
             "image": "opencontrail/analytics:2.20",
-            "command": ["/bin/sh", "-c", "/usr/bin/contrail-analytics-api 1>>/var/log/contrail/contrail-analytics-api.stdout 2>>/var/log/contrail/contrail-analytics-api.err"],
+            "command": ["/usr/bin/contrail-analytics-api"],
             "ports": [{
-                "name": "contrail-analytics-api",
+                "name": "analytics-ui",
                 "containerPort": 8081,
                 "hostPort": 8081
             }],

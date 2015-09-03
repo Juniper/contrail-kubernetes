@@ -7,9 +7,9 @@
         "containers":[{
             "name": "contrail-collector",
             "image": "opencontrail/analytics:2.20",
-            "command": ["/bin/sh", "-c", "/usr/bin/contrail-collector 1>>/var/log/contrail/contrail-collector.stdout 2>>/var/log/contrail/contrail-collector.err"],
+            "command": ["/usr/bin/contrail-collector"],
             "ports": [{
-                "name": "contrail-collector",
+                "name": "collector-ui",
                 "containerPort": 8086,
                 "hostPort": 8086
             }],
