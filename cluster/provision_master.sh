@@ -4,6 +4,7 @@ set -ex
 set -o pipefail
 
 LOGFILE=/var/log/contrail/provision_master.log
+mkdir -p /var/log/contrail
 exec 1<&- # Close STDOUT file descriptor
 exec 2<&- # Close STDERR FD
 exec 1<>$LOG_FILE # Open STDOUT as $LOG_FILE file for read and write.
