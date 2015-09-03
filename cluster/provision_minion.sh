@@ -12,6 +12,14 @@ readonly PROGNAME=$(basename "$0")
 ocver=$1
 
 LOGFILE=/var/log/contrail/provision_minion.log
+exec 1<&- # Close STDOUT file descriptor
+exec 2<&- # Close STDERR FD
+exec 1<>$LOG_FILE # Open STDOUT as $LOG_FILE file for read and write.
+exec 2>&1 # Redirect STDERR to STDOUT
+
+# Redirect STDERR to STDOUT
+exec 2>&1
+
 OS_TYPE="none"
 REDHAT="redhat"
 UBUNTU="ubuntu"
@@ -44,17 +52,17 @@ fi
 
 log_error_msg() {
     msg=$1
-    echo "$(timestamp): ERROR: $msg" >> $LOGFILE
+    echo "$(timestamp): ERROR: $msg"
 }
 
 log_warn_msg() {
     msg=$1
-    echo "$(timestamp): WARNING: $msg" >> $LOGFILE
+    echo "$(timestamp): WARNING: $msg"
 }
 
 log_info_msg() {
     msg=$1
-    echo "$(timestamp): INFO: $msg" >> $LOGFILE
+    echo "$(timestamp): INFO: $msg"
 }
 
 
@@ -89,7 +97,7 @@ function build_vrouter()
   cd ~/vrouter-build/tools && `git clone https://github.com/Juniper/contrail-build` && `mv contrail-build build`
   cd ~/vrouter-build/tools && `git clone -b $ocver https://github.com/Juniper/contrail-sandesh` && `mv contrail-sandesh sandesh` 
   cp ~/vrouter-build/tools/build/SConstruct ~/vrouter-build
-  cd ~/vrouter-build && `scons vrouter` 2>&1 | tee $LOGFILE
+  cd ~/vrouter-build && `scons vrouter` 2>&1
 }
 
 function modprobe_vrouter()
