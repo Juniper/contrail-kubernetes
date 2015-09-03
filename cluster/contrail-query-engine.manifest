@@ -7,9 +7,9 @@
         "containers":[{
             "name": "contrail-query-engine",
             "image": "opencontrail/analytics:2.20",
-            "command": ["/bin/sh", "-c", "/usr/bin/contrail-query-engine 1>>/var/log/contrail/contrail-query-engine.stdout 2>>/var/log/contrail/contrail-query-engine.err"],
+            "command": ["/usr/bin/contrail-query-engine"],
             "ports": [{
-                "name": "contrail-query-engine",
+                "name": "query-engine-ui",
                 "containerPort": 8091,
                 "hostPort": 8091
             }],
