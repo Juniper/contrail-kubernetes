@@ -1,0 +1,38 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {"name":"contrail-analytics-api"},
+    "spec":{
+        "hostNetwork": true,
+        "containers":[{
+            "name": "contrail-analytics-api",
+            "image": "opencontrail/analytics:2.20",
+            "command": ["/usr/bin/contrail-analytics-api"],
+            "ports": [{
+                "name": "analytics-ui",
+                "containerPort": 8081,
+                "hostPort": 8081
+            }],
+            "volumeMounts": [
+                {
+                    "name": "config",
+                    "mountPath": "/etc/contrail"
+                },
+                {
+                    "name": "logs",
+                    "mountPath": "/var/log/contrail",
+                    "readOnly": false
+                }]
+        }],
+        "volumes": [
+            {
+                "name": "config",
+                "hostPath": {"path": "/etc/contrail"}
+            },
+            {
+                "name": "logs",
+                "hostPath": {"path": "/var/log/contrail"}
+            }
+        ]
+    }
+}

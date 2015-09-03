@@ -1,0 +1,38 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {"name":"contrail-query-engine"},
+    "spec":{
+        "hostNetwork": true,
+        "containers":[{
+            "name": "contrail-query-engine",
+            "image": "opencontrail/analytics:2.20",
+            "command": ["/usr/bin/contrail-query-engine"],
+            "ports": [{
+                "name": "query-engine-ui",
+                "containerPort": 8091,
+                "hostPort": 8091
+            }],
+            "volumeMounts": [
+                {
+                    "name": "config",
+                    "mountPath": "/etc/contrail"
+                },
+                {
+                    "name": "logs",
+                    "mountPath": "/var/log/contrail",
+                    "readOnly": false
+                }]
+        }],
+        "volumes": [
+            {
+                "name": "config",
+                "hostPath": {"path": "/etc/contrail"}
+            },
+            {
+                "name": "logs",
+                "hostPath": {"path": "/var/log/contrail"}
+            }
+        ]
+    }
+}

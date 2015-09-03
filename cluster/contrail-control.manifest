@@ -7,7 +7,7 @@
 	"containers":[{
 	    "name": "contrail-control",
 	    "image": "opencontrail/control:2.20",
-	    "command": ["/bin/bash", "-c", "echo 127.0.0.1 $(hostname) >> /etc/hosts && /usr/bin/contrail-control >>/var/log/contrail/contrail-control.stdout 2>/var/log/contrail/contrail-control.err"],
+	    "command": ["/usr/bin/contrail-control"],
 	    "securityContext": {
 	    	"capabilities": {
 		    "add": ["NET_BIND_SERVICE"]
