@@ -8,6 +8,11 @@
 	    "name": "contrail-schema",
 	    "image": "opencontrail/config:2.20",
 	    "command": ["/usr/bin/contrail-schema"],
+	    "ports": [{
+	    "name": "schema-ui",
+		"containerPort": 8087,
+		"hostPort": 8087
+	    }],
 	    "volumeMounts": [{
 		"name": "config",
 		"mountPath": "/etc/contrail"
