@@ -7,12 +7,9 @@
 	"containers":[{
 	    "name": "contrail-vrouter-agent",
 	    "image": "opencontrail/vrouter-agent:2.20",
-            "privileged": "true",
-	    "command": ["/bin/bash", "-c", "/usr/bin/contrail-vrouter-agent >>/var/log/contrail/contrail-vrouter-agent-stdout.log 2>/var/log/contrail/contrail-vrouter-agent.err"],
+	    "command": ["/usr/bin/contrail-vrouter-agent"],
 	    "securityContext": {
-	    	"capabilities": {
-		    "add": ["NET_BIND_SERVICE"]
-		}
+	        "privileged": true
 	    },
 	    "ports": [{
 		"name": "vrouter-api",
