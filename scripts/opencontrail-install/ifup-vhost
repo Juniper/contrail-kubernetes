@@ -112,7 +112,7 @@ function def_reroute()
   if [ "$def" == "default" ]; then
       defgw=$(ip route | grep $OPENCONTRAIL_VROUTER_INTF | grep $def | awk 'NR==1{print $3}')
      `route add default gw $defgw dev vhost0`
-     `route del default dev $OPENCONTRAIL_VROUTER_INTF`
+     #`route del default dev $OPENCONTRAIL_VROUTER_INTF`
   fi
 }
 
