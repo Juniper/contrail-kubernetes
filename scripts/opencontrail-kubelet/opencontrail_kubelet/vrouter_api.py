@@ -35,13 +35,17 @@ class ContrailVRouterApi(object):
 
         url = "http://localhost:%d/port" % (VROUTER_AGENT_PORT)
         headers = {'content-type': 'application/json'}
-        r = requests.post(url, data=json_data, headers=headers)
+        s = requests.Session()
+        s.mount('http://', requests.adapters.HTTPAdapter(max_retries=10))
+        r = s.post(url, data=json_data, headers=headers)
         if r.status_code != requests.codes.ok:
             logging.error("%s: %s", url, r.text)
 
     def delete_port(self, nicId):
         url = "http://localhost:%d/port/%s" % (VROUTER_AGENT_PORT, nicId)
         headers = {'content-type': 'application/json'}
-        r = requests.delete(url, data=None, headers=headers)
+        s = requests.Session()
+        s.mount('http://', requests.adapters.HTTPAdapter(max_retries=10))
+        r = s.delete(url, data=None, headers=headers)
         if r.status_code != requests.codes.ok:
             logging.error("%s: %s", url, r.headers['status'])

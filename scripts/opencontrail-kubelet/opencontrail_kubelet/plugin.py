@@ -135,7 +135,9 @@ def setup(pod_namespace, pod_name, docker_id):
 
 
 def vrouter_interface_by_name(vmName):
-    r = requests.get('http://localhost:8085/Snh_ItfReq')
+    s = requests.Session()
+    s.mount('http://', requests.adapters.HTTPAdapter(max_retries=10))
+    r = s.get('http://localhost:8085/Snh_ItfReq')
     root = ElementTree.fromstring(r.text)
     for interface in root.iter('ItfSandeshData'):
         vm = interface.find('vm_name')
