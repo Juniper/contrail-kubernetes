@@ -258,7 +258,13 @@ function update_restart_kubelet()
   if [ ! -f /etc/kubernetes/manifests ]; then
      mkdir -p /etc/kubernetes/manifests
   fi
-  source /etc/default/kubelet; kubecf=`echo $KUBELET_OPTS`
+  source /etc/default/kubelet;
+
+  if [ grep --quiet KUBELET_OPTS /etc/default/kubelet ]; then
+      kubecf=`echo $KUBELET_OPTS`
+  else
+      kubecf=`echo $DAEMON_ARGS`
+  fi
   kubepid=$(ps -ef|grep kubelet |grep manifests | awk '{print $2}')
   if [[ $kubepid != `pidof kubelet` ]]; then
       mkdir -p /etc/kubernetes/manifests
@@ -273,7 +279,12 @@ function update_restart_kubelet()
      kubecf="$kubecf $kubeappendoc"
   fi
   sed -i '/KUBELET_OPTS/d' /etc/default/kubelet
-  echo 'KUBELET_OPTS="'$kubecf'"' > /etc/default/kubelet
+
+  if [ grep --quiet KUBELET_OPTS /etc/default/kubelet ]; then
+      echo 'KUBELET_OPTS="'$kubecf'"' > /etc/default/kubelet
+  else # In AWS like setups
+      echo 'DAEMON_ARGS="'$kubecf'"' > /etc/default/kubelet
+  fi
   service kubelet restart
 }
 
@@ -340,7 +351,6 @@ function vrouter_agent_startup()
   if [ -f $vrac ]; then
       sed -i 's/# tunnel_type=/tunnel_type=MPLSoUDP/g' $vrac
       sed -i 's/# server=127.0.0.1/server='$OPENCONTRAIL_CONTROLLER_IP'/g' $vrac
-      sed -i 's/# max_control_nodes=1/max_control_nodes=1/g' $vrac
       sed -i 's/# type=kvm/type=docker/g' $vrac
       sed -i 's/# control_network_ip=/control_network_ip='$MINION_OVERLAY_NET_IP'/g' $vrac
       sed -i 's/# name=vhost0/name=vhost0/g' $vrac
