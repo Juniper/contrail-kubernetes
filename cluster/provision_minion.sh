@@ -150,6 +150,8 @@ function setup_vhost()
   fi
   mask=$(ifconfig $phy_itf | grep -i '\(netmask\|mask\)' | awk '{print $4}' | cut -d ":" -f 2)
   mac=$(ifconfig $phy_itf | grep HWaddr | awk '{print $5}')
+  def=$(ip route  | grep $OPENCONTRAIL_VROUTER_INTF | grep -o default)
+  defgw=$(ip route | grep $OPENCONTRAIL_VROUTER_INTF | grep $def | awk 'NR==1{print $3}')
   if [ "$OS_TYPE" == $REDHAT ]; then
     if [ "$phy_itf" != $VHOST ]; then
       intf="/etc/sysconfig/network-scripts/ifcfg-$phy_itf"
@@ -177,13 +179,22 @@ function setup_vhost()
          mv /etc/sysconfig/network-scripts/route-$phy_itf /etc/sysconfig/network-scripts/route-$VHOST
          sed -i 's/$phy_itf/$VHOST/g' /etc/sysconfig/network-scripts/route-$VHOST
       fi
+      if [ "$def" == "default" ]; then
+         grep -q 'default via $defgw dev $VHOST' /etc/sysconfig/network-scripts/route-$VHOST || echo "default via $defgw dev $VHOST" >> /etc/sysconfig/network-scripts/route-$VHOST
+      fi
     fi
   elif [ "$OS_TYPE" == $UBUNTU ]; then
      if [ "$phy_itf" != $VHOST ]; then
         itf="/etc/network/interfaces"
         rt=$(cat $itf | grep route |grep $phy_itf)
         rtv=$(sed "s/$phy_itf/$VHOST/g" <<<"$rt")
-        grep -q "iface eth1 inet manual" $itf || sed -i 's/^iface eth1 inet.*/iface eth1 inet manual \n    pre-up ifconfig eth1 up\n    post-down ifconfig eth1 down/' $itf
+        if [ "$OPENCONTRAIL_VROUTER_INTF" == "eth0" ]; then
+           grep -q "iface eth0 inet manual" $itf || sed -i 's/^iface eth0 inet.*/iface eth0 inet manual \n    pre-up ifconfig eth0 up\n    post-down ifconfig eth0 down/' $itf
+        elif [ "$OPENCONTRAIL_VROUTER_INTF" == "eth1" ]; then
+           grep -q "iface eth1 inet manual" $itf || sed -i 's/^iface eth1 inet.*/iface eth1 inet manual \n    pre-up ifconfig eth1 up\n    post-down ifconfig eth1 down/' $itf
+        elif [ "$OPENCONTRAIL_VROUTER_INTF" == "bond0" ]; then
+           grep -q "iface bond0 inet manual" $itf || sed -i 's/^iface bond0 inet.*/iface bond0 inet manual \n    pre-up ifconfig bond0 up\n    post-down ifconfig bond0 down/' $itf
+        fi
         grep -vwE "(address $MINION_OVERLAY_NET_IP|netmask $mask)" $itf > /tmp/interface
         mv /tmp/interface $itf
     
@@ -193,6 +204,9 @@ function setup_vhost()
         grep -q 'netmask $mask' $itf || echo "    netmask $mask" >> $itf
         grep -q 'address $MINION_OVERLAY_NET_IP' $itf || echo "    address $MINION_OVERLAY_NET_IP" >> $itf
         grep -q 'network_name application' $itf || echo "    network_name application" >> $itf
+        if [ "$def" == "default" ]; then
+              grep -q 'up route add default gw $defgw dev $VHOST' $itf || echo "    up route add default gw $defgw dev $VHOST" >> $itf
+        fi
         grep -q "$rtv" $itf || echo "    $rtv" >> $itf
      fi
   fi   
@@ -337,7 +351,7 @@ function vrouter_agent_startup()
          defgw=$(ip route | grep $OPENCONTRAIL_VROUTER_INTF | grep '$via' | awk 'NR==1{print $3}')
       fi
       if [ -z $defgw ]; then
-         # assuming .1 is the gw for the range which is what kubernetes network provider
+         # assuming .1 is the gw for the range which is what kubernetes network provider 
          # assigns. If found different we need to change it
          defgw=$(sipcalc $OPENCONTRAIL_VROUTER_INTF | grep '$ur' | awk '{print $4}')
       fi
@@ -359,7 +373,7 @@ function vrouter_agent_startup()
   vragentfile=/tmp/contrail-vrouter-agent.manifest
   vrimg=$(cat $vragentfile | grep image | awk -F, '{print $1}' | awk '{print $2}')
   `docker pull $vrimg`
-  mv /tmp/contrail-vrouter-agent.manifest /etc/kubernetes/manifests
+  mv /tmp/contrail-vrouter-agent.manifest /etc/kubernetes/manifests  
 }
 
 function verify_vhost_setup()

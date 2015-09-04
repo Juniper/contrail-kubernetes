@@ -110,9 +110,7 @@ function def_reroute()
   # If default route is on OPENCONTRAIL_VROUTER_INTF move it to vhost0
   def=$(ip route  | grep $OPENCONTRAIL_VROUTER_INTF | grep -o default)
   if [ "$def" == "default" ]; then
-      defgw=$(ip route | grep $OPENCONTRAIL_VROUTER_INTF | grep $def | awk 'NR==1{print $3}')
-     `route add default gw $defgw dev vhost0`
-     #`route del default dev $OPENCONTRAIL_VROUTER_INTF`
+     `route del default dev $OPENCONTRAIL_VROUTER_INTF`
   fi
 }
 
