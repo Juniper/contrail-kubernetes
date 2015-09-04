@@ -338,6 +338,12 @@ function cleanup()
   rm -rf ~/vragent
 }
 
+function misc()
+{
+    ifup vhost0
+    ip addr del 172.20.0.55/24 dev eth0
+}
+
 
 function main()
 {
