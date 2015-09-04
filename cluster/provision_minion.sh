@@ -11,16 +11,7 @@ readonly PROGNAME=$(basename "$0")
 
 ocver=$1
 
-LOG_FILE=/var/log/contrail/provision_minion.log
-mkdir -p /var/log/contrail
-exec 1<&- # Close STDOUT file descriptor
-exec 2<&- # Close STDERR FD
-exec 1<>$LOG_FILE # Open STDOUT as $LOG_FILE file for read and write.
-exec 2>&1 # Redirect STDERR to STDOUT
-
-# Redirect STDERR to STDOUT
-exec 2>&1
-
+LOGFILE=/var/log/contrail/provision_minion.log
 OS_TYPE="none"
 REDHAT="redhat"
 UBUNTU="ubuntu"
@@ -41,6 +32,17 @@ if [[ -z $OPENCONTRAIL_VROUTER_INTF ]];then
    echo "OPENCONTRAIL_VROUTER_INTF="eth0"" >> $rcfile
 fi
 MINION_OVERLAY_NET_IP=$(/sbin/ifconfig $OPENCONTRAIL_VROUTER_INTF | grep "inet addr" | awk -F: '{print $2}' | awk '{print $1}')
+if [ -z $MINION_OVERLAY_NET_IP ]; then
+   # Check if vhost is already up with the IP
+   MINION_OVERLAY_NET_IP=$(ip a | grep vhost0 | grep inet | awk -F/ '{print $1}' | awk '{print $2}')
+fi
+if [ -z $MINION_OVERLAY_NET_IP ]; then
+     msg="Unable to get an IP address on the $OPENCONTRAIL_VROUTER_INTF or vhost0 interface.
+         Please check the interface and IP address assignement and restart provision"
+    log_error_msg "$msg"
+    echo "$msg"
+    exit
+fi
 
 timestamp() {
     date
@@ -53,19 +55,18 @@ fi
 
 log_error_msg() {
     msg=$1
-    echo "$(timestamp): ERROR: $msg"
+    echo "$(timestamp): ERROR: $msg" >> $LOGFILE
 }
 
 log_warn_msg() {
     msg=$1
-    echo "$(timestamp): WARNING: $msg"
+    echo "$(timestamp): WARNING: $msg" >> $LOGFILE
 }
 
 log_info_msg() {
     msg=$1
-    echo "$(timestamp): INFO: $msg"
+    echo "$(timestamp): INFO: $msg" >> $LOGFILE
 }
-
 
 function detect_os()
 {
@@ -83,10 +84,10 @@ function prep_to_build()
 {
   if [ "$OS_TYPEi" == $REDHAT ]; then
     yum update
-    yum install -y git automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r` libxml2-devel python-lxml
+    yum install -y git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r` libxml2-devel python-lxml sipcalc wget
   elif [ "$OS_TYPE" == $UBUNTU ]; then
     apt-get update
-    apt-get install -y git automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r` libxml2-dev python-lxml
+    apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r` libxml2-dev python-lxml sipcalc wget
   fi
 }
 
@@ -94,11 +95,11 @@ function build_vrouter()
 {
   rm -rf ~/vrouter-build
   mkdir -p vrouter-build/tools
-  cd ~/vrouter-build && `git clone -b $ocver https://github.com/Juniper/contrail-vrouter` && `mv contrail-vrouter vrouter`
-  cd ~/vrouter-build/tools && `git clone https://github.com/Juniper/contrail-build` && `mv contrail-build build`
-  cd ~/vrouter-build/tools && `git clone -b $ocver https://github.com/Juniper/contrail-sandesh` && `mv contrail-sandesh sandesh` 
+  cd ~/vrouter-build && `git clone -b $ocver https://github.com/Juniper/contrail-vrouter vrouter`
+  cd ~/vrouter-build/tools && `git clone https://github.com/Juniper/contrail-build build`
+  cd ~/vrouter-build/tools && `git clone -b $ocver https://github.com/Juniper/contrail-sandesh sandesh`
   cp ~/vrouter-build/tools/build/SConstruct ~/vrouter-build
-  cd ~/vrouter-build && `scons vrouter` 2>&1
+  cd ~/vrouter-build && `scons vrouter`
 }
 
 function modprobe_vrouter()
@@ -142,11 +143,11 @@ function modprobe_vrouter()
 
 function setup_vhost()
 {
-  if [ -z $MINION_OVERLAY_NET_IP ]; then 
-     log_info_msg "MINION_OVERLAY_NET_IP is empty. Please check the interface for IP. If it is already assigned to vhost0, there will be no change required"
+  phy_itf=$(ip a |grep $MINION_OVERLAY_NET_IP | awk '{print $7}')
+  if [ "$phy_itf" == $VHOST ]; then
+     log_info_msg "MINION_OVERLAY_NET_IP is already on $VHOST. No change required on the this interface"
      return
   fi
-  phy_itf=$(ip a |grep $MINION_OVERLAY_NET_IP | awk '{print $7}')
   mask=$(ifconfig $phy_itf | grep -i '\(netmask\|mask\)' | awk '{print $4}' | cut -d ":" -f 2)
   mac=$(ifconfig $phy_itf | grep HWaddr | awk '{print $5}')
   if [ "$OS_TYPE" == $REDHAT ]; then
@@ -199,9 +200,6 @@ function setup_vhost()
 
 function setup_opencontrail_kubelet()
 {
-  rm -rf ~/ockube
-  mkdir ockube
-  cd ~/ockube && `git clone -b vrouter-manifest https://github.com/Juniper/contrail-kubernetes` && cd
   if [ "$OS_TYPE" == $UBUNTU ]; then
      apt-get install -y python-setuptools
      apt-get install -y python-pip
@@ -219,7 +217,7 @@ function setup_opencontrail_kubelet()
   if [ ! -z "$ockub" ]; then
      pip uninstall -y opencontrail-kubelet
   fi
-  (cd ~/ockube/contrail-kubernetes/scripts/opencontrail-kubelet; python setup.py install) && cd
+  `pip install opencontrail-kubelet`
   
   mkdir -p /usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail
   if [ ! -f /usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail/config ]; then
@@ -262,6 +260,7 @@ function update_restart_kubelet()
   fi
   sed -i '/KUBELET_OPTS/d' /etc/default/kubelet
   echo 'KUBELET_OPTS="'$kubecf'"' > /etc/default/kubelet
+  service kubelet restart
 }
 
 function stop_kube_svcs()
@@ -269,8 +268,12 @@ function stop_kube_svcs()
    if [[ -n `pidof kube-proxy` ]]; then
       log_info_msg "Kube-proxy is running. Opencontrail does not use kube-proxy as it provides the function. Stoping it."
       `service kube-proxy stop`
-      `update-rc.d -f kube-proxy disable`
-      `update-rc.d -f kube-proxy remove`
+      if [ "$OS_TYPE" == $UBUNTU ]; then
+         `update-rc.d -f kube-proxy disable`
+         `update-rc.d -f kube-proxy remove`
+      else
+         `chkconfig kube-proxy off`
+      fi
    fi
 
    if [[ -n `pidof flanneld` ]]; then
@@ -280,8 +283,12 @@ function stop_kube_svcs()
       if [ $intf == "flannel0" ]; then
          `ifconfig $intf down`
          `ifdown $intf`
-         `update-rc.d -f flanneld disable`
-         `update-rc.d -f flanneld remove`
+         if [ "$OS_TYPE" == $UBUNTU ]; then
+            `update-rc.d -f flanneld disable`
+            `update-rc.d -f flanneld remove`
+         else
+            `chkconfig flanneld off`
+         fi
       fi
    fi
 }
@@ -292,30 +299,70 @@ function update_vhost_pre_up()
   if [ "$OS_TYPE" == $REDHAT ]; then
      preup="/etc/sysconfig/network-scripts"
   fi
-  cp ~/ockube/contrail-kubernetes/scripts/opencontrail-install/ifup-vhost $preup
+  wget -P $preup https://raw.githubusercontent.com/Juniper/contrail-kubernetes/vrouter-manifest/scripts/opencontrail-install/ifup-vhost
   `chmod +x $preup/ifup-vhost`
 }
 
 function vrouter_agent_startup()
 {
-  rm -rf ~/vragent
-  mkdir vragent
-  cd ~/vragent  && `git clone -b $ocver https://github.com/Juniper/contrail-controller` && cd 
   etcc="/etc/contrail"
   if [ ! -f $etcc ]; then
        mkdir -p $etcc
   fi
-  cp ~/vragent/contrail-controller/src/vnsw/agent/contrail-vrouter-agent.conf $etcc
+  wget -P $etcc https://raw.githubusercontent.com/Juniper/contrail-controller/$ocver/src/vnsw/agent/contrail-vrouter-agent.conf
+  def=$(ip route  | grep $OPENCONTRAIL_VROUTER_INTF | grep -o default)
+  cidr=$(sipcalc $OPENCONTRAIL_VROUTER_INTF | grep "Network mask (bits)" | awk '{print $5}')
+  if [ -z $cidr ]; then
+    # check on vhost0 assuming its a rerun
+    cidr=$(sipcalc $VHOST | grep "Network mask (bits)" | awk '{print $5}')
+  fi
+  if [ -z $cidr ]; then
+    log_error_msg "Unable to get CIDR for networks on $OPENCONTRAIL_VROUTER_INTF and $VHOST. Please check interface and network and rerun"
+    log_error_msg "Proceeding with CIDR unkown. Correct this issue by manually editing contrail-vrouter-agent.con for IP"
+  fi
+  vrac="$etcc/contrail-vrouter-agent.conf"
+  via="via"
+  ur="Usable range"
+  if [ -f $vrac ]; then
+      sed -i 's/# tunnel_type=/tunnel_type=MPLSoUDP/g' $vrac
+      sed -i 's/# server=127.0.0.1/server='$OPENCONTRAIL_CONTROLLER_IP'/g' $vrac
+      sed -i 's/# max_control_nodes=1/max_control_nodes=1/g' $vrac
+      sed -i 's/# type=kvm/type=docker/g' $vrac
+      sed -i 's/# control_network_ip=/control_network_ip='$MINION_OVERLAY_NET_IP'/g' $vrac
+      sed -i 's/# name=vhost0/name=vhost0/g' $vrac
+      sed -i 's,# ip=10.1.1.1/24,ip='$MINION_OVERLAY_NET_IP/$cidr',g' $vrac
+      if [ "$def" == "default" ]; then
+         defgw=$(ip route | grep $OPENCONTRAIL_VROUTER_INTF | grep $def | awk 'NR==1{print $3}')
+      else
+         defgw=$(ip route | grep $OPENCONTRAIL_VROUTER_INTF | grep '$via' | awk 'NR==1{print $3}')
+      fi
+      if [ -z $defgw ]; then
+         # assuming .1 is the gw for the range which is what kubernetes network provider
+         # assigns. If found different we need to change it
+         defgw=$(sipcalc $OPENCONTRAIL_VROUTER_INTF | grep '$ur' | awk '{print $4}')
+      fi
+      if [ -z $defgw ]; then
+         # check IP on VHOST
+         vip=$(ip a | grep $VHOST | grep inet | awk -F/ '{print $1}' | awk '{print $2}')
+         if [ $vip == $MINION_OVERLAY_NET_IP ]; then
+            defgw=$(ip route | grep $VHOST | grep $via | awk 'NR==1{print $3}')
+         fi
+      fi
+      sed -i 's,# gateway=10.1.1.254,gateway='$defgw',g' $vrac
+      sed -i 's/# physical_interface=vnet0/physical_interface='$OPENCONTRAIL_VROUTER_INTF'/g' $vrac
+      sed -i 's/compute_node_address = 10.204.216.28/#compute_node_address = /g' $vrac
+  fi
   if [ ! -f /etc/kubernetes/manifests ]; then
      mkdir -p /etc/kubernetes/manifests
   fi
-  vragent="~/ockube/contrail-kubernetes/cluster/contrail-vrouter-agent.manifest"
-  vrimg=$(cat $vragent | grep image | awk -F, '{print $1}' | awk '{print $2}')
+  wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-kubernetes/vrouter-manifest/cluster/contrail-vrouter-agent.manifest
+  vragentfile=/tmp/contrail-vrouter-agent.manifest
+  vrimg=$(cat $vragentfile | grep image | awk -F, '{print $1}' | awk '{print $2}')
   `docker pull $vrimg`
-  cp ~/ockube/contrail-kubernetes/cluster/contrail-vrouter-agent.manifest /etc/kubernetes/manifests
+  mv /tmp/contrail-vrouter-agent.manifest /etc/kubernetes/manifests
 }
 
-function verify_setup()
+function verify_vhost_setup()
 {
   ifup $VHOST
   status=$(ping -c 1 -w 1 -W 1 -n $OPENCONTRAIL_CONTROLLER_IP | grep packet | awk '{print $6}' | cut -c1)
@@ -326,16 +373,38 @@ function verify_setup()
   fi
 }
 
+function provision_vrouter()
+{
+  stderr="/tmp/stderr"
+  host=`hostname -s`
+  wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-controller/$ocver/src/config/utils/provision_vrouter.py
+  `chmod +x /tmp/provision_vrouter.py`
+  /tmp/provision_vrouter.py --host_name $host --host_ip $MINION_OVERLAY_NET_IP --api_server_ip $OPENCONTRAIL_CONTROLLER_IP --oper add 2> >( cat <() > $stderr)
+  if [ -z $stderr ]; then
+     log_info_msg "Provisioning of vrouter successful"
+  else
+     log_info_msg "Provisioning vrouter failed. Please check contrail-api and network to api server. It could also a duplicate entry"
+  fi
+  wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-controller/$ocver/src/config/utils/provision_encap.py
+  `chmod +x /tmp/provision_encap.py`
+  /tmp/provision_encap.py --encap_priority MPLSoUDP,MPLSoGRE,VXLAN --api_server_ip $OPENCONTRAIL_CONTROLLER_IP --admin_user myuser --admin_password mypass --oper mod 2> >( cat <() > $stderr)
+  if [ -z $stderr ]; then
+     log_info_msg "Provisioning of encap priority successful"
+  else
+     log_info_msg "Provisioning of encap priority failued. Please check contrail-api and network to api server. It could also a duplicate entry"
+  fi
+}
+
 function cleanup()
 {
   if [ "$OS_TYPE" == $REDHAT ]; then
-    yum remove -y git flex bison gcc gcc-c++ boost boost-devel scons libxml2-devel kernel-devel-`uname -r`
+    yum remove -y git flex bison gcc gcc-c++ boost boost-devel scons libxml2-devel kernel-devel-`uname -r` sipcalc automake make wget
   elif [ "$OS_TYPE" == $UBUNTU ]; then
-    apt-get remove -y git flex bison g++ gcc make libboost-all-dev scons libxml2-dev linux-headers-`uname -r`
+    apt-get remove -y git flex bison g++ gcc make libboost-all-dev scons libxml2-dev linux-headers-`uname -r` sipcalc automake make wget
   fi
   rm -rf ~/vrouter-build
-  rm -rf ~/ockube
-  rm -rf ~/vragent
+  rm -rf /tmp/provision_vrouter.py
+  rm -rf /tmp/provision_encap.py
 }
 
 
@@ -344,15 +413,17 @@ function main()
    detect_os
    prep_to_build
    build_vrouter
-   modprobe_vrouter
    setup_vhost
+   modprobe_vrouter
    setup_opencontrail_kubelet
    update_restart_kubelet
    stop_kube_svcs
    update_vhost_pre_up
+   verify_vhost_setup
    vrouter_agent_startup
-   verify_setup
+   provision_vrouter
    cleanup
+   log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
 }
 
 main
