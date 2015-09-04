@@ -260,7 +260,7 @@ function update_restart_kubelet()
   fi
   source /etc/default/kubelet;
 
-  if [ grep --quiet KUBELET_OPTS /etc/default/kubelet ]; then
+  if grep --quiet KUBELET_OPTS /etc/default/kubelet; then
       kubecf=`echo $KUBELET_OPTS`
   else
       kubecf=`echo $DAEMON_ARGS`
@@ -280,7 +280,7 @@ function update_restart_kubelet()
   fi
   sed -i '/KUBELET_OPTS/d' /etc/default/kubelet
 
-  if [ grep --quiet KUBELET_OPTS /etc/default/kubelet ]; then
+  if grep --quiet KUBELET_OPTS /etc/default/kubelet; then
       echo 'KUBELET_OPTS="'$kubecf'"' > /etc/default/kubelet
   else # In AWS like setups
       echo 'DAEMON_ARGS="'$kubecf'"' > /etc/default/kubelet
