@@ -9,9 +9,12 @@ source /etc/contrail/opencontrail-rc
 
 readonly PROGNAME=$(basename "$0")
 
+
 ocver=$1
 
-LOGFILE=/var/log/contrail/provision_minion.log
+LOG_FILE=/var/log/contrail/provision_minion.log
+exec > >(tee $LOG_FILE) 2>&1
+
 OS_TYPE="none"
 REDHAT="redhat"
 UBUNTU="ubuntu"
@@ -55,17 +58,17 @@ fi
 
 log_error_msg() {
     msg=$1
-    echo "$(timestamp): ERROR: $msg" >> $LOGFILE
+    echo "$(timestamp): ERROR: $msg"
 }
 
 log_warn_msg() {
     msg=$1
-    echo "$(timestamp): WARNING: $msg" >> $LOGFILE
+    echo "$(timestamp): WARNING: $msg"
 }
 
 log_info_msg() {
     msg=$1
-    echo "$(timestamp): INFO: $msg" >> $LOGFILE
+    echo "$(timestamp): INFO: $msg"
 }
 
 function detect_os()
@@ -99,20 +102,25 @@ function build_vrouter()
   cd ~/vrouter-build/tools && `git clone https://github.com/Juniper/contrail-build build`
   cd ~/vrouter-build/tools && `git clone -b $ocver https://github.com/Juniper/contrail-sandesh sandesh`
   cp ~/vrouter-build/tools/build/SConstruct ~/vrouter-build
-  cd ~/vrouter-build && `scons vrouter`
+  cd ~/vrouter-build && `scons vrouter` 2>&1
 }
 
 function modprobe_vrouter()
 {
   vr=$(lsmod | grep vrouter | awk '{print $1}')
+  phy_itf=$(ip a |grep $MINION_OVERLAY_NET_IP | awk '{print $7}')
+  def=$(ip route  | grep $OPENCONTRAIL_VROUTER_INTF | grep -o default)
   if [ "$vr" == $VROUTER ]; then
-     `rmmod vrouter`
-      if [ "$OS_TYPE" == $REDHAT ]; then
-         rm -rf /lib/modules/`uname -r`/extra/net/vrouter
-      elif [ "$OS_TYPE" == $UBUNTU ]; then
-         rm -rf /lib/modules/`uname -r`/updates/dkms/vrouter.ko
-      fi
+    if [ "$def" != "default" ] && [ "$phy_itf" != $VHOST ]; then
+      `rmmod vrouter`
+    fi
+    if [ "$OS_TYPE" == $REDHAT ]; then
+        rm -rf /lib/modules/`uname -r`/extra/net/vrouter
+    elif [ "$OS_TYPE" == $UBUNTU ]; then
+        rm -rf /lib/modules/`uname -r`/updates/dkms/vrouter.ko
+    fi
   fi
+  #Fresh install
   if [ "$OS_TYPE" == $REDHAT ]; then
      mkdir -p /lib/modules/`uname -r`/extra/net/vrouter
      mv ~/vrouter-build/vrouter/vrouter.ko /lib/modules/`uname -r`/extra/net/vrouter
@@ -177,10 +185,11 @@ function setup_vhost()
       # move any routes on intf to vhost0
       if [ -f /etc/sysconfig/network-scripts/route-$phy_itf ]; then
          mv /etc/sysconfig/network-scripts/route-$phy_itf /etc/sysconfig/network-scripts/route-$VHOST
-         sed -i 's/$phy_itf/$VHOST/g' /etc/sysconfig/network-scripts/route-$VHOST
+         sed -i 's/'$phy_itf'/'$VHOST'/g' /etc/sysconfig/network-scripts/route-$VHOST
       fi
       if [ "$def" == "default" ]; then
-         grep -q 'default via $defgw dev $VHOST' /etc/sysconfig/network-scripts/route-$VHOST || echo "default via $defgw dev $VHOST" >> /etc/sysconfig/network-scripts/route-$VHOST
+         sed -i '/GATEWAY='$defgw'/d' $intf
+         grep -q 'GATEWAY=$defgw' $ivhost0 || echo "GATEWAY=$defgw" >> $ivhost0
       fi
     fi
   elif [ "$OS_TYPE" == $UBUNTU ]; then
@@ -205,7 +214,8 @@ function setup_vhost()
         grep -q 'address $MINION_OVERLAY_NET_IP' $itf || echo "    address $MINION_OVERLAY_NET_IP" >> $itf
         grep -q 'network_name application' $itf || echo "    network_name application" >> $itf
         if [ "$def" == "default" ]; then
-              grep -q 'up route add default gw $defgw dev $VHOST' $itf || echo "    up route add default gw $defgw dev $VHOST" >> $itf
+              sed -i '/gateway '$defgw'/d' $itf
+              grep -q 'gateway $defgw' $itf || echo "    gateway $defgw" >> $itf
         fi
         grep -q "$rtv" $itf || echo "    $rtv" >> $itf
      fi
@@ -217,21 +227,15 @@ function setup_opencontrail_kubelet()
   if [ "$OS_TYPE" == $UBUNTU ]; then
      apt-get install -y python-setuptools
      apt-get install -y python-pip
-     apt-get install -y software-properties-common
-     add-apt-repository -y ppa:opencontrail/ppa
-     add-apt-repository -y ppa:opencontrail/r2.20
-     apt-get update
-     apt-get install -y python-contrail python-contrail-vrouter-api 
   elif [ "$OS_TYPE" == $REDHAT ]; then
      yum install -y python-setuptools
      yum install -y python-pip
-     #TODO get vn-api and python-contrail-vrouter-api
   fi
   ockub=$(pip freeze | grep kubelet | awk -F= '{print $1}')
   if [ ! -z "$ockub" ]; then
      pip uninstall -y opencontrail-kubelet
   fi
-  `pip install opencontrail-kubelet`
+  (exec pip install --upgrade opencontrail-kubelet)
   
   mkdir -p /usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail
   if [ ! -f /usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail/config ]; then
@@ -258,14 +262,20 @@ function update_restart_kubelet()
   if [ ! -f /etc/kubernetes/manifests ]; then
      mkdir -p /etc/kubernetes/manifests
   fi
-  source /etc/default/kubelet;
-
-  if grep --quiet KUBELET_OPTS /etc/default/kubelet; then
-      kubecf=`echo $KUBELET_OPTS`
-  else
-      kubecf=`echo $DAEMON_ARGS`
+  # Note: KUBELET_OPTS is used in Ubuntu
+  #       DAEMON_ARGS is ised in AWS
+  source /etc/default/kubelet
+  if [ ! -z "$KUBELET_OPTS" ]; then
+     kubecf=`echo $KUBELET_OPTS`
+  elif [ ! -z "$DAEMON_ARGS" ]; then
+     kubecf=`echo $DAEMON_ARGS`
   fi
+
+  # kubelet runtime args are imp. Make sure it is up
   kubepid=$(ps -ef|grep kubelet |grep manifests | awk '{print $2}')
+  if [ -z $kubepid ]; then
+    service restart kubelet
+  fi
   if [[ $kubepid != `pidof kubelet` ]]; then
       mkdir -p /etc/kubernetes/manifests
       kubecf="$kubecf $kubeappendmf"
@@ -278,12 +288,11 @@ function update_restart_kubelet()
   if [[ $kubepid != `pidof kubelet` ]]; then
      kubecf="$kubecf $kubeappendoc"
   fi
-  sed -i '/KUBELET_OPTS/d' /etc/default/kubelet
 
-  if grep --quiet KUBELET_OPTS /etc/default/kubelet; then
-      echo 'KUBELET_OPTS="'$kubecf'"' > /etc/default/kubelet
-  else # In AWS like setups
-      echo 'DAEMON_ARGS="'$kubecf'"' > /etc/default/kubelet
+  if [ ! -z "$KUBELET_OPTS" ]; then
+    echo 'KUBELET_OPTS="'$kubecf'"' > /etc/default/kubelet
+  elif [ ! -z "$DAEMON_ARGS" ]; then
+    echo 'DAEMON_ARGS="'$kubecf'"' > /etc/default/kubelet
   fi
   service kubelet restart
 }
@@ -350,7 +359,7 @@ function vrouter_agent_startup()
   ur="Usable range"
   if [ -f $vrac ]; then
       sed -i 's/# tunnel_type=/tunnel_type=MPLSoUDP/g' $vrac
-      sed -i 's/# server=127.0.0.1/server='$OPENCONTRAIL_CONTROLLER_IP'/g' $vrac
+      sed -i 's/# server=10.0.0.1 10.0.0.2/server='$OPENCONTRAIL_CONTROLLER_IP'/g' $vrac
       sed -i 's/# type=kvm/type=docker/g' $vrac
       sed -i 's/# control_network_ip=/control_network_ip='$MINION_OVERLAY_NET_IP'/g' $vrac
       sed -i 's/# name=vhost0/name=vhost0/g' $vrac
@@ -411,7 +420,7 @@ function provision_vrouter()
   fi
   wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-controller/$ocver/src/config/utils/provision_encap.py
   `chmod +x /tmp/provision_encap.py`
-  /tmp/provision_encap.py --encap_priority MPLSoUDP,MPLSoGRE,VXLAN --api_server_ip $OPENCONTRAIL_CONTROLLER_IP --admin_user myuser --admin_password mypass --oper mod 2> >( cat <() > $stderr)
+  /tmp/provision_encap.py --encap_priority MPLSoUDP,MPLSoGRE,VXLAN --api_server_ip $OPENCONTRAIL_CONTROLLER_IP --admin_user myuser --admin_password mypass --oper add 2> >( cat <() > $stderr)
   if [ -z $stderr ]; then
      log_info_msg "Provisioning of encap priority successful"
   else
@@ -430,13 +439,6 @@ function cleanup()
   rm -rf /tmp/provision_vrouter.py
   rm -rf /tmp/provision_encap.py
 }
-
-function misc()
-{
-    ifup vhost0
-    ip addr del 172.20.0.55/24 dev eth0
-}
-
 
 function main()
 {
