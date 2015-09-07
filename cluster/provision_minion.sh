@@ -9,43 +9,7 @@ source /etc/contrail/opencontrail-rc
 
 readonly PROGNAME=$(basename "$0")
 
-
 ocver=$1
-
-LOG_FILE=/var/log/contrail/provision_minion.log
-exec > >(tee $LOG_FILE) 2>&1
-
-OS_TYPE="none"
-REDHAT="redhat"
-UBUNTU="ubuntu"
-VROUTER="vrouter"
-VHOST="vhost0"
-if [[ -z $ocver ]]; then
-   ocver="R2.20"
-fi
-rcfile="/etc/contrail/opencontrail-rc"
-if [[ -z $OPENCONTRAIL_CONTROLLER_IP ]]; then
-   kube_api_port=$(cat /etc/default/kubelet | grep -o 'api-servers=[^;]*' | awk -F// '{print $2}' | awk '{print $1}')
-   kube_api_ip=$(echo $kube_api_port| awk -F':' '{print $1}')
-   OPENCONTRAIL_CONTROLLER_IP=$kube_api_ip
-   echo "OPENCONTRAIL_CONTROLLER_IP=$kube_api_ip" >> $rcfile
-fi
-if [[ -z $OPENCONTRAIL_VROUTER_INTF ]];then
-   OPENCONTRAIL_VROUTER_INTF="eth0"
-   echo "OPENCONTRAIL_VROUTER_INTF="eth0"" >> $rcfile
-fi
-MINION_OVERLAY_NET_IP=$(/sbin/ifconfig $OPENCONTRAIL_VROUTER_INTF | grep "inet addr" | awk -F: '{print $2}' | awk '{print $1}')
-if [ -z $MINION_OVERLAY_NET_IP ]; then
-   # Check if vhost is already up with the IP
-   MINION_OVERLAY_NET_IP=$(ip a | grep vhost0 | grep inet | awk -F/ '{print $1}' | awk '{print $2}')
-fi
-if [ -z $MINION_OVERLAY_NET_IP ]; then
-     msg="Unable to get an IP address on the $OPENCONTRAIL_VROUTER_INTF or vhost0 interface.
-         Please check the interface and IP address assignement and restart provision"
-    log_error_msg "$msg"
-    echo "$msg"
-    exit
-fi
 
 timestamp() {
     date
@@ -71,6 +35,56 @@ log_info_msg() {
     echo "$(timestamp): INFO: $msg"
 }
 
+log_info_msg "Start Provisioning VROUTER kernel module and agent in container"
+
+LOG_FILE=/var/log/contrail/provision_minion.log
+exec &> >(tee -a "$LOG_FILE")
+
+OS_TYPE="none"
+REDHAT="redhat"
+UBUNTU="ubuntu"
+VROUTER="vrouter"
+VHOST="vhost0"
+
+if [[ -z $ocver ]]; then
+   ocver="R2.20"
+fi
+
+flag=false
+rcfile="/etc/contrail/opencontrail-rc"
+rcdir=`dirname "$rcfile"`
+if [ ! -f "$rcdir" ]; then
+    mkdir -p "$rcdir"
+fi
+if [[ -z $OPENCONTRAIL_CONTROLLER_IP ]]; then
+   kube_api_port=$(cat /etc/default/kubelet | grep -o 'api-servers=[^;]*' | awk -F// '{print $2}' | awk '{print $1}')
+   kube_api_ip=$(echo $kube_api_port| awk -F':' '{print $1}')
+   OPENCONTRAIL_CONTROLLER_IP=$kube_api_ip
+   echo "OPENCONTRAIL_CONTROLLER_IP=$kube_api_ip" >> $rcfile
+fi
+if [[ -z $OPENCONTRAIL_VROUTER_INTF ]];then
+   OPENCONTRAIL_VROUTER_INTF="eth0"
+   echo "OPENCONTRAIL_VROUTER_INTF="eth0"" >> $rcfile
+   flag=true
+fi
+
+if [[ "$flag" == true ]]; then
+   source "$rcfile"
+fi
+
+MINION_OVERLAY_NET_IP=$(/sbin/ifconfig $OPENCONTRAIL_VROUTER_INTF | grep "inet addr" | awk -F: '{print $2}' | awk '{print $1}')
+if [ -z $MINION_OVERLAY_NET_IP ]; then
+   # Check if vhost is already up with the IP
+   MINION_OVERLAY_NET_IP=$(ip a | grep vhost0 | grep inet | awk -F/ '{print $1}' | awk '{print $2}')
+fi
+if [ -z $MINION_OVERLAY_NET_IP ]; then
+     msg="Unable to get an IP address on the $OPENCONTRAIL_VROUTER_INTF or vhost0 interface.
+         Please check the interface and IP address assignement and restart provision"
+    log_error_msg "$msg"
+    echo "$msg"
+    exit
+fi
+
 function detect_os()
 {
    OS=`uname`
@@ -90,6 +104,8 @@ function prep_to_build()
     yum install -y git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r` libxml2-devel python-lxml sipcalc wget
   elif [ "$OS_TYPE" == $UBUNTU ]; then
     apt-get update
+    # in case of an interrupt during execution of apt-get
+    dpkg --configure -a
     apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r` libxml2-dev python-lxml sipcalc wget
   fi
 }
@@ -330,19 +346,45 @@ function stop_kube_svcs()
 function update_vhost_pre_up()
 {
   preup="/etc/network/if-pre-up.d"
+  ifup_file="$preup/ifup-vhost"
+
   if [ "$OS_TYPE" == $REDHAT ]; then
      preup="/etc/sysconfig/network-scripts"
+     ifup_file="$preup/ifup-vhost"
+  fi
+
+  if [ -f "$ifup_file" ]; then
+    rm -f "$ifup_file"
   fi
   wget -P $preup https://raw.githubusercontent.com/Juniper/contrail-kubernetes/vrouter-manifest/scripts/opencontrail-install/ifup-vhost
   `chmod +x $preup/ifup-vhost`
 }
 
+function prereq_vrouter_agent()
+{
+  docpid=`pidof docker`
+  if [ -z $docpid ]; then
+   service docker restart
+   docpid=`pidof docker`
+  fi
+
+  if  [ -z $docpid ]; then
+    (exec /usr/bin/docker -d)&
+  fi
+}
+
 function vrouter_agent_startup()
 {
   etcc="/etc/contrail"
+  vra_file="$etcc/contrail-vrouter-agent.conf"
   if [ ! -f $etcc ]; then
        mkdir -p $etcc
   fi
+
+  if [ -f "$vra_file" ]; then
+    rm -f "$vra_file"
+  fi
+
   wget -P $etcc https://raw.githubusercontent.com/Juniper/contrail-controller/$ocver/src/vnsw/agent/contrail-vrouter-agent.conf
   def=$(ip route  | grep $OPENCONTRAIL_VROUTER_INTF | grep -o default)
   cidr=$(sipcalc $OPENCONTRAIL_VROUTER_INTF | grep "Network mask (bits)" | awk '{print $5}')
@@ -360,6 +402,7 @@ function vrouter_agent_startup()
   if [ -f $vrac ]; then
       sed -i 's/# tunnel_type=/tunnel_type=MPLSoUDP/g' $vrac
       sed -i 's/# server=10.0.0.1 10.0.0.2/server='$OPENCONTRAIL_CONTROLLER_IP'/g' $vrac
+      sed -i 's/# collectors=127.0.0.1:8086/collectors='$OPENCONTRAIL_CONTROLLER_IP':8086/g' $vrac
       sed -i 's/# type=kvm/type=docker/g' $vrac
       sed -i 's/# control_network_ip=/control_network_ip='$MINION_OVERLAY_NET_IP'/g' $vrac
       sed -i 's/# name=vhost0/name=vhost0/g' $vrac
@@ -388,6 +431,10 @@ function vrouter_agent_startup()
   if [ ! -f /etc/kubernetes/manifests ]; then
      mkdir -p /etc/kubernetes/manifests
   fi
+  vra_manifest="/etc/kubernetes/manifests/contrail-vrouter-agent.manifest"
+  if [ -f "$vra_manifest" ]; then
+     rm -f "$vra_manifest"
+  fi
   wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-kubernetes/vrouter-manifest/cluster/contrail-vrouter-agent.manifest
   vragentfile=/tmp/contrail-vrouter-agent.manifest
   vrimg=$(cat $vragentfile | grep image | awk -F, '{print $1}' | awk '{print $2}')
@@ -410,6 +457,10 @@ function provision_vrouter()
 {
   stderr="/tmp/stderr"
   host=`hostname -s`
+  pr_vr="/tmp/provision_vrouter.py"
+  if [ -f "$pr_vr" ]; then
+     rm -f "$pr_vr"
+  fi
   wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-controller/$ocver/src/config/utils/provision_vrouter.py
   `chmod +x /tmp/provision_vrouter.py`
   /tmp/provision_vrouter.py --host_name $host --host_ip $MINION_OVERLAY_NET_IP --api_server_ip $OPENCONTRAIL_CONTROLLER_IP --oper add 2> >( cat <() > $stderr)
@@ -418,13 +469,17 @@ function provision_vrouter()
   else
      log_info_msg "Provisioning vrouter failed. Please check contrail-api and network to api server. It could also a duplicate entry"
   fi
+  pr_en="/tmp/provision_encap.py"
+  if [ -f "$pr_en" ]; then
+     rm -f "$pr_en"
+  fi
   wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-controller/$ocver/src/config/utils/provision_encap.py
   `chmod +x /tmp/provision_encap.py`
   /tmp/provision_encap.py --encap_priority MPLSoUDP,MPLSoGRE,VXLAN --api_server_ip $OPENCONTRAIL_CONTROLLER_IP --admin_user myuser --admin_password mypass --oper add 2> >( cat <() > $stderr)
   if [ -z $stderr ]; then
      log_info_msg "Provisioning of encap priority successful"
   else
-     log_info_msg "Provisioning of encap priority failued. Please check contrail-api and network to api server. It could also a duplicate entry"
+     log_info_msg "Provisioning of encap priority failed. Please check contrail-api and network to api server. It could also a duplicate entry"
   fi
 }
 
@@ -440,6 +495,32 @@ function cleanup()
   rm -rf /tmp/provision_encap.py
 }
 
+function verify_vrouter_agent()
+{
+  status=$(lsmod |grep vrouter | awk '{print $3}')
+  if [ $status != 1 ]; then
+    log_error_msg "Vrouter agent not launched successfuly. Please check contrail-vrouter-agent docker and vrouter kernel module"
+    return
+  fi
+  vra_introspect_status=$(netstat -natp | grep 8085 | grep contrail | awk '{print $6}')
+  vra_api_status=$(netstat -natp | grep 9090 | grep contrail | awk '{print $6}')
+  vra_thrift_status=$(netstat -natp | grep 9091 | grep contrail | awk '{print $6}')
+  if [[ $vra_introspect_status && $vra_api_status && $vra_thrift_status ]]; then
+     log_info_msg "Vrouter agent is up and running"
+  else
+     log_error_msg "Issue with vrouter agent container. Please check vrouter agent configuration and the contrainer"
+  fi
+
+  vra_ctrl_status=$(netstat -natp | grep 5269 | grep contrail | awk '{print $6}')
+  vra_coll_status=$(netstat -natp | grep 8086 | grep contrail | awk '{print $6}')
+  vra_dns_status=$(netstat -natp | grep 53 | grep contrail | awk '{print $6}')
+  if [[ $vra_ctrl_status && $vra_coll_status && $vra_dns_status ]]; then
+      log_info_msg "Vrouter agent is successfully connected to contrail-control, contrail-collector and skyDNS"
+  else
+      log_error_msg "Vrouter agent is not connected to either contrail-control(port-5269), contrail-collector(port-8086) OR skyDNS(port-53). Please check services and connectivity"
+  fi
+}
+
 function main()
 {
    detect_os
@@ -452,9 +533,11 @@ function main()
    stop_kube_svcs
    update_vhost_pre_up
    verify_vhost_setup
+   prereq_vrouter_agent
    vrouter_agent_startup
    provision_vrouter
    cleanup
+   verify_vrouter_agent
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
 }
 
