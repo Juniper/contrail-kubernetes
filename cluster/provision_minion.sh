@@ -113,7 +113,7 @@ function prep_to_build()
 function build_vrouter()
 {
   rm -rf ~/vrouter-build
-  mkdir -p vrouter-build/tools
+  mkdir -p ~/vrouter-build/tools
   cd ~/vrouter-build && `git clone -b $ocver https://github.com/Juniper/contrail-vrouter vrouter`
   cd ~/vrouter-build/tools && `git clone https://github.com/Juniper/contrail-build build`
   cd ~/vrouter-build/tools && `git clone -b $ocver https://github.com/Juniper/contrail-sandesh sandesh`
