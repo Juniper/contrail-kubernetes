@@ -92,6 +92,14 @@ function provision_linklocal() {
     master $cmd
 }
 
+# Provision vrouter encap order
+function provision_vrouter_encap() {
+    cmd='docker ps | grep contrail-api | grep -v pause | awk "{print \"docker exec \" \$1 \" curl -s https://raw.githubusercontent.com/Juniper/contrail-controller/R2.20/src/config/utils/provision_encap.py -o /tmp/provision_encap.py\"}" | sudo sh'
+    master $cmd
+    cmd='docker ps | grep contrail-api | grep -v pause | awk "{print \"docker exec \" \$1 \" python /tmp/provision_encap.py --api_server_ip `hostname --ip-address` --api_server_port 8082 --encap_priority MPLSoUDP,MPLSoGRE,VXLAN --admin_user myuser --admin_password mypass --oper add\"}" | sudo sh'
+    master $cmd
+}
+
 # Setup kube dns endpoints
 function setup_kube_dns_endpoints() {
     master kubectl --namespace=kube-system create -f /etc/kubernetes/addons/kube-ui/kube-ui-endpoint.yaml || true
@@ -125,6 +133,9 @@ function setup_contrail_master() {
 
     # Provision link-local service to connect to kube-api
     provision_linklocal
+
+    # Provision vrouter encap order
+    provision_vrouter_encap
 
     # Setip kube-dns
     setup_kube_dns_endpoints
