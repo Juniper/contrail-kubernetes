@@ -38,7 +38,7 @@ log_info_msg() {
 log_info_msg "Start Provisioning VROUTER kernel module and agent in container"
 
 LOG_FILE=/var/log/contrail/provision_minion.log
-exec &> >(tee -a "$LOG_FILE")
+exec 2>&1 &> >(tee -a "$LOG_FILE")
 
 OS_TYPE="none"
 REDHAT="redhat"
@@ -118,7 +118,7 @@ function build_vrouter()
   cd ~/vrouter-build/tools && `git clone https://github.com/Juniper/contrail-build build`
   cd ~/vrouter-build/tools && `git clone -b $ocver https://github.com/Juniper/contrail-sandesh sandesh`
   cp ~/vrouter-build/tools/build/SConstruct ~/vrouter-build
-  cd ~/vrouter-build && `scons vrouter` 2>&1
+  cd ~/vrouter-build && scons vrouter 2>&1
 }
 
 function modprobe_vrouter()
@@ -400,6 +400,7 @@ function vrouter_agent_startup()
   via="via"
   ur="Usable range"
   if [ -f $vrac ]; then
+      sed -i 's/log_file=/var/log/contrail/contrail-vrouter-agent.log/#log_file=/var/log/contrail/contrail-vrouter-agent.log/g' $vrac
       sed -i 's/# tunnel_type=/tunnel_type=MPLSoUDP/g' $vrac
       sed -i 's/# server=10.0.0.1 10.0.0.2/server='$OPENCONTRAIL_CONTROLLER_IP'/g' $vrac
       sed -i 's/# collectors=127.0.0.1:8086/collectors='$OPENCONTRAIL_CONTROLLER_IP':8086/g' $vrac
@@ -438,7 +439,7 @@ function vrouter_agent_startup()
   wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-kubernetes/vrouter-manifest/cluster/contrail-vrouter-agent.manifest
   vragentfile=/tmp/contrail-vrouter-agent.manifest
   vrimg=$(cat $vragentfile | grep image | awk -F, '{print $1}' | awk '{print $2}')
-  `docker pull $vrimg`
+  echo $vrimg | xargs -n1 sudo docker pull
   mv /tmp/contrail-vrouter-agent.manifest /etc/kubernetes/manifests  
 }
 
@@ -457,29 +458,11 @@ function provision_vrouter()
 {
   stderr="/tmp/stderr"
   host=`hostname -s`
-  pr_vr="/tmp/provision_vrouter.py"
-  if [ -f "$pr_vr" ]; then
-     rm -f "$pr_vr"
-  fi
-  wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-controller/$ocver/src/config/utils/provision_vrouter.py
-  `chmod +x /tmp/provision_vrouter.py`
-  /tmp/provision_vrouter.py --host_name $host --host_ip $MINION_OVERLAY_NET_IP --api_server_ip $OPENCONTRAIL_CONTROLLER_IP --oper add 2> >( cat <() > $stderr)
+  curl -X POST -H "Content-Type: application/json; charset=UTF-8" -d '{"virtual-router": {"parent_type": "global-system-config", "fq_name": ["default-global-system-config", "'$host'" ], "display_name": "'$host'", "virtual_router_ip_address": "'$MINION_OVERLAY_NET_IP'", "name": "'$host'"}}' http://$OPENCONTRAIL_CONTROLLER_IP:8082/virtual-routers 2> >( cat <() > $stderr)
   if [ -z $stderr ]; then
      log_info_msg "Provisioning of vrouter successful"
   else
      log_info_msg "Provisioning vrouter failed. Please check contrail-api and network to api server. It could also a duplicate entry"
-  fi
-  pr_en="/tmp/provision_encap.py"
-  if [ -f "$pr_en" ]; then
-     rm -f "$pr_en"
-  fi
-  wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-controller/$ocver/src/config/utils/provision_encap.py
-  `chmod +x /tmp/provision_encap.py`
-  /tmp/provision_encap.py --encap_priority MPLSoUDP,MPLSoGRE,VXLAN --api_server_ip $OPENCONTRAIL_CONTROLLER_IP --admin_user myuser --admin_password mypass --oper add 2> >( cat <() > $stderr)
-  if [ -z $stderr ]; then
-     log_info_msg "Provisioning of encap priority successful"
-  else
-     log_info_msg "Provisioning of encap priority failed. Please check contrail-api and network to api server. It could also a duplicate entry"
   fi
 }
 
@@ -492,7 +475,6 @@ function cleanup()
   fi
   rm -rf ~/vrouter-build
   rm -rf /tmp/provision_vrouter.py
-  rm -rf /tmp/provision_encap.py
 }
 
 function verify_vrouter_agent()
