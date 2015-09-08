@@ -498,7 +498,7 @@ function cleanup()
 function verify_vrouter_agent()
 {
   status=$(lsmod |grep vrouter | awk '{print $3}')
-  if [ $status != 1 ]; then
+  if [ "$status" != "1" ]; then
     log_error_msg "Vrouter agent not launched successfuly. Please check contrail-vrouter-agent docker and vrouter kernel module"
     return
   fi
