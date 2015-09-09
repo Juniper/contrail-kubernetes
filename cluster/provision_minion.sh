@@ -407,7 +407,6 @@ function vrouter_agent_startup()
   via="via"
   ur="Usable range"
   if [ -f $vrac ]; then
-      sed -i 's,log_file=/var/log/contrail/contrail-vrouter-agent.log,# log_file=/var/log/contrail/contrail-vrouter-agent.log,g' $vrac
       sed -i 's/# tunnel_type=/tunnel_type=MPLSoUDP/g' $vrac
       sed -i 's/# server=10.0.0.1 10.0.0.2/server='$OPENCONTRAIL_CONTROLLER_IP'/g' $vrac
       sed -i 's/# collectors=127.0.0.1:8086/collectors='$OPENCONTRAIL_CONTROLLER_IP':8086/g' $vrac
