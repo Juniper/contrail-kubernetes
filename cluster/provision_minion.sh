@@ -464,7 +464,8 @@ function provision_vrouter()
   stderr="/tmp/stderr"
   host=`hostname -s`
   curl -X POST -H "Content-Type: application/json; charset=UTF-8" -d '{"virtual-router": {"parent_type": "global-system-config", "fq_name": ["default-global-system-config", "'$host'" ], "display_name": "'$host'", "virtual_router_ip_address": "'$MINION_OVERLAY_NET_IP'", "name": "'$host'"}}' http://$OPENCONTRAIL_CONTROLLER_IP:8082/virtual-routers 2> >( cat <() > $stderr)
-  if [ -z $stderr ]; then
+  err=$(cat $stderr)
+  if [ -z $err ]; then
      log_info_msg "Provisioning of vrouter successful"
   else
      log_error_msg "Error in provisioning vrouter $stderr"
