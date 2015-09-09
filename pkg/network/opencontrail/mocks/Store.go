@@ -71,8 +71,8 @@ func (m *Store) GetByKey(key string) (interface{}, bool, error) {
 
 	return r0, r1, r2
 }
-func (m *Store) Replace(_a0 []interface{}) error {
-	ret := m.Called(_a0)
+func (m *Store) Replace(_a0 []interface{}, _a1 string) error {
+	ret := m.Called(_a0, _a1)
 
 	r0 := ret.Error(0)
 
