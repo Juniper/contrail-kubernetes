@@ -109,7 +109,10 @@ function setup_kube_dns_endpoints() {
 
 # Setup contrail manifest files under kubernetes
 function setup_contrail_manifest_files() {
-    cmd='wget -qO - https://raw.githubusercontent.com/juniper/contrail-kubernetes/master/cluster/manifests.hash | grep -v kube-network-manager | grep -v contrail-vrouter-agent | grep -v provision | awk "{print \"https://raw.githubusercontent.com/juniper/contrail-kubernetes/master/cluster/\"\$1}" | xargs -n1 sudo wget -q --directory-prefix=/etc/contrail/manifests --continue'
+    cmd1='wget -qO - https://raw.githubusercontent.com/juniper/contrail-kubernetes/'
+    cmd2='/cluster/manifests.hash | grep -v kube-network-manager | grep -v contrail-vrouter-agent | grep -v provision | awk "{print \"https://raw.githubusercontent.com/juniper/contrail-kubernetes/'
+    cmd3='/cluster/\"\$1}" | xargs -n1 sudo wget -q --directory-prefix=/etc/contrail/manifests --continue'
+    cmd="$cmd1$OPENCONTRAIL_KUBERNETES_TAG$cmd2$OPENCONTRAIL_KUBERNETES_TAG$cmd3"
     master $cmd
 
     cmd='grep \"image\": /etc/contrail/manifests/* | cut -d "\"" -f 4 | sort -u | xargs -n1 sudo docker pull'

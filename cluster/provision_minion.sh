@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -x
+
 ##############################################################
 # opencontrail-kubernetes minion setup and provisioning script. 
 # For more info, please refer to the following link
