@@ -468,7 +468,7 @@ function provision_vrouter()
   if [ -z $err ]; then
      log_info_msg "Provisioning of vrouter successful"
   else
-     log_error_msg "Error in provisioning vrouter $stderr"
+     log_error_msg "Error in provisioning vrouter $err"
      log_info_msg "Provisioning vrouter failed. Please check contrail-api and network to api server. It could also a duplicate entry"
   fi
 }
