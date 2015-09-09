@@ -511,6 +511,20 @@ function verify_vrouter_agent()
   fi
 }
 
+# Restart kube containers
+function kube_vrouter_restart() {
+    KUBE_PLUGIN=/usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail/opencontrail
+    CONTAINERS=$(docker ps | grep -v "/pause" | grep -v contrail-vrouter-agent | awk '/[0-9a-z]{12} /{print $1;}')
+
+    for i in $CONTAINERS; do
+        NAME=$(docker inspect -f '{{.Name}}' $i)
+        ID=$(docker inspect -f '{{.Id}}' $i)
+        PODNAME=$(echo $NAME | awk '//{split($0, arr, "_"); print arr[3]}')
+        NAMESPACE=$(echo $NAME | awk '//{split($0, arr, "_"); print arr[4]}')
+        $KUBE_PLUGIN setup $NAMESPACE $PODNAME $ID
+    done
+}
+
 function main()
 {
    detect_os
@@ -528,6 +542,7 @@ function main()
    provision_vrouter
    cleanup
    verify_vrouter_agent
+   kube_vrouter_restart
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
 }
 
