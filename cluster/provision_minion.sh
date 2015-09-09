@@ -11,7 +11,8 @@ source /etc/contrail/opencontrail-rc
 
 readonly PROGNAME=$(basename "$0")
 
-ocver=$1
+ocver=$OPENCONTRAIL_TAG
+ockver=$OPENCONTRAIL_KUBERNETES_TAG
 
 timestamp() {
     date
@@ -50,6 +51,10 @@ VHOST="vhost0"
 
 if [[ -z $ocver ]]; then
    ocver="R2.20"
+fi
+
+if [[ -z $ockver ]]; then
+   ockver="master"
 fi
 
 flag=false
@@ -358,7 +363,7 @@ function update_vhost_pre_up()
   if [ -f "$ifup_file" ]; then
     rm -f "$ifup_file"
   fi
-  wget -P $preup https://raw.githubusercontent.com/Juniper/contrail-kubernetes/vrouter-manifest/scripts/opencontrail-install/ifup-vhost
+  wget -P $preup https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/scripts/opencontrail-install/ifup-vhost
   `chmod +x $preup/ifup-vhost`
 }
 
@@ -438,7 +443,7 @@ function vrouter_agent_startup()
   if [ -f "$vra_manifest" ]; then
      rm -f "$vra_manifest"
   fi
-  wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-kubernetes/vrouter-manifest/cluster/contrail-vrouter-agent.manifest
+  wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/cluster/contrail-vrouter-agent.manifest
   vragentfile=/tmp/contrail-vrouter-agent.manifest
   vrimg=$(cat $vragentfile | grep image | awk -F, '{print $1}' | awk '{print $2}')
   echo $vrimg | xargs -n1 sudo docker pull
@@ -461,9 +466,11 @@ function provision_vrouter()
   stderr="/tmp/stderr"
   host=`hostname -s`
   curl -X POST -H "Content-Type: application/json; charset=UTF-8" -d '{"virtual-router": {"parent_type": "global-system-config", "fq_name": ["default-global-system-config", "'$host'" ], "display_name": "'$host'", "virtual_router_ip_address": "'$MINION_OVERLAY_NET_IP'", "name": "'$host'"}}' http://$OPENCONTRAIL_CONTROLLER_IP:8082/virtual-routers 2> >( cat <() > $stderr)
-  if [ -z $stderr ]; then
+  err=$(cat $stderr)
+  if [ -z $err ]; then
      log_info_msg "Provisioning of vrouter successful"
   else
+     log_error_msg "Error in provisioning vrouter $err"
      log_info_msg "Provisioning vrouter failed. Please check contrail-api and network to api server. It could also a duplicate entry"
   fi
 }
