@@ -9,7 +9,8 @@ source /etc/contrail/opencontrail-rc
 
 readonly PROGNAME=$(basename "$0")
 
-ocver=$1
+ocver=$OPENCONTRAIL_TAG
+ockver=$OPENCONTRAIL_KUBERNETES_TAG
 
 timestamp() {
     date
@@ -48,6 +49,10 @@ VHOST="vhost0"
 
 if [[ -z $ocver ]]; then
    ocver="R2.20"
+fi
+
+if [[ -z $ockver ]]; then
+   ockver="master"
 fi
 
 flag=false
@@ -356,7 +361,7 @@ function update_vhost_pre_up()
   if [ -f "$ifup_file" ]; then
     rm -f "$ifup_file"
   fi
-  wget -P $preup https://raw.githubusercontent.com/Juniper/contrail-kubernetes/vrouter-manifest/scripts/opencontrail-install/ifup-vhost
+  wget -P $preup https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/scripts/opencontrail-install/ifup-vhost
   `chmod +x $preup/ifup-vhost`
 }
 
@@ -436,7 +441,7 @@ function vrouter_agent_startup()
   if [ -f "$vra_manifest" ]; then
      rm -f "$vra_manifest"
   fi
-  wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-kubernetes/vrouter-manifest/cluster/contrail-vrouter-agent.manifest
+  wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/cluster/contrail-vrouter-agent.manifest
   vragentfile=/tmp/contrail-vrouter-agent.manifest
   vrimg=$(cat $vragentfile | grep image | awk -F, '{print $1}' | awk '{print $2}')
   echo $vrimg | xargs -n1 sudo docker pull
