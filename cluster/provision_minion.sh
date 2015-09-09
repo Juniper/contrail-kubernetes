@@ -1,11 +1,11 @@
 #!/bin/bash
-
-set -x
-
 ##############################################################
 # opencontrail-kubernetes minion setup and provisioning script. 
 # For more info, please refer to the following link
 # https://github.com/Juniper/contrail-kubernetes
+#
+# Author - Sanju Abraham -@asanju- OpenContrail-Kubernetes
+#
 ##############################################################
 source /etc/contrail/opencontrail-rc
 
@@ -466,7 +466,7 @@ function provision_vrouter()
   host=`hostname -s`
   curl -X POST -H "Content-Type: application/json; charset=UTF-8" -d '{"virtual-router": {"parent_type": "global-system-config", "fq_name": ["default-global-system-config", "'$host'" ], "display_name": "'$host'", "virtual_router_ip_address": "'$MINION_OVERLAY_NET_IP'", "name": "'$host'"}}' http://$OPENCONTRAIL_CONTROLLER_IP:8082/virtual-routers 2> >( cat <() > $stderr)
   err=$(cat $stderr)
-  if [ -z $err ]; then
+  if [ -z "$err" ]; then
      log_info_msg "Provisioning of vrouter successful"
   else
      log_error_msg "Error in provisioning vrouter $err"
@@ -511,10 +511,11 @@ function verify_vrouter_agent()
   fi
 }
 
-# Restart kube containers
-function kube_vrouter_restart() {
+# Discover and add containers to vrouter
+function discover_docc_addto_vrouter() {
+    vrouter_agent=$(cat /etc/kubernetes/manifests/contrail-vrouter-agent.manifest | grep metadata | awk '{print $2}' | tr -d '{}",' | awk -F: '{print $2}')
     KUBE_PLUGIN=/usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail/opencontrail
-    CONTAINERS=$(docker ps | grep -v "/pause" | grep -v contrail-vrouter-agent | awk '/[0-9a-z]{12} /{print $1;}')
+    CONTAINERS=$(docker ps | grep -v "/pause" | grep -v $vrouter_agent | awk '/[0-9a-z]{12} /{print $1;}')
 
     for i in $CONTAINERS; do
         NAME=$(docker inspect -f '{{.Name}}' $i)
@@ -542,7 +543,7 @@ function main()
    provision_vrouter
    cleanup
    verify_vrouter_agent
-   kube_vrouter_restart
+   discover_docc_addto_vrouter
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
 }
 
