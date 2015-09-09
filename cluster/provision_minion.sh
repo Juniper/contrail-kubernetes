@@ -526,6 +526,13 @@ function discover_docc_addto_vrouter() {
     done
 }
 
+function provision_virtual_gateway
+{
+    wget -q --directory-prefix=/etc/contrail https://raw.githubusercontent.com/Juniper/contrail-controller/R2.20/src/config/utils/provision_vgw_interface.py
+   OPENCONTRAIL_PUBLIC_SUBNET="${OPENCONTRAIL_PUBLIC_SUBNET:-10.1.0.0/16}"
+   `sudo docker ps |\grep contrail-vrouter-agent | \grep -v pause | awk '{print "sudo docker exec -it " $1 " python /etc/contrail/provision_vgw_interface.py --oper create --interface vgw_public --subnets '$OPENCONTRAIL_PUBLIC_SUBNET' --routes 0.0.0.0/0 --vrf default-domain:default-project:Public:Public"}'`
+}
+
 function main()
 {
    detect_os
@@ -541,9 +548,10 @@ function main()
    prereq_vrouter_agent
    vrouter_agent_startup
    provision_vrouter
-   cleanup
    verify_vrouter_agent
    discover_docc_addto_vrouter
+   provision_virtual_gateway
+   cleanup
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
 }
 
