@@ -92,14 +92,6 @@ function provision_vrouter_encap() {
     master $cmd
 }
 
-# Provision vrouter encap order
-function provision_vrouter_encap() {
-    cmd='docker ps | grep contrail-api | grep -v pause | awk "{print \"docker exec \" \$1 \" curl -s https://raw.githubusercontent.com/Juniper/contrail-controller/R2.20/src/config/utils/provision_encap.py -o /tmp/provision_encap.py\"}" | sudo sh'
-    master $cmd
-    cmd='docker ps | grep contrail-api | grep -v pause | awk "{print \"docker exec \" \$1 \" python /tmp/provision_encap.py --api_server_ip `hostname --ip-address` --api_server_port 8082 --encap_priority MPLSoUDP,MPLSoGRE,VXLAN --admin_user myuser --admin_password mypass --oper add\"}" | sudo sh'
-    master $cmd
-}
-
 
 # Setup kube dns endpoints
 function setup_kube_dns_endpoints() {
