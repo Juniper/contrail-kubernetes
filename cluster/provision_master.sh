@@ -109,7 +109,7 @@ function setup_kube_dns_endpoints() {
 
 # Setup contrail manifest files under kubernetes
 function setup_contrail_manifest_files() {
-    echo "[IFMAP]" >> /etc/contrail/contrail-control.conf
+    echo "[IFMAP]" > /etc/contrail/contrail-control.conf
     echo "server_url=https://127.0.0.1:8443" >> /etc/contrail/contrail-control.conf
 
     cmd1='wget -qO - https://raw.githubusercontent.com/juniper/contrail-kubernetes/'
