@@ -24,24 +24,6 @@ def docker_get_pid(docker_id):
     return int(pid_str)
 
 
-# kubelet config is at different places in different envs, unfortunately
-def kubelet_get_api():
-    fp = None
-    try:
-        fp = open('/etc/sysconfig/kubelet', 'r')
-    except:
-        try:
-            fp = open('/etc/default/kubelet', 'r')
-        except:
-            fp = open('/etc/kubernetes/kubelet', 'r')
-
-    for line in fp.readlines():
-        m = re.search(r'--api-servers=http[s]?://(\d+\.\d+\.\d+\.\d+)', line)
-        if m:
-            return m.group(1)
-    return None
-
-
 def getDockerPod(docker_id):
     name = Shell.run('docker inspect -f \'{{.Name}}\' %s' % docker_id)
 
@@ -56,12 +38,22 @@ def getDockerPod(docker_id):
 
 
 def getPodInfo(namespace, podName):
-    kubeapi = kubelet_get_api()
+    r = requests.get('http://localhost:10255/pods')
+    if r.status_code != requests.codes.ok:
+        logging.error("%s: %s", url, r.text)
+        return None
 
-    data = Shell.run(
-        'kubectl --server=%s:8080 get --namespace=%s -o json pod %s' % (
-            kubeapi, namespace, podName), True)
-    return json.loads(data)
+    podItems = json.loads(r.text)
+
+    for pod in podItems["items"]:
+        if 'metadata' not in pod:
+            continue
+        meta = pod['metadata']
+        if meta['namespace'] == namespace and meta['name'] == podName:
+            logging.debug('pod %s %s', podName, pod['status']['phase'])
+            return pod
+
+    return None
 
 
 def setup(pod_namespace, pod_name, docker_id):

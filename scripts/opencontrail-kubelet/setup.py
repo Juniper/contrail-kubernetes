@@ -12,7 +12,7 @@ def requirements(filename):
 
 setuptools.setup(
     name='opencontrail-kubelet',
-    version='0.1',
+    version='0.3.2',
     packages=setuptools.find_packages(),
 
     # metadata
@@ -20,6 +20,7 @@ setuptools.setup(
     author_email="dev@lists.opencontrail.org",
     license="Apache Software License",
     url="http://www.opencontrail.org/",
+    description="OpenContrail kubelet plugin",
     long_description="Kubernetes kubelet plugin for OpenContrail",
 
     install_requires=requirements('requirements.txt'),
