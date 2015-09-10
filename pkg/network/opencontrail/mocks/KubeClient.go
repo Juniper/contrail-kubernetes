@@ -96,3 +96,6 @@ func (c *KubeClient) PodTemplates(namespace string) kubeclient.PodTemplateInterf
 func (c *KubeClient) ServiceAccounts(namespace string) kubeclient.ServiceAccountsInterface {
 	return nil
 }
+func (c *KubeClient) Experimental() kubeclient.ExperimentalInterface {
+	return nil
+}
