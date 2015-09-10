@@ -36,7 +36,7 @@ def kubelet_get_api():
             fp = open('/etc/kubernetes/kubelet', 'r')
 
     for line in fp.readlines():
-        m = re.search(r'--api-servers=http[s]?://(.+)', line)
+        m = re.search(r'--api-servers=http[s]?://(\d+\.\d+\.\d+\.\d+)', line)
         if m:
             return m.group(1)
     return None
@@ -59,7 +59,7 @@ def getPodInfo(namespace, podName):
     kubeapi = kubelet_get_api()
 
     data = Shell.run(
-        'kubectl --server=%s get --namespace=%s -o json pod %s' % (
+        'kubectl --server=%s:8080 get --namespace=%s -o json pod %s' % (
             kubeapi, namespace, podName), True)
     return json.loads(data)
 
