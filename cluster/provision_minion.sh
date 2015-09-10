@@ -108,12 +108,12 @@ function prep_to_build()
 {
   if [ "$OS_TYPEi" == $REDHAT ]; then
     yum update
-    yum install -y git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r` libxml2-devel python-lxml sipcalc wget
+    yum install -y git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r` libxml2-devel python-lxml sipcalc wget ethtool bridge-utils
   elif [ "$OS_TYPE" == $UBUNTU ]; then
     apt-get update
     # in case of an interrupt during execution of apt-get
     dpkg --configure -a
-    apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r` libxml2-dev python-lxml sipcalc wget
+    apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r` libxml2-dev python-lxml sipcalc wget ethtool bridge-utils
   fi
 }
 
