@@ -12,7 +12,7 @@ def requirements(filename):
 
 setuptools.setup(
     name='opencontrail-kubelet',
-    version='0.3.2',
+    version='0.3.3',
     packages=setuptools.find_packages(),
 
     # metadata

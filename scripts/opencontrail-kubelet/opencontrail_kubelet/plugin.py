@@ -3,12 +3,11 @@
 #
 
 import argparse
+import distutils.spawn
 import json
 import logging
 import os
-import re
 import requests
-import socket
 import sys
 import time
 import xml.etree.ElementTree as ElementTree
@@ -18,6 +17,7 @@ from lxc_manager import LxcManager
 from shell import Shell
 
 opt_net_mode = "bridge"
+
 
 def docker_get_pid(docker_id):
     pid_str = Shell.run('docker inspect -f \'{{.State.Pid}}\' %s' % docker_id)
@@ -40,7 +40,7 @@ def getDockerPod(docker_id):
 def getPodInfo(namespace, podName):
     r = requests.get('http://localhost:10255/pods')
     if r.status_code != requests.codes.ok:
-        logging.error("%s: %s", url, r.text)
+        logging.error("%s: %s", 'http://localhost:10255/pods', r.text)
         return None
 
     podItems = json.loads(r.text)
@@ -50,10 +50,20 @@ def getPodInfo(namespace, podName):
             continue
         meta = pod['metadata']
         if meta['namespace'] == namespace and meta['name'] == podName:
-            logging.debug('pod %s %s', podName, pod['status']['phase'])
+            logging.debug('pod %s %s', podName, pod['status'])
             return pod
 
+    logging.error('%s not present in kubelet cache' % podName)
     return None
+
+
+def init():
+    """ Ensure that the following tools are available on the PATH """
+    executables = ['ethtool', 'brctl']
+    for prog in executables:
+        if distutils.spawn.find_executable(prog) is None:
+            logging.error('%s not in PATH' % prog)
+            sys.exit(1)
 
 
 def setup(pod_namespace, pod_name, docker_id):
@@ -85,8 +95,13 @@ def setup(pod_namespace, pod_name, docker_id):
     uid, podName = getDockerPod(docker_id)
     podInfo = None
     podState = None
-    for i in range(0, 120):
+    for i in range(0, 30):
         podInfo = getPodInfo(pod_namespace, podName)
+        if podInfo is None:
+            sys.exit(1)
+        if 'hostNetwork' in podInfo['spec'] and \
+           podInfo['spec']['hostNetwork']:
+            sys.exit(0)
         if 'annotations' in podInfo["metadata"] and \
            'opencontrail.org/pod-state' in podInfo["metadata"]["annotations"]:
             podState = json.loads(
@@ -107,8 +122,7 @@ def setup(pod_namespace, pod_name, docker_id):
         ifname = manager.create_interface(short_id, instance_ifname,
                                           mac_address)
     else:
-        ifname = manager.move_interface(short_id, pid, instance_ifname,
-                                        mac_address)
+        ifname = manager.move_interface(short_id, pid, mac_address)
 
     api = ContrailVRouterApi()
     api.add_port(uid, nic_uuid, ifname, mac_address,
@@ -195,7 +209,7 @@ def main():
 
     try:
         if args.action == 'init':
-            pass
+            init()
         elif args.action == 'setup':
             setup(args.pod_namespace, args.pod_name, args.docker_id)
         elif args.action == 'teardown':
@@ -204,6 +218,8 @@ def main():
             status(args.pod_namespace, args.pod_name, args.docker_id)
     except Exception as ex:
         logging.error(ex)
+        if args.action == 'setup':
+            sys.exit(0)
         sys.exit(1)
 
 if __name__ == '__main__':
