@@ -7,6 +7,8 @@
 # Author - Sanju Abraham -@asanju- OpenContrail-Kubernetes
 #
 ##############################################################
+set -x
+
 source /etc/contrail/opencontrail-rc
 
 readonly PROGNAME=$(basename "$0")
@@ -108,12 +110,12 @@ function prep_to_build()
 {
   if [ "$OS_TYPEi" == $REDHAT ]; then
     yum update
-    yum install -y git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r` libxml2-devel python-lxml sipcalc wget ethtool bridge-utils
+    yum install -y git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r` libxml2-devel python-lxml sipcalc wget ethtool bridge-utils curl
   elif [ "$OS_TYPE" == $UBUNTU ]; then
     apt-get update
     # in case of an interrupt during execution of apt-get
     dpkg --configure -a
-    apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r` libxml2-dev python-lxml sipcalc wget ethtool bridge-utils
+    apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r` libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl
   fi
 }
 
@@ -121,9 +123,9 @@ function build_vrouter()
 {
   rm -rf ~/vrouter-build
   mkdir -p ~/vrouter-build/tools
-  cd ~/vrouter-build && `git clone -b $ocver https://github.com/Juniper/contrail-vrouter vrouter`
-  cd ~/vrouter-build/tools && `git clone https://github.com/Juniper/contrail-build build`
-  cd ~/vrouter-build/tools && `git clone -b $ocver https://github.com/Juniper/contrail-sandesh sandesh`
+  cd ~/vrouter-build && (git clone -b $ocver https://github.com/Juniper/contrail-vrouter vrouter)
+  cd ~/vrouter-build/tools && (git clone https://github.com/Juniper/contrail-build build)
+  cd ~/vrouter-build/tools && (git clone -b $ocver https://github.com/Juniper/contrail-sandesh sandesh)
   cp ~/vrouter-build/tools/build/SConstruct ~/vrouter-build
   cd ~/vrouter-build && scons vrouter 2>&1
 }
@@ -369,6 +371,16 @@ function update_vhost_pre_up()
 
 function prereq_vrouter_agent()
 {
+  if [ "$OS_TYPE" == $REDHAT ]; then
+     docon=$(rpm -qa | grep docker-engine)
+  elif [ "$OS_TYPE" == $UBUNTU ]; then
+     docon=$(rpm -qa | grep lxc-docker)
+  fi
+
+  if [ -z $docon ]; then
+     curl -sSL https://get.docker.com/ | sh
+  fi
+
   docpid=`pidof docker`
   if [ -z $docpid ]; then
    service docker restart
