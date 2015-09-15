@@ -30,8 +30,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"k8s.io/kubernetes/pkg/api"
+	"k8s.io/kubernetes/pkg/client/cache"
 	kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
-	"k8s.io/kubernetes/pkg/client/unversioned/cache"
 	"k8s.io/kubernetes/pkg/labels"
 	kubetypes "k8s.io/kubernetes/pkg/types"
 
