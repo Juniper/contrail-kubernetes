@@ -19,8 +19,8 @@ package opencontrail
 import (
 	"time"
 
+	"k8s.io/kubernetes/pkg/client/cache"
 	kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
-	"k8s.io/kubernetes/pkg/client/unversioned/cache"
 
 	"github.com/Juniper/contrail-go-api"
 )

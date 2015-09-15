@@ -48,10 +48,6 @@ func (m *KubeClient) Endpoints(namespace string) kubeclient.EndpointsInterface {
 	return nil
 }
 
-func (m *KubeClient) Daemons(namespace string) kubeclient.DaemonInterface {
-	return nil
-}
-
 func (m *KubeClient) Events(namespace string) kubeclient.EventInterface {
 	return nil
 }
