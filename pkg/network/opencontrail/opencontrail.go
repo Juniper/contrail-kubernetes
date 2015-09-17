@@ -17,12 +17,14 @@ limitations under the License.
 package opencontrail
 
 import (
+	"io"
 	"time"
 
 	"k8s.io/kubernetes/pkg/client/cache"
 	kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
 
 	"github.com/Juniper/contrail-go-api"
+	"github.com/Juniper/contrail-kubernetes/pkg/network"
 )
 
 const (
@@ -45,22 +47,31 @@ type InstanceMetadata struct {
 	Gateway string `json:"gateway"`
 }
 
-func NewController(kube *kubeclient.Client, args []string) *Controller {
+func NewController(kube *kubeclient.Client, args []string) network.NetworkController {
 	controller := new(Controller)
 	controller.eventChannel = make(chan notification, 32)
 	controller.kube = kube
-	config := NewConfig()
-	controller.config = config
-	config.Parse(args)
-	client := contrail.NewClient(config.ApiAddress, config.ApiPort)
-	controller.client = client
-	controller.allocator = NewAddressAllocator(client, config)
-	controller.instanceMgr = NewInstanceManager(client, controller.allocator)
-	controller.networkMgr = NewNetworkManager(client, config)
-	controller.serviceMgr = NewServiceManager(client, config, controller.networkMgr)
-	controller.namespaceMgr = NewNamespaceManager(client)
-	controller.consistencyPeriod = time.Duration(1) * time.Minute
+	controller.config = NewConfig()
+	controller.config.Parse(args)
 	return controller
+}
+
+func (c *Controller) Init(global *network.Config, reader io.Reader) error {
+	err := c.config.ReadConfiguration(global, reader)
+	if err != nil {
+		return err
+	}
+
+	client := contrail.NewClient(c.config.ApiAddress, c.config.ApiPort)
+	c.client = client
+	c.allocator = NewAddressAllocator(client, c.config)
+	c.instanceMgr = NewInstanceManager(client, c.allocator)
+	c.networkMgr = NewNetworkManager(client, c.config)
+	c.serviceMgr = NewServiceManager(client, c.config, c.networkMgr)
+	c.namespaceMgr = NewNamespaceManager(client)
+	c.consistencyPeriod = time.Duration(1) * time.Minute
+
+	return nil
 }
 
 func (c *Controller) SetNamespaceStore(store cache.Store) {
@@ -77,4 +88,8 @@ func (c *Controller) SetReplicationControllerStore(store cache.Store) {
 
 func (c *Controller) SetServiceStore(store cache.Store) {
 	c.serviceStore = store
+}
+
+func init() {
+	network.Register("opencontrail", NewController)
 }

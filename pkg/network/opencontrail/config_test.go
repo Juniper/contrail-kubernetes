@@ -17,6 +17,7 @@ limitations under the License.
 package opencontrail
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -29,4 +30,28 @@ func TestParse(t *testing.T) {
 	config.Parse([]string{"--portal_net=172.12.0.0/16"})
 	assert.Equal("172.12.0.0/16", config.ServiceSubnet)
 	assert.Equal("localhost", config.ApiAddress)
+}
+
+func TestConfigFile(t *testing.T) {
+	content := `
+[opencontrail]
+api-server = master
+network-label = k8-app
+public-ip-range = 192.168.0.0/24
+`
+	buffer := bytes.NewBufferString(content)
+	config := NewConfig()
+	err := config.ReadConfiguration(nil, buffer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.ApiAddress != "master" {
+		t.Errorf("expected master, got %s", config.ApiAddress)
+	}
+	if config.NetworkTag != "k8-app" {
+		t.Errorf("expected k8-app, got %s", config.NetworkTag)
+	}
+	if config.PublicSubnet != "192.168.0.0/24" {
+		t.Errorf("expected 192.168.0.0/24, got %s", config.PublicSubnet)
+	}
 }

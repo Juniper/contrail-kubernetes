@@ -14,20 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package app
 
 import (
-	goflag "flag"
-
-	flag "github.com/spf13/pflag"
-
-	"github.com/Juniper/contrail-kubernetes/cmd/kube-network-manager/app"
+	_ "github.com/Juniper/contrail-kubernetes/pkg/network/opencontrail"
 )
-
-func main() {
-	m := app.NewNetworkManager()
-	flag.CommandLine.AddGoFlagSet(goflag.CommandLine)
-	m.AddFlags(flag.CommandLine)
-	flag.Parse()
-	m.Run(flag.CommandLine.Args())
-}
