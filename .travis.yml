@@ -17,5 +17,5 @@ install:
   - GOPATH=${GOPATH}:${GOPATH}/src/k8s.io/kubernetes/Godeps/_workspace
 
 script:
-  - go test -v -covermode=count -coverprofile=coverage.out github.com/Juniper/contrail-kubernetes/pkg/network/opencontrail
-  - ${HOME}/gopath/bin/goveralls  -coverprofile=coverage.out -service=travis-ci -repotoken=${COVERALLS_TOKEN}
+  - gocov test -v ./... > coverage.json
+  - ${HOME}/gopath/bin/goveralls  -gocovdata=coverage.json -service=travis-ci -repotoken=${COVERALLS_TOKEN}

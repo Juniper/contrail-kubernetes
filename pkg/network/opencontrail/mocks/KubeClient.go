@@ -48,10 +48,6 @@ func (m *KubeClient) Endpoints(namespace string) kubeclient.EndpointsInterface {
 	return nil
 }
 
-func (m *KubeClient) Daemons(namespace string) kubeclient.DaemonInterface {
-	return nil
-}
-
 func (m *KubeClient) Events(namespace string) kubeclient.EventInterface {
 	return nil
 }
@@ -94,5 +90,8 @@ func (c *KubeClient) PodTemplates(namespace string) kubeclient.PodTemplateInterf
 	return nil
 }
 func (c *KubeClient) ServiceAccounts(namespace string) kubeclient.ServiceAccountsInterface {
+	return nil
+}
+func (c *KubeClient) Experimental() kubeclient.ExperimentalInterface {
 	return nil
 }
