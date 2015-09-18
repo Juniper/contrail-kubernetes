@@ -17,9 +17,21 @@ limitations under the License.
 package network
 
 import (
-	"github.com/Juniper/contrail-kubernetes/pkg/network/opencontrail"
 	client "k8s.io/kubernetes/pkg/client/unversioned"
 )
+
+type Allocator func(*client.Client, []string) NetworkController
+
+var (
+	allocatorMap map[string]Allocator
+)
+
+func Register(networkImpl string, allocFn Allocator) {
+	if allocatorMap == nil {
+		allocatorMap = make(map[string]Allocator, 0)
+	}
+	allocatorMap[networkImpl] = allocFn
+}
 
 // Placeholder class that constructs a NetworkController
 type NetworkFactory struct {
@@ -32,5 +44,8 @@ func NewNetworkFactory() *NetworkFactory {
 
 func (f *NetworkFactory) Create(client *client.Client, args []string) NetworkController {
 	// TODO(prm): read configuration in order to select plugin.
-	return opencontrail.NewController(client, args)
+	if alloc, ok := allocatorMap["opencontrail"]; ok {
+		return alloc(client, args)
+	}
+	return nil
 }
