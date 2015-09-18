@@ -22,14 +22,14 @@
 	    }],
 	    "volumeMounts": [{
 		"name": "data",
-		"mountPath": "/var/lib/cassandra/data",
+		"mountPath": "/var/lib/cassandra",
 		"readOnly": false
 	    }]
 	}],
 	"volumes": [
 	    {
 		"name": "data",
-		"hostPath": {"path": "/var/lib/cassandra/data"}
+		"hostPath": {"path": "/var/lib/cassandra"}
 	    }
 	]
     }
