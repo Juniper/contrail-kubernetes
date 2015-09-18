@@ -17,7 +17,14 @@ limitations under the License.
 package opencontrail
 
 import (
+	"io"
+	"net"
+
 	flag "github.com/spf13/pflag"
+
+	"github.com/scalingdata/gcfg"
+
+	"github.com/Juniper/contrail-kubernetes/pkg/network"
 )
 
 const (
@@ -25,18 +32,25 @@ const (
 )
 
 type Config struct {
-	ApiAddress string
-	ApiPort    int
+	// OpenContrail api server address:port
+	ApiAddress string `gcfg:"api-server"`
+	ApiPort    int    `gcfg:"api-port"`
 
-	DefaultProject string
-	PublicNetwork  string
+	// Project used for objects that are not namespace specific
+	DefaultProject string `gcfg:"default-project"`
+	// Network identifier for the external network
+	PublicNetwork string `gcfg:"public-network"`
+	// IP address range configured on the external network
+	PublicSubnet string `gcfg:"public-ip-range"`
+	// IP address range used to allocate Pod private IP addresses
+	PrivateSubnet string `gcfg:"private-ip-range"`
+	// IP address range used by the kube-apiserver to allocate ClusterIP addresses for services
+	ServiceSubnet string `gcfg:"service-cluster-ip-range"`
 
-	PublicSubnet  string
-	PrivateSubnet string
-	ServiceSubnet string
-
-	NetworkTag       string
-	NetworkAccessTag string
+	// Label used to create the network name used by pods and services
+	NetworkTag string `gcfg:"network-label"`
+	// Label used to connect pods with services
+	NetworkAccessTag string `gcfg:"service-label"`
 }
 
 func NewConfig() *Config {
@@ -53,6 +67,7 @@ func NewConfig() *Config {
 	return config
 }
 
+// DEPRECATED
 func (c *Config) Parse(args []string) {
 	fs := flag.NewFlagSet("opencontrail", flag.ExitOnError)
 	fs.StringVar(&c.ApiAddress, "contrail_api", c.ApiAddress,
@@ -72,4 +87,43 @@ func (c *Config) Parse(args []string) {
 	fs.StringVar(&c.NetworkAccessTag, "access_label", c.NetworkAccessTag,
 		"Label used to determine what services this resource (pod/rc) accesses.")
 	fs.Parse(args)
+}
+
+type configWrapper struct {
+	OpenContrail Config
+}
+
+func (c *Config) Validate() error {
+	if _, _, err := net.ParseCIDR(c.PrivateSubnet); err != nil {
+		return err
+	}
+	if c.PublicSubnet != "" {
+		if _, _, err := net.ParseCIDR(c.PublicSubnet); err != nil {
+			return err
+		}
+	}
+	if _, _, err := net.ParseCIDR(c.ServiceSubnet); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Config) ReadConfiguration(global *network.Config, reader io.Reader) error {
+	if global != nil {
+		c.ServiceSubnet = global.ClusterIpRange
+	}
+
+	if reader == nil {
+		return nil
+	}
+
+	wrapper := configWrapper{OpenContrail: *c}
+	if err := gcfg.ReadInto(&wrapper, reader); err != nil {
+		return err
+	}
+	if err := wrapper.OpenContrail.Validate(); err != nil {
+		return err
+	}
+	*c = wrapper.OpenContrail
+	return nil
 }

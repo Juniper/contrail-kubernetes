@@ -17,6 +17,8 @@ limitations under the License.
 package app
 
 import (
+	"io"
+	"os"
 	"time"
 
 	"github.com/golang/glog"
@@ -31,13 +33,15 @@ import (
 	"github.com/Juniper/contrail-kubernetes/pkg/network"
 )
 
-type Config struct {
-	KubeUrl      string
-	ResyncPeriod time.Duration
-}
+const (
+	KubernetesApiDefault  = "http://localhost:8080"
+	ResyncTimeDefault     = time.Duration(5) * time.Minute
+	ClusterIpRangeDefault = "10.254.0.0/16"
+)
 
 type NetworkManager struct {
-	config Config
+	ConfigFile string
+	config     network.Config
 
 	Client     *client.Client
 	Controller network.NetworkController
@@ -59,30 +63,59 @@ type NetworkManager struct {
 
 func NewNetworkManager() *NetworkManager {
 	manager := new(NetworkManager)
-	manager.config = Config{
-		KubeUrl:      "http://localhost:8080",
-		ResyncPeriod: time.Minute,
+	manager.config = network.Config{
+		KubeUrl:        KubernetesApiDefault,
+		ResyncPeriod:   ResyncTimeDefault,
+		ClusterIpRange: ClusterIpRangeDefault,
 	}
 	manager.Shutdown = make(chan struct{})
 	return manager
 }
 
 func (m *NetworkManager) AddFlags(fs *flag.FlagSet) {
+	fs.StringVar(&m.ConfigFile, "config-file", "/etc/kubernetes/network.conf",
+		"Network manager configuration")
+	// DEPRECATED
 	fs.StringVar(&m.config.KubeUrl, "master", m.config.KubeUrl,
 		"Kubernetes API endpoint")
 }
 
-func (m *NetworkManager) start(args []string) {
-	config := &client.Config{
+func (m *NetworkManager) parseConfig() io.ReadCloser {
+	if m.ConfigFile == "" {
+		return nil
+	}
+	file, err := os.Open(m.ConfigFile)
+	if err != nil {
+		glog.Warning(err)
+		return nil
+	}
+	network.ReadConfiguration(file, &m.config)
+	return file
+}
+
+func (m *NetworkManager) init(args []string) {
+	configFile := m.parseConfig()
+	defer func() {
+		if configFile != nil {
+			configFile.Close()
+		}
+	}()
+
+	k8sClientConfig := &client.Config{
 		Host: m.config.KubeUrl,
 	}
 	var err error
-	m.Client, err = client.New(config)
+	m.Client, err = client.New(k8sClientConfig)
 	if err != nil {
 		glog.Fatalf("Invalid API configuratin: %v", err)
 	}
 
 	m.Controller = network.NewNetworkFactory().Create(m.Client, args)
+	m.Controller.Init(&m.config, configFile)
+}
+
+func (m *NetworkManager) start(args []string) {
+	m.init(args)
 
 	m.PodStore, m.PodInformer = framework.NewInformer(
 		cache.NewListWatchFromClient(

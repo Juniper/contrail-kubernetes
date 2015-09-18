@@ -85,8 +85,9 @@ func (c *Controller) Run(shutdown chan struct{}) {
 	var timerChan <-chan time.Time
 
 	if c.consistencyPeriod != 0 {
-		timerChan = time.NewTicker(c.consistencyPeriod * time.Second).C
-		c.consistencyWorker = NewConsistencyChecker(c.client, c.podStore, c.serviceStore)
+		glog.V(3).Infof("Consistency checker interval %s", c.consistencyPeriod.String())
+		timerChan = time.NewTicker(c.consistencyPeriod).C
+		c.consistencyWorker = NewConsistencyChecker(c.client, c.config, c.podStore, c.serviceStore)
 	}
 
 	for {
@@ -175,8 +176,8 @@ func (c *Controller) getPodNetwork(pod *api.Pod) *types.VirtualNetwork {
 	return network
 }
 
-func (c *Controller) serviceName(labels map[string]string) string {
-	name, ok := labels[c.config.NetworkTag]
+func ServiceName(config *Config, labels map[string]string) string {
+	name, ok := labels[config.NetworkTag]
 	if !ok {
 		return "default"
 	}
@@ -207,7 +208,7 @@ func (c *Controller) updatePodServiceIp(service *api.Service, pod *api.Pod) {
 		return
 	}
 
-	serviceName := c.serviceName(service.Labels)
+	serviceName := ServiceName(c.config, service.Labels)
 	serviceNetwork, err := c.serviceMgr.LocateServiceNetwork(service.Namespace, serviceName)
 	if err != nil {
 		return
@@ -359,7 +360,7 @@ func (c *Controller) updateServicePublicIP(service *api.Service) (*types.Floatin
 // to the backends.
 func (c *Controller) addService(service *api.Service) {
 	glog.Infof("Add Service %s", service.Name)
-	serviceName := c.serviceName(service.Labels)
+	serviceName := ServiceName(c.config, service.Labels)
 	err := c.serviceMgr.Create(service.Namespace, serviceName)
 	if err != nil {
 		return
@@ -437,7 +438,7 @@ func (c *Controller) purgeStaleServiceRefs(fip *types.FloatingIp, refs contrail.
 
 func (c *Controller) updateService(service *api.Service) {
 	glog.Infof("Update Service %s", service.Name)
-	serviceName := c.serviceName(service.Labels)
+	serviceName := ServiceName(c.config, service.Labels)
 	err := c.serviceMgr.Create(service.Namespace, serviceName)
 	if err != nil {
 		return
@@ -500,7 +501,7 @@ func (c *Controller) updateService(service *api.Service) {
 
 func (c *Controller) deleteService(service *api.Service) {
 	glog.Infof("Delete Service %s", service.Name)
-	serviceName := c.serviceName(service.Labels)
+	serviceName := ServiceName(c.config, service.Labels)
 	serviceNetwork, err := c.serviceMgr.LookupServiceNetwork(service.Namespace, serviceName)
 	if err == nil {
 		c.networkMgr.DeleteFloatingIp(serviceNetwork, service.Name)

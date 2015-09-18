@@ -51,7 +51,7 @@ func TestConsistencyMissingVM(t *testing.T) {
 	client := createTestClient()
 	podStore := new(mocks.Store)
 	serviceStore := new(mocks.Store)
-	checker := NewConsistencyChecker(client, podStore, serviceStore)
+	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore)
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -139,7 +139,7 @@ func TestConsistencyStaleVM(t *testing.T) {
 	client := createTestClient()
 	podStore := new(mocks.Store)
 	serviceStore := new(mocks.Store)
-	checker := NewConsistencyChecker(client, podStore, serviceStore)
+	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore)
 
 	kube := mocks.NewKubeClient()
 	controller := NewTestController(kube, client, nil, nil)
@@ -184,7 +184,7 @@ func TestConsistencyMissingInterface(t *testing.T) {
 	client := createTestClient()
 	podStore := new(mocks.Store)
 	serviceStore := new(mocks.Store)
-	checker := NewConsistencyChecker(client, podStore, serviceStore)
+	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore)
 
 	kube := mocks.NewKubeClient()
 	controller := NewTestController(kube, client, nil, nil)
@@ -224,7 +224,7 @@ func TestConsistencyStaleInterface(t *testing.T) {
 	client := createTestClient()
 	podStore := new(mocks.Store)
 	serviceStore := new(mocks.Store)
-	checker := NewConsistencyChecker(client, podStore, serviceStore)
+	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore)
 
 	kube := mocks.NewKubeClient()
 	controller := NewTestController(kube, client, nil, nil)
@@ -257,7 +257,7 @@ func TestConsistencyServiceIp(t *testing.T) {
 	client := createTestClient()
 	podStore := new(mocks.Store)
 	serviceStore := new(mocks.Store)
-	checker := NewConsistencyChecker(client, podStore, serviceStore)
+	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore)
 
 	kube := mocks.NewKubeClient()
 	controller := NewTestController(kube, client, nil, nil)
@@ -281,6 +281,7 @@ func TestConsistencyServiceIp(t *testing.T) {
 				"app": "pod01",
 			},
 			ClusterIP: "10.254.42.42",
+			Type:      api.ServiceTypeLoadBalancer,
 		},
 	}
 	service2 := &api.Service{
@@ -295,7 +296,8 @@ func TestConsistencyServiceIp(t *testing.T) {
 			Selector: map[string]string{
 				"app": "pod02",
 			},
-			ClusterIP: "10.254.42.43",
+			ClusterIP:   "10.254.42.43",
+			ExternalIPs: []string{"10.1.4.89"},
 		},
 	}
 	service3 := &api.Service{
@@ -313,6 +315,8 @@ func TestConsistencyServiceIp(t *testing.T) {
 			ClusterIP: "10.254.42.44",
 		},
 	}
+
+	kube.ServiceInterface.On("Update", service1).Return(service1, nil)
 
 	shutdown := make(chan struct{})
 	go controller.Run(shutdown)

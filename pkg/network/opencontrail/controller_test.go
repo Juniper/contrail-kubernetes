@@ -166,6 +166,7 @@ func TestPodCreate(t *testing.T) {
 	}
 	shutdown <- shutdownMsg{}
 
+	assert.True(t, controller.podAnnotationsCheck(pod))
 	kube.PodInterface.AssertExpectations(t)
 }
 

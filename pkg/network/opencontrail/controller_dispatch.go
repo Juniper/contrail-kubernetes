@@ -17,11 +17,13 @@ limitations under the License.
 package opencontrail
 
 import (
+	"encoding/json"
 	"reflect"
 
 	"github.com/golang/glog"
 
 	"k8s.io/kubernetes/pkg/api"
+	"k8s.io/kubernetes/pkg/kubelet"
 )
 
 func EqualTags(m1, m2 map[string]string, tags []string) bool {
@@ -36,16 +38,21 @@ func EqualTags(m1, m2 map[string]string, tags []string) bool {
 	return true
 }
 
-// Return true if this pod uses host networking.
-func ignorePod(pod *api.Pod) bool {
+// IgnorePod returns true if this pod should not be managed by OpenContrail.
+// Pods that use host networking on kubelet static pods fall into this category.
+func IgnorePod(pod *api.Pod) bool {
 	if pod.Spec.HostNetwork {
+		return true
+	}
+
+	if value, ok := pod.Annotations[kubelet.ConfigMirrorAnnotationKey]; ok && value == kubelet.MirrorType {
 		return true
 	}
 	return false
 }
 
 func (c *Controller) AddPod(pod *api.Pod) {
-	if ignorePod(pod) {
+	if IgnorePod(pod) {
 		return
 	}
 	c.eventChannel <- notification{evAddPod, pod}
@@ -55,20 +62,27 @@ func (c *Controller) podAnnotationsCheck(pod *api.Pod) bool {
 	if pod.Annotations == nil {
 		return false
 	}
-	id, ok := pod.Annotations[MetadataAnnotationTag]
+	data, ok := pod.Annotations[MetadataAnnotationTag]
 	if !ok {
 		return false
 	}
+
+	var state InstanceMetadata
+	err := json.Unmarshal([]byte(data), &state)
+	if err != nil {
+		return false
+	}
+
 	nic := c.instanceMgr.LookupInterface(pod.Namespace, pod.Name)
-	if nic == nil || nic.GetUuid() != id {
+	if nic == nil || nic.GetUuid() != state.Uuid {
 		return false
 	}
 	return true
 }
 
 func (c *Controller) UpdatePod(oldPod, newPod *api.Pod) {
-	if ignorePod(newPod) {
-		if !ignorePod(oldPod) {
+	if IgnorePod(newPod) {
+		if !IgnorePod(oldPod) {
 			c.eventChannel <- notification{evDeletePod, oldPod}
 		}
 		return
@@ -80,8 +94,10 @@ func (c *Controller) UpdatePod(oldPod, newPod *api.Pod) {
 	}
 	update := false
 	if !c.podAnnotationsCheck(newPod) {
+		glog.V(3).Infof("Pod %s: annotations not current", newPod.Name)
 		update = true
 	} else if !EqualTags(oldPod.Labels, newPod.Labels, watchTags) {
+		glog.V(3).Infof("Pod %s: tags have changed", newPod.Name)
 		update = true
 	}
 	if update {
@@ -119,15 +135,19 @@ func (c *Controller) UpdateService(oldObj, newObj *api.Service) {
 	}
 
 	if newObj.Spec.ClusterIP != oldObj.Spec.ClusterIP {
+		glog.V(3).Infof("Service %s: clusterIP changed", newObj.Name)
 		update = true
 	}
 	if !reflect.DeepEqual(newObj.Spec.ExternalIPs, oldObj.Spec.ExternalIPs) {
+		glog.V(3).Infof("Service %s: ExternalIPs changed", newObj.Name)
 		update = true
 	}
 	if newObj.Spec.Type != oldObj.Spec.Type {
 		update = true
+		glog.V(3).Infof("Service %s: Type changed", newObj.Name)
 	} else if newObj.Spec.Type == api.ServiceTypeLoadBalancer && len(newObj.Status.LoadBalancer.Ingress) == 0 {
 		update = true
+		glog.V(3).Infof("Service %s: no load balancer status", newObj.Name)
 	}
 	if update {
 		c.eventChannel <- notification{evUpdateService, newObj}

@@ -17,11 +17,15 @@ limitations under the License.
 package network
 
 import (
+	"io"
+
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/client/cache"
 )
 
 type NetworkController interface {
+	Init(global *Config, configFile io.Reader) error
+
 	SetNamespaceStore(store cache.Store)
 	AddNamespace(obj *api.Namespace)
 	UpdateNamespace(oldObj, newObj *api.Namespace)

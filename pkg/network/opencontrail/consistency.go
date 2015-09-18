@@ -19,6 +19,7 @@ package opencontrail
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/golang/glog"
 
@@ -35,13 +36,15 @@ type ConsistencyChecker interface {
 
 type consistencyChecker struct {
 	client       contrail.ApiClient
+	config       *Config
 	podStore     cache.StoreToPodLister
 	serviceStore cache.StoreToServiceLister
 }
 
-func NewConsistencyChecker(client contrail.ApiClient, podStore cache.Store, serviceStore cache.Store) ConsistencyChecker {
+func NewConsistencyChecker(client contrail.ApiClient, config *Config, podStore cache.Store, serviceStore cache.Store) ConsistencyChecker {
 	checker := new(consistencyChecker)
 	checker.client = client
+	checker.config = config
 	checker.podStore = cache.StoreToPodLister{podStore}
 	checker.serviceStore = cache.StoreToServiceLister{serviceStore}
 	return checker
@@ -119,7 +122,7 @@ func (c *consistencyChecker) vmiCompare(pod *api.Pod, interfaceId string) bool {
 	if err == nil {
 		serviceIpMap := make(map[string]bool)
 		for _, ref := range refs {
-			name := ref.To[len(ref.To)-1]
+			name := strings.Join(ref.To, ":")
 			if _, ok := serviceIpMap[name]; !ok {
 				serviceIpMap[name] = true
 				serviceIpNames = append(serviceIpNames, name)
@@ -132,7 +135,16 @@ func (c *consistencyChecker) vmiCompare(pod *api.Pod, interfaceId string) bool {
 	services, err := c.serviceStore.GetPodServices(pod)
 	if err == nil {
 		for _, service := range services {
-			serviceCacheNames = append(serviceCacheNames, service.Name)
+			serviceName := ServiceName(c.config, service.Labels)
+			serviceNet := fmt.Sprintf(ServiceNetworkFmt, serviceName)
+			fqn := []string{DefaultDomain, service.Namespace, serviceNet, serviceNet, service.Name}
+			serviceCacheNames = append(serviceCacheNames, strings.Join(fqn, ":"))
+			if service.Spec.Type == api.ServiceTypeLoadBalancer || len(service.Spec.ExternalIPs) > 0 {
+				publicFQN := strings.Split(c.config.PublicNetwork, ":")
+				id := fmt.Sprintf("%s:%s:%s_%s",
+					c.config.PublicNetwork, publicFQN[len(publicFQN)-1], service.Namespace, service.Name)
+				serviceCacheNames = append(serviceCacheNames, id)
+			}
 		}
 	}
 	serviceCacheNames.Sort()
@@ -153,10 +165,27 @@ func (c *consistencyChecker) vmiCompare(pod *api.Pod, interfaceId string) bool {
 	return result
 }
 
+func filterPods(store cache.StoreToPodLister, podList []string) []string {
+	filteredList := make([]string, 0, len(podList))
+	for _, key := range podList {
+		item, exists, err := store.GetByKey(key)
+		if err != nil || !exists {
+			continue
+		}
+		pod := item.(*api.Pod)
+		if IgnorePod(pod) {
+			continue
+		}
+		filteredList = append(filteredList, key)
+	}
+
+	return filteredList
+}
+
 func (c *consistencyChecker) InstanceChecker() bool {
 	podMap := make(map[string]*api.Pod)
 	var cacheKeys sort.StringSlice
-	cacheKeys = c.podStore.ListKeys()
+	cacheKeys = filterPods(c.podStore, c.podStore.ListKeys())
 	cacheKeys.Sort()
 
 	elements, err := c.client.List("virtual-machine")
@@ -235,6 +264,7 @@ func (c *consistencyChecker) InstanceChecker() bool {
 }
 
 func (c *consistencyChecker) Check() bool {
+	glog.V(3).Infof("Running consistency checker")
 	if !c.InstanceChecker() {
 		return false
 	}
