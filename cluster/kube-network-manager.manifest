@@ -15,11 +15,11 @@
                 "volumeMounts": [
                     {
                         "mountPath": "/etc/kubernetes",
-                        "name": "kubernetes_config"
+                        "name": "kubernetes-config"
                     },
                     {
                         "mountPath": "/etc/contrail",
-                        "name": "contrail_config"
+                        "name": "contrail-config"
                     },
                     {
                         "mountPath": "/var/log/contrail",
@@ -35,13 +35,13 @@
                 "hostPath": {
                     "path": "/etc/kubernetes"
                 },
-                "name": "kubernetes_config"
+                "name": "kubernetes-config"
             },
             {
                 "hostPath": {
                     "path": "/etc/contrail"
                 },
-                "name": "contrail_config"
+                "name": "contrail-config"
             },
             {
                 "hostPath": {
