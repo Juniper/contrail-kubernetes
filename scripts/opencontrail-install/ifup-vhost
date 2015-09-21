@@ -1,6 +1,8 @@
 #!/bin/bash
 source /etc/contrail/opencontrail-rc
 
+IFACE="${IFACE:-vhost0}"
+
 if [ -e /lib/lsb/init-functions ]; then
     . /lib/lsb/init-functions
 fi

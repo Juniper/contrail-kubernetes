@@ -360,6 +360,10 @@ function update_vhost_pre_up()
   if [ "$OS_TYPE" == $REDHAT ]; then
      preup="/etc/sysconfig/network-scripts"
      ifup_file="$preup/ifup-vhost"
+  else
+     # Make room for vrouter memory blocks in debian env
+     sync
+     echo 3 > /proc/sys/vm/drop_caches
   fi
 
   if [ -f "$ifup_file" ]; then
