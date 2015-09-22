@@ -120,7 +120,7 @@ function prep_to_build()
     if [ "$kver" == "3.2.0-4-amd64" ]; then
        echo "deb http://http.debian.net/debian wheezy-backports main" >> /etc/apt/sources.list
        apt-get update
-       apt-get install -t wheezy-backports linux-image-amd64
+       apt-get install -y -t wheezy-backports linux-image-amd64
     fi
     apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r` libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl
   fi
