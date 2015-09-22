@@ -118,9 +118,12 @@ function prep_to_build()
     kver=$(uname -r)
     # Sometimes observerd in GCE 
     if [ "$kver" == "3.2.0-4-amd64" ]; then
+       log_error_msg "Kernel version 3.2.4 not supported. Upgrading to 3.2.16 and rebooting. Restart provisioning after reboot"
        echo "deb http://http.debian.net/debian wheezy-backports main" >> /etc/apt/sources.list
        apt-get update
        apt-get install -y -t wheezy-backports linux-image-amd64
+       log_info_msg "System rebooting now"
+       reboot
     fi
     apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r` libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl
   fi
