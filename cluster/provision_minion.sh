@@ -401,7 +401,7 @@ function prereq_vrouter_agent()
   if [ "$OS_TYPE" == $REDHAT ]; then
      docon=$(rpm -qa | grep docker-engine)
   elif [ "$OS_TYPE" == $UBUNTU ]; then
-     docon=$(rpm -qa | grep lxc-docker)
+     docon=$(dpkg -l | grep lxc-docker)
   fi
 
   if [ -z $docon ]; then
@@ -492,7 +492,7 @@ function verify_vhost_setup()
 {
   ifup $VHOST
   status=$(ping -c 1 -w 1 -W 1 -n $OPENCONTRAIL_CONTROLLER_IP | grep packet | awk '{print $6}' | cut -c1)
-  if [ $status == 0 ]; then
+  if [ "$status" == 0 ]; then
     log_info_msg "Vrouter kernel module and network successfuly setup"
   else
     log_info_msg "Vrouter kernel module and network - Error"
