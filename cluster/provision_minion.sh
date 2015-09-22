@@ -181,7 +181,8 @@ function setup_vhost()
      log_info_msg "MINION_OVERLAY_NET_IP is already on $VHOST. No change required on the this interface"
      return
   fi
-  mask=$(ifconfig $phy_itf | grep -i '\(netmask\|mask\)' | awk '{print $4}' | cut -d ":" -f 2)
+  mask=$(sipcalc $phy_itf | grep "Network mask" | head -n 1 | awk '{print $4}')
+  #mask=$(ifconfig $phy_itf | grep -i '\(netmask\|mask\)' | awk '{print $4}' | cut -d ":" -f 2)
   mac=$(ifconfig $phy_itf | grep HWaddr | awk '{print $5}')
   def=$(ip route  | grep $OPENCONTRAIL_VROUTER_INTF | grep -o default)
   defgw=$(ip route | grep $OPENCONTRAIL_VROUTER_INTF | grep $def | awk 'NR==1{print $3}')
