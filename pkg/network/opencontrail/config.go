@@ -28,7 +28,8 @@ import (
 )
 
 const (
-	DefaultDomain = "default-domain"
+	DefaultDomain        = "default-domain"
+	DefaultServiceSubnet = "10.254.0.0/16"
 )
 
 type Config struct {
@@ -60,7 +61,7 @@ func NewConfig() *Config {
 		DefaultProject:   "default-domain:default-project",
 		PublicNetwork:    "default-domain:default-project:Public",
 		PrivateSubnet:    "10.0.0.0/16",
-		ServiceSubnet:    "10.254.0.0/16",
+		ServiceSubnet:    DefaultServiceSubnet,
 		NetworkTag:       "name",
 		NetworkAccessTag: "uses",
 	}
@@ -109,7 +110,7 @@ func (c *Config) Validate() error {
 }
 
 func (c *Config) ReadConfiguration(global *network.Config, reader io.Reader) error {
-	if global != nil {
+	if global != nil && c.ServiceSubnet == DefaultServiceSubnet {
 		c.ServiceSubnet = global.ClusterIpRange
 	}
 
