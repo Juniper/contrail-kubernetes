@@ -183,6 +183,14 @@ function modprobe_vrouter()
   fi 
 }
 
+function isGceVM()
+{
+  if [ -f /var/run/google.onboot ]; then
+   return 0
+  else
+   return 1
+  fi
+}
 
 function setup_vhost()
 {
@@ -191,8 +199,12 @@ function setup_vhost()
      log_info_msg "MINION_OVERLAY_NET_IP is already on $VHOST. No change required on the this interface"
      return
   fi
-  mask=$(sipcalc $phy_itf | grep "Network mask" | head -n 1 | awk '{print $4}')
-  #mask=$(ifconfig $phy_itf | grep -i '\(netmask\|mask\)' | awk '{print $4}' | cut -d ":" -f 2)
+  mask=$(ifconfig $phy_itf | grep -i '\(netmask\|mask\)' | awk '{print $4}' | cut -d ":" -f 2)
+  if isGceVM ; then
+     log_info_msg "Getting network address and mask for GCE VM"
+     netAddr=$(gcloud compute networks list | grep default | awk '{print $2}')
+     mask=$(sipcalc $netAddr | grep "Network mask" | head -n 1 | awk '{print $4}')
+  fi
   mac=$(ifconfig $phy_itf | grep HWaddr | awk '{print $5}')
   def=$(ip route  | grep $OPENCONTRAIL_VROUTER_INTF | grep -o default)
   defgw=$(ip route | grep $OPENCONTRAIL_VROUTER_INTF | grep $def | awk 'NR==1{print $3}')
