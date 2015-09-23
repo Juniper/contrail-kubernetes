@@ -192,6 +192,13 @@ function isGceVM()
   fi
 }
 
+function getGceNetAddr()
+{
+  netAddr=$(gcloud compute networks list | grep default | awk '{print $2}')
+  echo $netAddr
+  return 1
+}
+
 function setup_vhost()
 {
   phy_itf=$(ip a |grep $MINION_OVERLAY_NET_IP | awk '{print $7}')
@@ -202,8 +209,8 @@ function setup_vhost()
   mask=$(ifconfig $phy_itf | grep -i '\(netmask\|mask\)' | awk '{print $4}' | cut -d ":" -f 2)
   if isGceVM ; then
      log_info_msg "Getting network address and mask for GCE VM"
-     netAddr=$(gcloud compute networks list | grep default | awk '{print $2}')
-     mask=$(sipcalc $netAddr | grep "Network mask" | head -n 1 | awk '{print $4}')
+     naddr=$(getGceNetAddr)
+     mask=$(sipcalc $naddr | grep "Network mask" | head -n 1 | awk '{print $4}')
   fi
   mac=$(ifconfig $phy_itf | grep HWaddr | awk '{print $5}')
   def=$(ip route  | grep $OPENCONTRAIL_VROUTER_INTF | grep -o default)
@@ -434,6 +441,11 @@ function vrouter_agent_startup()
   wget -P $etcc https://raw.githubusercontent.com/Juniper/contrail-controller/$ocver/src/vnsw/agent/contrail-vrouter-agent.conf
   def=$(ip route  | grep $OPENCONTRAIL_VROUTER_INTF | grep -o default)
   cidr=$(sipcalc $OPENCONTRAIL_VROUTER_INTF | grep "Network mask (bits)" | awk '{print $5}')
+  if isGceVM ; then
+     log_info_msg "Getting CIDR for GCE VM"
+     naddr=$(getGceNetAddr)
+     cidr=$(sipcalc $naddr | grep "Network mask (bits)" | awk '{print $5}')
+  fi
   if [ -z $cidr ]; then
     # check on vhost0 assuming its a rerun
     cidr=$(sipcalc $VHOST | grep "Network mask (bits)" | awk '{print $5}')
