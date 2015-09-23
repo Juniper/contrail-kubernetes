@@ -583,10 +583,10 @@ function main()
    update_restart_kubelet
    stop_kube_svcs
    update_vhost_pre_up
-   verify_vhost_setup
    prereq_vrouter_agent
    vrouter_agent_startup
    provision_vrouter
+   verify_vhost_setup
    verify_vrouter_agent
    discover_docc_addto_vrouter
    provision_virtual_gateway
