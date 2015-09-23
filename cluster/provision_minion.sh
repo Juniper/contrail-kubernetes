@@ -594,4 +594,4 @@ function main()
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
 }
 
-main
+# main
