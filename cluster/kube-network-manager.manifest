@@ -14,16 +14,16 @@
                 "name": "kube-network-manager",
                 "volumeMounts": [
                     {
-                        "mountPath": "/etc/kubernetes",
-                        "name": "kubernetesconfig"
+                        "name": "kubernetesconfig",
+                        "mountPath": "/etc/kubernetes"
                     },
                     {
-                        "mountPath": "/etc/contrail",
-                        "name": "contrailconfig"
+                        "name": "contrailconfig",
+                        "mountPath": "/etc/contrail"
                     },
                     {
-                        "mountPath": "/var/log/contrail",
                         "name": "logs",
+                        "mountPath": "/var/log/contrail",
                         "readOnly": false
                     }
                 ]
@@ -32,22 +32,16 @@
         "hostNetwork": true,
         "volumes": [
             {
-                "hostPath": {
-                    "path": "/etc/kubernetes"
-                },
-                "name": "kubernetesconfig"
+                "name": "kubernetesconfig",
+                "hostPath": { "path": "/etc/kubernetes" }
             },
             {
-                "hostPath": {
-                    "path": "/etc/contrail"
-                },
-                "name": "contrailconfig"
+                "name": "contrailconfig",
+                "hostPath": { "path": "/etc/contrail" }
             },
             {
-                "hostPath": {
-                    "path": "/var/log/contrail"
-                },
-                "name": "logs"
+                "name": "logs",
+                "hostPath": { "path": "/var/log/contrail" }
             }
         ]
     }
