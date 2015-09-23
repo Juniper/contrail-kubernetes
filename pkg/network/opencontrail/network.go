@@ -168,7 +168,7 @@ func (m *NetworkManagerImpl) LookupNetwork(projectName, networkName string) (*ty
 	fqn := []string{DefaultDomain, projectName, networkName}
 	obj, err := m.client.FindByName("virtual-network", strings.Join(fqn, ":"))
 	if err != nil {
-		glog.Errorf("GET virtual-network %s: %v", networkName, err)
+		glog.V(3).Infof("GET virtual-network %s: %v", networkName, err)
 		return nil, err
 	}
 	return obj.(*types.VirtualNetwork), nil

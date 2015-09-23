@@ -34,19 +34,26 @@ type ConsistencyChecker interface {
 	Check() bool
 }
 
+type networkConnectionMap map[string]ServiceIdList
+
 type consistencyChecker struct {
 	client       contrail.ApiClient
 	config       *Config
 	podStore     cache.StoreToPodLister
 	serviceStore cache.StoreToServiceLister
+	serviceMgr   ServiceManager
+	gcPolicyMap  networkConnectionMap
 }
 
-func NewConsistencyChecker(client contrail.ApiClient, config *Config, podStore cache.Store, serviceStore cache.Store) ConsistencyChecker {
+func NewConsistencyChecker(client contrail.ApiClient, config *Config, podStore cache.Store,
+	serviceStore cache.Store, serviceMgr ServiceManager) ConsistencyChecker {
 	checker := new(consistencyChecker)
 	checker.client = client
 	checker.config = config
 	checker.podStore = cache.StoreToPodLister{podStore}
 	checker.serviceStore = cache.StoreToServiceLister{serviceStore}
+	checker.serviceMgr = serviceMgr
+	checker.gcPolicyMap = make(networkConnectionMap, 0)
 	return checker
 }
 
@@ -138,7 +145,9 @@ func (c *consistencyChecker) vmiCompare(pod *api.Pod, interfaceId string) bool {
 			serviceName := ServiceName(c.config, service.Labels)
 			serviceNet := fmt.Sprintf(ServiceNetworkFmt, serviceName)
 			fqn := []string{DefaultDomain, service.Namespace, serviceNet, serviceNet, service.Name}
-			serviceCacheNames = append(serviceCacheNames, strings.Join(fqn, ":"))
+			if service.Spec.ClusterIP != "" {
+				serviceCacheNames = append(serviceCacheNames, strings.Join(fqn, ":"))
+			}
 			if service.Spec.Type == api.ServiceTypeLoadBalancer || len(service.Spec.ExternalIPs) > 0 {
 				publicFQN := strings.Split(c.config.PublicNetwork, ":")
 				id := fmt.Sprintf("%s:%s:%s_%s",
@@ -182,7 +191,23 @@ func filterPods(store cache.StoreToPodLister, podList []string) []string {
 	return filteredList
 }
 
-func (c *consistencyChecker) InstanceChecker() bool {
+func (c *consistencyChecker) collectNetworkConnections(pod *api.Pod, connections networkConnectionMap) {
+	name := PodNetworkName(pod, c.config)
+	fqn := []string{DefaultDomain, pod.Namespace, name}
+	network := strings.Join(fqn, ":")
+	serviceList, ok := connections[network]
+	if !ok {
+		serviceList = MakeServiceIdList()
+		for _, svc := range c.config.ClusterServices {
+			namespace, service := serviceIdFromName(svc)
+			serviceList.Add(namespace, service)
+		}
+	}
+	BuildPodServiceList(pod, c.config, &serviceList)
+	connections[network] = serviceList
+}
+
+func (c *consistencyChecker) InstanceChecker(connections networkConnectionMap) bool {
 	podMap := make(map[string]*api.Pod)
 	var cacheKeys sort.StringSlice
 	cacheKeys = filterPods(c.podStore, c.podStore.ListKeys())
@@ -260,13 +285,149 @@ func (c *consistencyChecker) InstanceChecker() bool {
 			return c.vmiCompare(pod, interfaceIdMap[key])
 		},
 	)
+
+	for _, pod := range podMap {
+		c.collectNetworkConnections(pod, connections)
+	}
+
 	return vmCmp && interfaceCmp
+}
+
+// addServiceNetworks is used by NetworkChecker to add all the service network names
+// known to kubernetes so these can be compared against the contents present in the
+// contrail DB.
+func (c *consistencyChecker) addServiceNetworks(kubeNetworks *sort.StringSlice) {
+	serviceNetworkMap := make(map[string]bool)
+	serviceList, err := c.serviceStore.List()
+	if err != nil {
+		glog.Error(err)
+		return
+	}
+	for _, svc := range serviceList.Items {
+		fqn := []string{DefaultDomain, svc.Namespace, fmt.Sprintf(ServiceNetworkFmt, ServiceName(c.config, svc.Labels))}
+		networkName := strings.Join(fqn, ":")
+		if _, ok := serviceNetworkMap[networkName]; !ok {
+			serviceNetworkMap[networkName] = true
+			*kubeNetworks = append(*kubeNetworks, networkName)
+		}
+	}
+}
+
+var defaultNetworks = []string{
+	AddressAllocationNetwork,
+	"default-domain:default-project:__link_local__",
+	"default-domain:default-project:default-virtual-network",
+	"default-domain:default-project:ip-fabric",
+}
+
+func isSystemDefaultNetwork(network string) bool {
+	for _, name := range defaultNetworks {
+		if name == network {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *consistencyChecker) NetworkChecker(connections networkConnectionMap) bool {
+	lastPolicyMap := c.gcPolicyMap
+	c.gcPolicyMap = make(networkConnectionMap, 0)
+
+	var kubeNetworks sort.StringSlice
+	connectionCheck := true
+
+	for k, v := range connections {
+		kubeNetworks = append(kubeNetworks, k)
+		if c.serviceMgr == nil {
+			continue
+		}
+		network, err := types.VirtualNetworkByName(c.client, k)
+		if err != nil {
+			glog.Error(err)
+			continue
+		}
+
+		// State policy references are removed if they are found to be stale in
+		// two successive cycles.
+		c.serviceMgr.PurgeStalePolicyRefs(network, v,
+			func(namespace, service string) bool {
+				networkName := strings.Join(network.GetFQName(), ":")
+				if entry, ok := lastPolicyMap[networkName]; ok {
+					if entry.Contains(namespace, service) {
+						glog.Infof("%s service connection %s/%s delete", networkName, namespace, service)
+						connectionCheck = false
+						return true
+					}
+				}
+				var serviceList ServiceIdList
+				if entry, ok := c.gcPolicyMap[networkName]; ok {
+					serviceList = entry
+				} else {
+					serviceList = MakeServiceIdList()
+				}
+				glog.Infof("%s service connection %s/%s not used by pod specifications",
+					networkName, namespace, service)
+				serviceList.Add(namespace, service)
+				c.gcPolicyMap[networkName] = serviceList
+				connectionCheck = false
+				return false
+			})
+	}
+
+	// consider service networks.
+	c.addServiceNetworks(&kubeNetworks)
+
+	kubeNetworks.Sort()
+
+	var dbNetworks sort.StringSlice
+	elements, err := c.client.List("virtual-network")
+	if err != nil {
+		glog.Error(err)
+		return false
+	}
+	for _, ref := range elements {
+		networkName := strings.Join(ref.Fq_name, ":")
+		if networkName == c.config.PublicNetwork {
+			continue
+		}
+		if isSystemDefaultNetwork(networkName) {
+			continue
+		}
+		dbNetworks = append(dbNetworks, networkName)
+	}
+	dbNetworks.Sort()
+
+	cmp := CompareSortedLists(kubeNetworks, dbNetworks,
+		func(key string) {
+			glog.Errorf("network %s not present in opencontrail db", key)
+		},
+		func(key string) {
+			glog.Errorf("network %s not used by kubernetes", key)
+			if c.serviceMgr == nil {
+				return
+			}
+			network, err := types.VirtualNetworkByName(c.client, key)
+			if err != nil {
+				glog.Error(err)
+				return
+			}
+			c.serviceMgr.PurgeStalePolicyRefs(network, MakeServiceIdList(), func(string, string) bool { return true })
+		},
+		func(key string) bool {
+			return true
+		})
+	return connectionCheck && cmp
 }
 
 func (c *consistencyChecker) Check() bool {
 	glog.V(3).Infof("Running consistency checker")
-	if !c.InstanceChecker() {
-		return false
+	connections := make(networkConnectionMap, 0)
+	success := true
+	if !c.InstanceChecker(connections) {
+		success = false
 	}
-	return true
+	if !c.NetworkChecker(connections) {
+		success = false
+	}
+	return success
 }

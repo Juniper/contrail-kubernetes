@@ -87,7 +87,7 @@ func (c *Controller) Run(shutdown chan struct{}) {
 	if c.consistencyPeriod != 0 {
 		glog.V(3).Infof("Consistency checker interval %s", c.consistencyPeriod.String())
 		timerChan = time.NewTicker(c.consistencyPeriod).C
-		c.consistencyWorker = NewConsistencyChecker(c.client, c.config, c.podStore, c.serviceStore)
+		c.consistencyWorker = NewConsistencyChecker(c.client, c.config, c.podStore, c.serviceStore, c.serviceMgr)
 	}
 
 	for {
@@ -163,12 +163,17 @@ func (c *Controller) updateInstanceMetadata(
 	}
 }
 
-// Retrieve the private network for this Pod.
-func (c *Controller) getPodNetwork(pod *api.Pod) *types.VirtualNetwork {
-	name, ok := pod.Labels[c.config.NetworkTag]
+func PodNetworkName(pod *api.Pod, config *Config) string {
+	name, ok := pod.Labels[config.NetworkTag]
 	if !ok {
 		name = "default-network"
 	}
+	return name
+}
+
+// Retrieve the private network for this Pod.
+func (c *Controller) getPodNetwork(pod *api.Pod) *types.VirtualNetwork {
+	name := PodNetworkName(pod, c.config)
 	network, err := c.networkMgr.LocateNetwork(pod.Namespace, name, c.config.PrivateSubnet)
 	if err != nil {
 		return nil
@@ -211,10 +216,12 @@ func (c *Controller) updatePodServiceIp(service *api.Service, pod *api.Pod) {
 	serviceName := ServiceName(c.config, service.Labels)
 	serviceNetwork, err := c.serviceMgr.LocateServiceNetwork(service.Namespace, serviceName)
 	if err != nil {
+		glog.Error(err)
 		return
 	}
 	serviceIp, err := c.networkMgr.LocateFloatingIp(serviceNetwork, service.Name, service.Spec.ClusterIP)
 	if err != nil {
+		glog.Error(err)
 		return
 	}
 	c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, serviceIp)
@@ -247,6 +254,16 @@ func decodeAccessTag(tag string) []string {
 	return []string{tag}
 }
 
+func BuildPodServiceList(pod *api.Pod, config *Config, serviceList *ServiceIdList) {
+	policyTag, ok := pod.Labels[config.NetworkAccessTag]
+	if ok {
+		serviceLabels := decodeAccessTag(policyTag)
+		for _, srv := range serviceLabels {
+			serviceList.Add(pod.Namespace, srv)
+		}
+	}
+}
+
 func (c *Controller) updatePod(pod *api.Pod) {
 	glog.Infof("Pod %s", pod.Name)
 
@@ -271,15 +288,19 @@ func (c *Controller) updatePod(pod *api.Pod) {
 	}
 	c.updateInstanceMetadata(pod, nic, address.GetInstanceIpAddress(), gateway)
 
-	policyTag, ok := pod.Labels[c.config.NetworkAccessTag]
-	if ok {
-		serviceList := decodeAccessTag(policyTag)
-		for _, srv := range serviceList {
-			c.serviceMgr.Connect(pod.Namespace, srv, network)
-		}
+	serviceList := MakeServiceIdList()
+	for _, svc := range c.config.ClusterServices {
+		namespace, service := serviceIdFromName(svc)
+		serviceList.Add(namespace, service)
 	}
-	// TODO(prm): Disconnect from any policy that the network is associated with other than the
-	// policies above.
+	BuildPodServiceList(pod, c.config, &serviceList)
+	for _, srv := range serviceList {
+		c.serviceMgr.Connect(srv.Namespace, srv.Service, network)
+	}
+
+	// TODO(prm): disconnect of services that are no longer used
+	// in consistency checker after building a list of all services
+	// used by pods in this network.
 
 	for _, item := range c.serviceStore.List() {
 		service := item.(*api.Service)
@@ -384,6 +405,13 @@ func (c *Controller) addService(service *api.Service) {
 		if err == nil {
 			serviceIp, err = c.networkMgr.LocateFloatingIp(
 				serviceNetwork, service.Name, service.Spec.ClusterIP)
+			if err != nil {
+				glog.Error(err)
+			} else {
+				glog.V(3).Infof("Created floating-ip %s for %s/%s", service.Spec.ClusterIP, service.Namespace, service.Name)
+			}
+		} else {
+			glog.Error(err)
 		}
 	}
 

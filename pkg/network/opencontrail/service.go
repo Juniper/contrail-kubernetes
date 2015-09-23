@@ -34,6 +34,7 @@ type ServiceManager interface {
 	LocateServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error)
 	LookupServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error)
 	IsEmpty(tenant, serviceName string) (bool, []string)
+	PurgeStalePolicyRefs(*types.VirtualNetwork, ServiceIdList, func(string, string) bool) error
 }
 
 type ServiceManagerImpl struct {
@@ -314,6 +315,54 @@ func (m *ServiceManagerImpl) Disconnect(tenant, serviceName, netName string) err
 		serviceFQN := []string{DefaultDomain, tenant, fmt.Sprintf(ServiceNetworkFmt, serviceName)}
 		err = m.deletePolicyRule(policy, strings.Join(netFQN, ":"), strings.Join(serviceFQN, ":"))
 		return err
+	}
+	return nil
+}
+
+func (m *ServiceManagerImpl) PurgeStalePolicyRefs(network *types.VirtualNetwork, services ServiceIdList,
+	doDelete func(string, string) bool) error {
+	purgeList := make([]string, 0)
+	refs, err := network.GetNetworkPolicyRefs()
+	if err != nil {
+		return err
+	}
+	for _, ref := range refs {
+		if len(ref.To) < 3 {
+			glog.Errorf("unexpected policy id %+v", ref.To)
+			continue
+		}
+		namespace := ref.To[1]
+		serviceName := ref.To[len(ref.To)-1]
+		if !services.Contains(namespace, serviceName) && doDelete(namespace, serviceName) {
+			purgeList = append(purgeList, ref.Uuid)
+		}
+	}
+	if len(purgeList) == 0 {
+		return nil
+	}
+	for _, policyId := range purgeList {
+		network.DeleteNetworkPolicy(policyId)
+	}
+	err = m.client.Update(network)
+	if err != nil {
+		return err
+	}
+	for _, policyId := range purgeList {
+		policy, err := types.NetworkPolicyByUuid(m.client, policyId)
+		if err != nil {
+			glog.Error(err)
+			continue
+		}
+		refs, err := policy.GetVirtualNetworkBackRefs()
+		if err != nil {
+			glog.Error(err)
+		}
+		if len(refs) == 0 {
+			err = m.client.Delete(policy)
+			if err != nil {
+				glog.Error(err)
+			}
+		}
 	}
 	return nil
 }
