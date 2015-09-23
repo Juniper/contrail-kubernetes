@@ -399,9 +399,9 @@ function update_vhost_pre_up()
 function prereq_vrouter_agent()
 {
   if [ "$OS_TYPE" == $REDHAT ]; then
-     docon=$(rpm -qa | grep docker-engine)
+     docon=$(rpm -qa | grep docker)
   elif [ "$OS_TYPE" == $UBUNTU ]; then
-     docon=$(dpkg -l | grep lxc-docker)
+     docon=$(dpkg -l | grep docker)
   fi
 
   if [ -z $docon ]; then
