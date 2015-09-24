@@ -341,7 +341,7 @@ function update_restart_kubelet()
 
   # kubelet runtime args are imp. Make sure it is up
   kubepid=$(ps -ef|grep kubelet |grep manifests | awk '{print $2}')
-  ln -sf /usr/local/bin/kubelet /usr/bin/kubelet # temp hack
+  ln -sf /usr/local/bin/kubectl /usr/bin/kubectl # temp hack
   if [ -z $kubepid ]; then
     service restart kubelet
   fi
