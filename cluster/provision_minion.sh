@@ -87,14 +87,13 @@ fi
 
 if [[ -z $OPENCONTRAIL_CONTROLLER_IP ]]; then
    kube_api_port=$(cat /etc/default/kubelet | grep -o 'api-servers=[^;]*' | awk -F// '{print $2}' | awk '{print $1}')
-   kube_api_ip=$(echo $kube_api_port| awk -F':' '{print $1}')
-   OPENCONTRAIL_CONTROLLER_IP=$kube_api_ip
+   OPENCONTRAIL_CONTROLLER_IP=$(echo $kube_api_port| awk -F':' '{print $1}')
 
    # Try to resolve
    if [[ -z $OPENCONTRAIL_CONTROLLER_IP ]]; then
        OPENCONTRAIL_CONTROLLER_IP=$(host kubernetes-master | grep address | awk '{print $4}')
    fi
-   echo "OPENCONTRAIL_CONTROLLER_IP=$kube_api_ip" >> $rcfile
+   echo "OPENCONTRAIL_CONTROLLER_IP=$OPENCONTRAIL_CONTROLLER_IP" >> $rcfile
 fi
 if [[ -z $OPENCONTRAIL_VROUTER_INTF ]];then
    OPENCONTRAIL_VROUTER_INTF="eth0"
@@ -611,9 +610,11 @@ function discover_docc_addto_vrouter() {
 
 function provision_virtual_gateway
 {
-    wget -q --directory-prefix=/etc/contrail https://raw.githubusercontent.com/Juniper/contrail-controller/R2.20/src/config/utils/provision_vgw_interface.py
-   OPENCONTRAIL_PUBLIC_SUBNET="${OPENCONTRAIL_PUBLIC_SUBNET:-10.1.0.0/16}"
-   `sudo docker ps |\grep contrail-vrouter-agent | \grep -v pause | awk '{print "sudo docker exec -it " $1 " python /etc/contrail/provision_vgw_interface.py --oper create --interface vgw_public --subnets '$OPENCONTRAIL_PUBLIC_SUBNET' --routes 0.0.0.0/0 --vrf default-domain:default-project:Public:Public"}'`
+    if [ $PROVISION_CONTRAIL_VGW == "TRUE" ]; then
+        wget -q --directory-prefix=/etc/contrail https://raw.githubusercontent.com/Juniper/contrail-controller/R2.20/src/config/utils/provision_vgw_interface.py
+       OPENCONTRAIL_PUBLIC_SUBNET="${OPENCONTRAIL_PUBLIC_SUBNET:-10.1.0.0/16}"
+       `sudo docker ps |\grep contrail-vrouter-agent | \grep -v pause | awk '{print "sudo docker exec -it " $1 " python /etc/contrail/provision_vgw_interface.py --oper create --interface vgw_public --subnets '$OPENCONTRAIL_PUBLIC_SUBNET' --routes 0.0.0.0/0 --vrf default-domain:default-project:Public:Public"}'`
+    fi
 }
 
 function main()
