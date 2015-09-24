@@ -65,10 +65,16 @@ rcdir=`dirname "$rcfile"`
 if [ ! -f "$rcdir" ]; then
     mkdir -p "$rcdir"
 fi
+
 if [[ -z $OPENCONTRAIL_CONTROLLER_IP ]]; then
    kube_api_port=$(cat /etc/default/kubelet | grep -o 'api-servers=[^;]*' | awk -F// '{print $2}' | awk '{print $1}')
    kube_api_ip=$(echo $kube_api_port| awk -F':' '{print $1}')
    OPENCONTRAIL_CONTROLLER_IP=$kube_api_ip
+
+   # Try to resolve
+   if [[ -z $OPENCONTRAIL_CONTROLLER_IP ]]; then
+       OPENCONTRAIL_CONTROLLER_IP=$(host kubernetes-master | grep address | awk '{print $4}')
+   fi
    echo "OPENCONTRAIL_CONTROLLER_IP=$kube_api_ip" >> $rcfile
 fi
 if [[ -z $OPENCONTRAIL_VROUTER_INTF ]];then
@@ -329,6 +335,7 @@ function update_restart_kubelet()
   # kubelet runtime args are imp. Make sure it is up
   kubepid=$(ps -ef|grep kubelet |grep manifests | awk '{print $2}')
   if [ -z $kubepid ]; then
+    ln -sf /usr/local/bin/kubelet /usr/bin/kubelet # temp hack
     service restart kubelet
   fi
   if [[ $kubepid != `pidof kubelet` ]]; then
@@ -480,6 +487,15 @@ function vrouter_agent_startup()
       sed -i 's,# gateway=10.1.1.254,gateway='$defgw',g' $vrac
       sed -i 's/# physical_interface=vnet0/physical_interface='$OPENCONTRAIL_VROUTER_INTF'/g' $vrac
       sed -i 's/compute_node_address = 10.204.216.28/# compute_node_address = /g' $vrac
+
+      # Setup virtual-gateway
+      sed -i 's/# routing_instance=default-domain:admin:public:public$/routing_instance=default-domain:default-project:Public:Public/g' $vrac
+      sed -i 's/# interface=vgw$/interface=vgw/g' $vrac
+
+      PUBLIC_IP=$(echo $OPENCONTRAIL_PUBLIC_SUBNET | cut -d '/' -f 1)
+      PUBLIC_LEN=$(echo $OPENCONTRAIL_PUBLIC_SUBNET | cut -d '/' -f 2)
+
+      sed -i 's/# ip_blocks=1\.1\.1\.1\/24$/ip_blocks='$PUBLIC_IP'\/'$PUBLIC_LEN'/g' $vrac
   fi
   if [ ! -f /etc/kubernetes/manifests ]; then
      mkdir -p /etc/kubernetes/manifests

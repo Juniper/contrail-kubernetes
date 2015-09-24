@@ -92,7 +92,6 @@ function provision_vrouter_encap() {
     master $cmd
 }
 
-
 # Setup kube dns endpoints
 function setup_kube_dns_endpoints() {
     master kubectl --namespace=kube-system create -f /etc/kubernetes/addons/kube-ui/kube-ui-endpoint.yaml || true
@@ -150,4 +149,11 @@ function setup_contrail_master() {
     setup_kube_dns_endpoints
 }
 
+function setup_contrail_minion() {
+    if [ -f /var/run/google.onboot ]; then
+        wget -q https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$OPENCONTRAIL_KUBERNETES_TAG/cluster/provision_minion.sh | bash -x
+    fi
+}
+
 setup_contrail_master
+setup_contrail_minion
