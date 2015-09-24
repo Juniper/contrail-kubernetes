@@ -16,6 +16,7 @@ readonly PROGNAME=$(basename "$0")
 function detect_os()
 {
    OS=`uname`
+   OS_TYPE="none"
    if [ "${OS}" = "Linux" ]; then
       if [ -f /etc/redhat-release ]; then
          OS_TYPE="redhat"
@@ -58,7 +59,6 @@ log_info_msg "Start Provisioning VROUTER kernel module and agent in container"
 LOG_FILE=/var/log/contrail/provision_minion.log
 exec 2>&1 &> >(tee -a "$LOG_FILE")
 
-OS_TYPE="none"
 REDHAT="redhat"
 UBUNTU="ubuntu"
 VROUTER="vrouter"
