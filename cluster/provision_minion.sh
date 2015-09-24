@@ -86,8 +86,8 @@ else
 fi
 
 if [[ -z $OPENCONTRAIL_CONTROLLER_IP ]]; then
-   kube_api_port=$(cat /etc/default/kubelet | grep -o 'api-servers=[^;]*' | awk -F// '{print $2}' | awk '{print $1}')
-   OPENCONTRAIL_CONTROLLER_IP=$(echo $kube_api_port| awk -F':' '{print $1}')
+   # kube_api_port=$(cat /etc/default/kubelet | grep -o 'api-servers=[^;]*' | awk -F// '{print $2}' | awk '{print $1}')
+   # OPENCONTRAIL_CONTROLLER_IP=$(echo $kube_api_port| awk -F':' '{print $1}')
 
    # Try to resolve
    if [[ -z $OPENCONTRAIL_CONTROLLER_IP ]]; then
