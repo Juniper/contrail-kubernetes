@@ -7,7 +7,13 @@
     "spec": {
         "containers": [
             {
-                "command": [ "/go/kube-network-manager", "--config-file=/etc/kubernetes/network.conf" ],
+                "command": [
+                    "/go/kube-network-manager",
+                    "--",
+                    "--portal_net=10.0.0.0/16",
+                    "--private_net=10.10.0.0/16",
+                    "--public_net=10.1.0.0/16"
+                ],
                 "image": "opencontrail/kube-network-manager",
                 "name": "kube-network-manager",
                 "volumeMounts": [
