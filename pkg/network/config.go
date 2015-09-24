@@ -17,8 +17,12 @@ limitations under the License.
 package network
 
 import (
+	"bufio"
+	"bytes"
 	"io"
 	"net"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/scalingdata/gcfg"
@@ -34,11 +38,35 @@ type configWrapper struct {
 	Default Config
 }
 
+func readSection(reader io.Reader, section string) *bytes.Buffer {
+	buffer := new(bytes.Buffer)
+	scanner := bufio.NewScanner(reader)
+	re := regexp.MustCompile(`\[(\w+)\]`)
+	var record bool
+	for scanner.Scan() {
+		line := scanner.Text()
+		if match := re.FindStringSubmatch(line); match != nil {
+			if record {
+				break
+			}
+			if strings.EqualFold(section, match[1]) {
+				record = true
+			}
+		}
+		if record {
+			buffer.WriteString(line)
+			buffer.WriteByte('\n')
+		}
+	}
+	return buffer
+}
+
 func ReadConfiguration(reader io.Reader, config *Config) error {
 	wrapper := configWrapper{Default: *config}
 	wrapper.Default.ResyncPeriod = 0
 
-	err := gcfg.ReadInto(&wrapper, reader)
+	buffer := readSection(reader, "default")
+	err := gcfg.ReadInto(&wrapper, bytes.NewReader(buffer.Bytes()))
 	if err != nil {
 		return err
 	}

@@ -34,6 +34,9 @@ func TestParse(t *testing.T) {
 
 func TestConfigFile(t *testing.T) {
 	content := `
+[DEFAULT]
+service-cluster-ip-range = 10.253.0.0/16
+
 [opencontrail]
 api-server = master
 network-label = k8-app

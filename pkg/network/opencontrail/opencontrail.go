@@ -20,6 +20,8 @@ import (
 	"io"
 	"time"
 
+	"github.com/golang/glog"
+
 	"k8s.io/kubernetes/pkg/client/cache"
 	kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
 
@@ -59,8 +61,13 @@ func NewController(kube *kubeclient.Client, args []string) network.NetworkContro
 func (c *Controller) Init(global *network.Config, reader io.Reader) error {
 	err := c.config.ReadConfiguration(global, reader)
 	if err != nil {
-		return err
+		glog.Error(err)
 	}
+
+	glog.Infof("Starting opencontrail plugin")
+	glog.Infof("Private Subnet:  %s", c.config.PrivateSubnet)
+	glog.Infof("Services Subnet: %s", c.config.ServiceSubnet)
+	glog.Infof("Public Subnet:   %s", c.config.PublicSubnet)
 
 	client := contrail.NewClient(c.config.ApiAddress, c.config.ApiPort)
 	c.client = client
