@@ -105,6 +105,7 @@ function vif_create()
         $vif --create ${IFACE} --mac $(get_hwaddr ${OPENCONTRAIL_VROUTER_INTF})
         $vif --add ${OPENCONTRAIL_VROUTER_INTF} --mac $(get_hwaddr ${OPENCONTRAIL_VROUTER_INTF}) --vrf 0 --vhost-phys --type physical
         $vif --add ${IFACE} --mac $(get_hwaddr ${OPENCONTRAIL_VROUTER_INTF}) --vrf 0 --type vhost --xconnect ${OPENCONTRAIL_VROUTER_INTF}
+        ip link set dev ${IFACE} mtu `ip link list dev ${OPENCONTRAIL_VROUTER_INTF} | grep mtu | awk '{print $5}'`
         ip link set dev ${IFACE} up
    fi
    log_info_msg "vhost0 interface successfully instantiated"
