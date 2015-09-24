@@ -13,6 +13,19 @@ source /etc/contrail/opencontrail-rc
 
 readonly PROGNAME=$(basename "$0")
 
+function detect_os()
+{
+   OS=`uname`
+   if [ "${OS}" = "Linux" ]; then
+      if [ -f /etc/redhat-release ]; then
+         OS_TYPE="redhat"
+      elif [ -f /etc/debian_version ]; then
+         OS_TYPE="ubuntu"
+      fi
+   fi
+}
+detect_os
+
 ocver=$OPENCONTRAIL_TAG
 ockver=$OPENCONTRAIL_KUBERNETES_TAG
 
@@ -66,6 +79,12 @@ if [ ! -f "$rcdir" ]; then
     mkdir -p "$rcdir"
 fi
 
+if [ "$OS_TYPE" == $UBUNTU ]; then
+    apt-get -y install host
+else
+    yum -y install host
+fi
+
 if [[ -z $OPENCONTRAIL_CONTROLLER_IP ]]; then
    kube_api_port=$(cat /etc/default/kubelet | grep -o 'api-servers=[^;]*' | awk -F// '{print $2}' | awk '{print $1}')
    kube_api_ip=$(echo $kube_api_port| awk -F':' '{print $1}')
@@ -100,21 +119,9 @@ if [ -z $MINION_OVERLAY_NET_IP ]; then
     exit
 fi
 
-function detect_os()
-{
-   OS=`uname`
-   if [ "${OS}" = "Linux" ]; then
-      if [ -f /etc/redhat-release ]; then
-         OS_TYPE="redhat"
-      elif [ -f /etc/debian_version ]; then
-         OS_TYPE="ubuntu"
-      fi
-   fi
-}
-
 function prep_to_build()
 {
-  if [ "$OS_TYPEi" == $REDHAT ]; then
+  if [ "$OS_TYPE" == $REDHAT ]; then
     yum update
     yum install -y git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r` libxml2-devel python-lxml sipcalc wget ethtool bridge-utils curl
   elif [ "$OS_TYPE" == $UBUNTU ]; then
@@ -608,7 +615,6 @@ function provision_virtual_gateway
 
 function main()
 {
-   detect_os
    prep_to_build
    build_vrouter
    setup_vhost
