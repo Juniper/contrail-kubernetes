@@ -138,7 +138,7 @@ function prep_to_build()
        log_info_msg "System rebooting now"
        reboot
     fi
-    apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r` libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl
+    apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r` libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl python-pip
   fi
 }
 
