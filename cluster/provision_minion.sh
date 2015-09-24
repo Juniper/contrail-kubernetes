@@ -511,6 +511,17 @@ function verify_vhost_setup()
   fi
 }
 
+function routeconfig()
+{
+    if isGceVM ; then
+       #configure point to point route
+       naddr=$(getGceNetAddr)
+       defgw=$(ip route | grep default | awk '{print $3}')
+       route add -host $defgw $VHOST
+       route del -net $naddr dev $VHOST
+    fi
+}
+
 function provision_vrouter()
 {
   stderr="/tmp/stderr"
@@ -597,8 +608,9 @@ function main()
    update_vhost_pre_up
    prereq_vrouter_agent
    vrouter_agent_startup
-   provision_vrouter
    verify_vhost_setup
+   routeconfig
+   provision_vrouter
    verify_vrouter_agent
    discover_docc_addto_vrouter
    provision_virtual_gateway
