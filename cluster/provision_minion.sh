@@ -441,11 +441,6 @@ function vrouter_agent_startup()
   wget -P $etcc https://raw.githubusercontent.com/Juniper/contrail-controller/$ocver/src/vnsw/agent/contrail-vrouter-agent.conf
   def=$(ip route  | grep $OPENCONTRAIL_VROUTER_INTF | grep -o default)
   cidr=$(sipcalc $OPENCONTRAIL_VROUTER_INTF | grep "Network mask (bits)" | awk '{print $5}')
-  if isGceVM ; then
-     log_info_msg "Getting CIDR for GCE VM"
-     naddr=$(getGceNetAddr)
-     cidr=$(sipcalc $naddr | grep "Network mask (bits)" | awk '{print $5}')
-  fi
   if [ -z $cidr ]; then
     # check on vhost0 assuming its a rerun
     cidr=$(sipcalc $VHOST | grep "Network mask (bits)" | awk '{print $5}')
