@@ -86,14 +86,16 @@ else
 fi
 
 if [[ -z $OPENCONTRAIL_CONTROLLER_IP ]]; then
-   # kube_api_port=$(cat /etc/default/kubelet | grep -o 'api-servers=[^;]*' | awk -F// '{print $2}' | awk '{print $1}')
-   # OPENCONTRAIL_CONTROLLER_IP=$(echo $kube_api_port| awk -F':' '{print $1}')
+    kube_api_port=$(cat /etc/default/kubelet | grep -o 'api-servers=[^;]*' | awk -F// '{print $2}' | awk '{print $1}')
+    kube_api_server=$(echo $kube_api_port| awk -F':' '{print $1}')
 
    # Try to resolve
-   if [[ -z $OPENCONTRAIL_CONTROLLER_IP ]]; then
-       OPENCONTRAIL_CONTROLLER_IP=$(host kubernetes-master | grep address | awk '{print $4}')
+   if [[ -n $kube_api_server ]]; then
+       OPENCONTRAIL_CONTROLLER_IP=$(host $kube_api_server | grep address | awk '{print $4}')
+       echo "OPENCONTRAIL_CONTROLLER_IP=$OPENCONTRAIL_CONTROLLER_IP" >> $rcfile
+   else
+      log_error_msg "Unable to resolve to contrail controller which is deployed on Kubernetes master"
    fi
-   echo "OPENCONTRAIL_CONTROLLER_IP=$OPENCONTRAIL_CONTROLLER_IP" >> $rcfile
 fi
 if [[ -z $OPENCONTRAIL_VROUTER_INTF ]];then
    OPENCONTRAIL_VROUTER_INTF="eth0"
@@ -122,7 +124,9 @@ function prep_to_build()
 {
   if [ "$OS_TYPE" == $REDHAT ]; then
     yum update
-    yum install -y git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r` libxml2-devel python-lxml sipcalc wget ethtool bridge-utils curl
+    yum install -y git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r` \
+        libxml2-devel python-lxml sipcalc wget ethtool bridge-utils curl python-pip python-setuptools
+        python-setuptools
   elif [ "$OS_TYPE" == $UBUNTU ]; then
     apt-get update
     # in case of an interrupt during execution of apt-get
@@ -137,7 +141,8 @@ function prep_to_build()
        log_info_msg "System rebooting now"
        reboot
     fi
-    apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r` libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl python-pip
+    apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r` \
+            libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl python-pip python-setuptools
   fi
 }
 
@@ -291,13 +296,6 @@ function setup_vhost()
 
 function setup_opencontrail_kubelet()
 {
-  if [ "$OS_TYPE" == $UBUNTU ]; then
-     apt-get install -y python-setuptools
-     apt-get install -y python-pip
-  elif [ "$OS_TYPE" == $REDHAT ]; then
-     yum install -y python-setuptools
-     yum install -y python-pip
-  fi
   ockub=$(pip freeze | grep kubelet | awk -F= '{print $1}')
   if [ ! -z "$ockub" ]; then
      pip uninstall -y opencontrail-kubelet
@@ -494,15 +492,12 @@ function vrouter_agent_startup()
       sed -i 's/# physical_interface=vnet0/physical_interface='$OPENCONTRAIL_VROUTER_INTF'/g' $vrac
       sed -i 's/compute_node_address = 10.204.216.28/# compute_node_address = /g' $vrac
 
-      if [ $PROVISION_CONTRAIL_VGW == "TRUE" ]; then
-
+      if $PROVISION_CONTRAIL_VGW ; then
           # Setup virtual-gateway
           sed -i 's/# routing_instance=default-domain:admin:public:public$/routing_instance=default-domain:default-project:Public:Public/g' $vrac
           sed -i 's/# interface=vgw$/interface=vgw/g' $vrac
-
           PUBLIC_IP=$(echo $OPENCONTRAIL_PUBLIC_SUBNET | cut -d '/' -f 1)
           PUBLIC_LEN=$(echo $OPENCONTRAIL_PUBLIC_SUBNET | cut -d '/' -f 2)
-
           sed -i 's/# ip_blocks=1\.1\.1\.1\/24$/ip_blocks='$PUBLIC_IP'\/'$PUBLIC_LEN'/g' $vrac
       fi
   fi
@@ -610,7 +605,7 @@ function discover_docc_addto_vrouter() {
 
 function provision_virtual_gateway
 {
-    if [ $PROVISION_CONTRAIL_VGW == "TRUE" ]; then
+    if $PROVISION_CONTRAIL_VGW ; then
         wget -q --directory-prefix=/etc/contrail https://raw.githubusercontent.com/Juniper/contrail-controller/R2.20/src/config/utils/provision_vgw_interface.py
        OPENCONTRAIL_PUBLIC_SUBNET="${OPENCONTRAIL_PUBLIC_SUBNET:-10.1.0.0/16}"
        `sudo docker ps |\grep contrail-vrouter-agent | \grep -v pause | awk '{print "sudo docker exec -it " $1 " python /etc/contrail/provision_vgw_interface.py --oper create --interface vgw_public --subnets '$OPENCONTRAIL_PUBLIC_SUBNET' --routes 0.0.0.0/0 --vrf default-domain:default-project:Public:Public"}'`
