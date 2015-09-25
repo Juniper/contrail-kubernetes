@@ -91,6 +91,7 @@ func (c *Config) Parse(args []string) {
 }
 
 type configWrapper struct {
+	Default      network.Config
 	OpenContrail Config
 }
 

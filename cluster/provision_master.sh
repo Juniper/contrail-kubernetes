@@ -104,14 +104,14 @@ function setup_contrail_manifest_files() {
     echo "[IFMAP]" >> /etc/contrail/contrail-control.conf
     echo "server_url=https://127.0.0.1:8443" >> /etc/contrail/contrail-control.conf
 
-#   mkdir -p /etc/kubernetes
-#   echo "[DEFAULT]" > /etc/kubernetes/network.conf
-#   echo "service-cluster-ip-range = $SERVICE_CLUSTER_IP_RANGE" >> /etc/kubernetes/network.conf
+    mkdir -p /etc/kubernetes
+    echo "[DEFAULT]" > /etc/kubernetes/network.conf
+    echo "service-cluster-ip-range = $SERVICE_CLUSTER_IP_RANGE" >> /etc/kubernetes/network.conf
 
-#   echo >> /etc/kubernetes/network.conf
-#   echo "[opencontrail]" >> /etc/kubernetes/network.conf
-#   echo "public-ip-range = $OPENCONTRAIL_PUBLIC_SUBNET" >> /etc/kubernetes/network.conf
-#   echo "private-ip-range = 10.10.0.0/16" >> /etc/kubernetes/network.conf
+    echo >> /etc/kubernetes/network.conf
+    echo "[opencontrail]" >> /etc/kubernetes/network.conf
+    echo "public-ip-range = $OPENCONTRAIL_PUBLIC_SUBNET" >> /etc/kubernetes/network.conf
+    echo "private-ip-range = 10.10.0.0/16" >> /etc/kubernetes/network.conf
 
     cmd1='wget -qO - https://raw.githubusercontent.com/juniper/contrail-kubernetes/'
     cmd2='/cluster/manifests.hash | grep -v contrail-vrouter-agent | grep -v provision | awk "{print \"https://raw.githubusercontent.com/juniper/contrail-kubernetes/'

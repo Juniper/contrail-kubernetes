@@ -89,7 +89,17 @@ func (m *NetworkManager) parseConfig() io.ReadCloser {
 		glog.Warning(err)
 		return nil
 	}
-	network.ReadConfiguration(file, &m.config)
+
+	err = network.ReadConfiguration(file, &m.config)
+	if err != nil {
+		glog.Error(err)
+	}
+
+	_, err = file.Seek(0, 0)
+	if err != nil {
+		glog.Error(err)
+	}
+
 	return file
 }
 

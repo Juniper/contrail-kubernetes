@@ -26,6 +26,9 @@ func TestMaster(t *testing.T) {
 	configData := `
 [DEFAULT]
 master = https://master:443
+
+[opencontrail]
+option = value
 `
 	buffer := bytes.NewBufferString(configData)
 	var config Config
