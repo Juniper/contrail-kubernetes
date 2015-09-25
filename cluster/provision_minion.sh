@@ -358,6 +358,7 @@ function update_restart_kubelet()
     sed -i '/DAEMON_ARGS/d' /etc/default/kubelet
     echo 'DAEMON_ARGS="'$kubecf'"' > /etc/default/kubelet
   fi
+  echo 'PATH=/usr/local/bin:$PATH' > /etc/default/kubelet
   service kubelet restart
 }
 
@@ -513,14 +514,14 @@ function vrouter_agent_startup()
   mv /tmp/contrail-vrouter-agent.manifest /etc/kubernetes/manifests  
 }
 
-function verify_vhost_setup()
+function ifup_vhost()
 {
   ifup $VHOST
-  status=$(ping -c 1 -w 1 -W 1 -n $OPENCONTRAIL_CONTROLLER_IP | grep packet | awk '{print $6}' | cut -c1)
-  if [ "$status" == 0 ]; then
-    log_info_msg "Vrouter kernel module and network successfuly setup"
+  intf=$(vif --list | grep vhost | awk '{print $3}')
+  if [[ "$intf" == $VHOST ]]; then
+    log_info_msg "Vhost setuo successfuly"
   else
-    log_info_msg "Vrouter kernel module and network - Error"
+    log_info_msg "Vhost setup - Error"
   fi
 }
 
@@ -533,6 +534,17 @@ function routeconfig()
        route add -host $defgw $VHOST
        route del -net $naddr dev $VHOST
     fi
+}
+
+function verify_vhost_setup()
+{
+  sleep 3
+  status=$(ping -c 1 -w 1 -W 1 -n $OPENCONTRAIL_CONTROLLER_IP | grep packet | awk '{print $6}' | cut -c1)
+  if [ "$status" == 0 ]; then
+    log_info_msg "Vrouter kernel module and network successfuly setup"
+  else
+    log_info_msg "Vrouter kernel module and network - Error"
+  fi
 }
 
 function provision_vrouter()
@@ -557,13 +569,12 @@ function cleanup()
     apt-get remove -y git flex bison g++ gcc make libboost-all-dev scons libxml2-dev linux-headers-`uname -r` sipcalc automake make python-setuptools python-pip
   fi
   rm -rf ~/vrouter-build
-  rm -rf /tmp/provision_vrouter.py
 }
 
 function verify_vrouter_agent()
 {
   status=$(lsmod |grep vrouter | awk '{print $3}')
-  if [ "$status" != "1" ]; then
+  if [ "$status" != 0 ]; then
     log_error_msg "Vrouter agent not launched successfuly. Please check contrail-vrouter-agent docker and vrouter kernel module"
     return
   fi
@@ -606,7 +617,7 @@ function provision_virtual_gateway
     if $PROVISION_CONTRAIL_VGW ; then
         wget -q --directory-prefix=/etc/contrail https://raw.githubusercontent.com/Juniper/contrail-controller/R2.20/src/config/utils/provision_vgw_interface.py
        OPENCONTRAIL_PUBLIC_SUBNET="${OPENCONTRAIL_PUBLIC_SUBNET:-10.1.0.0/16}"
-       `sudo docker ps |\grep contrail-vrouter-agent | \grep -v pause | awk '{print "sudo docker exec -it " $1 " python /etc/contrail/provision_vgw_interface.py --oper create --interface vgw_public --subnets '$OPENCONTRAIL_PUBLIC_SUBNET' --routes 0.0.0.0/0 --vrf default-domain:default-project:Public:Public"}'`
+       `sudo docker ps |\grep contrail-vrouter-agent | \grep -v pause | awk '{print "sudo docker exec -it " $1 " python /etc/contrail/provision_vgw_interface.py --oper create --interface vgw --subnets '$OPENCONTRAIL_PUBLIC_SUBNET' --routes 0.0.0.0/0 --vrf default-domain:default-project:Public:Public"}'`
     fi
 }
 
@@ -624,8 +635,9 @@ function main()
    update_vhost_pre_up
    prereq_vrouter_agent
    vrouter_agent_startup
-   verify_vhost_setup
+   ifup_vhost
    routeconfig
+   verify_vhost_setup
    provision_vrouter
    verify_vrouter_agent
    discover_docc_addto_vrouter
