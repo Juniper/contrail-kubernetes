@@ -13,20 +13,6 @@ source /etc/contrail/opencontrail-rc
 
 readonly PROGNAME=$(basename "$0")
 
-function detect_os()
-{
-   OS=`uname`
-   OS_TYPE="none"
-   if [ "${OS}" = "Linux" ]; then
-      if [ -f /etc/redhat-release ]; then
-         OS_TYPE="redhat"
-      elif [ -f /etc/debian_version ]; then
-         OS_TYPE="ubuntu"
-      fi
-   fi
-}
-detect_os
-
 ocver=$OPENCONTRAIL_TAG
 ockver=$OPENCONTRAIL_KUBERNETES_TAG
 
@@ -72,19 +58,27 @@ if [[ -z $ockver ]]; then
    ockver="master"
 fi
 
+function detect_os()
+{
+   OS=`uname`
+   OS_TYPE="none"
+   if [ "${OS}" = "Linux" ]; then
+      if [ -f /etc/redhat-release ]; then
+         OS_TYPE="redhat"
+      elif [ -f /etc/debian_version ]; then
+         OS_TYPE="ubuntu"
+      fi
+   fi
+}
+
+function generate_rc()
+{
 flag=false
 rcfile="/etc/contrail/opencontrail-rc"
 rcdir=`dirname "$rcfile"`
 if [ ! -f "$rcdir" ]; then
     mkdir -p "$rcdir"
 fi
-
-if [ "$OS_TYPE" == $UBUNTU ]; then
-    apt-get -y install host
-else
-    yum -y install host
-fi
-
 if [[ -z $OPENCONTRAIL_CONTROLLER_IP ]]; then
     kube_api_port=$(cat /etc/default/kubelet | grep -o 'api-servers=[^;]*' | awk -F// '{print $2}' | awk '{print $1}')
     kube_api_server=$(echo $kube_api_port| awk -F':' '{print $1}')
@@ -102,7 +96,6 @@ if [[ -z $OPENCONTRAIL_VROUTER_INTF ]];then
    echo "OPENCONTRAIL_VROUTER_INTF="eth0"" >> $rcfile
    flag=true
 fi
-
 if [[ "$flag" == true ]]; then
    source "$rcfile"
 fi
@@ -119,14 +112,15 @@ if [ -z $MINION_OVERLAY_NET_IP ]; then
     echo "$msg"
     exit
 fi
+}
 
-function prep_to_build()
+function prep_to_install()
 {
   if [ "$OS_TYPE" == $REDHAT ]; then
     yum update
     yum install -y git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r` \
         libxml2-devel python-lxml sipcalc wget ethtool bridge-utils curl python-pip python-setuptools
-        python-setuptools
+        python-setuptools host
   elif [ "$OS_TYPE" == $UBUNTU ]; then
     apt-get update
     # in case of an interrupt during execution of apt-get
@@ -142,7 +136,7 @@ function prep_to_build()
        reboot
     fi
     apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r` \
-            libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl python-pip python-setuptools
+            libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl python-pip python-setuptools host
   fi
 }
 
@@ -554,9 +548,9 @@ function provision_vrouter()
 function cleanup()
 {
   if [ "$OS_TYPE" == $REDHAT ]; then
-    yum remove -y git flex bison gcc gcc-c++ boost boost-devel scons libxml2-devel kernel-devel-`uname -r` sipcalc automake make
+    yum remove -y git flex bison gcc gcc-c++ boost boost-devel scons libxml2-devel kernel-devel-`uname -r` sipcalc automake make python-setuptools python-pip
   elif [ "$OS_TYPE" == $UBUNTU ]; then
-    apt-get remove -y git flex bison g++ gcc make libboost-all-dev scons libxml2-dev linux-headers-`uname -r` sipcalc automake make
+    apt-get remove -y git flex bison g++ gcc make libboost-all-dev scons libxml2-dev linux-headers-`uname -r` sipcalc automake make python-setuptools python-pip
   fi
   rm -rf ~/vrouter-build
   rm -rf /tmp/provision_vrouter.py
@@ -614,7 +608,9 @@ function provision_virtual_gateway
 
 function main()
 {
-   prep_to_build
+   detect_os
+   prep_to_install
+   generate_rc
    build_vrouter
    setup_vhost
    modprobe_vrouter
