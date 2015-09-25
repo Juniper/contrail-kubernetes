@@ -551,10 +551,10 @@ function provision_vrouter()
 {
   stderr="/tmp/stderr"
   host=`hostname -s`
-  # check if contrail-api is up
-  # check for 10 in 30 sec max
+
+  # check if contrail-api is up 40 times, for 2 mins
   vr='';i=0
-  for (( i=0; i<10; i++ ))
+  for (( i=0; i<40; i++ ))
     do
      vr=$(curl http://$OPENCONTRAIL_CONTROLLER_IP:8082 | grep -ow "virtual-routers")
      if [ ! -z $vr ]; then
@@ -562,7 +562,7 @@ function provision_vrouter()
      fi
      sleep 3
     done
-  curl -X POST -H "Content-Type: application/json; charset=UTF-8" -d '{"virtual-router": {"parent_type": "global-system-config", "fq_name": ["default-global-system-config", "'$host'" ], "display_name": "'$host'", "virtual_router_ip_address": "'$MINION_OVERLAY_NET_IP'", "name": "'$host'"}}' http://$OPENCONTRAIL_CONTROLLER_IP:8082/virtual-routers 2> >( cat <() > $stderr)
+  curl -s -X POST -H "Content-Type: application/json; charset=UTF-8" -d '{"virtual-router": {"parent_type": "global-system-config", "fq_name": ["default-global-system-config", "'$host'" ], "display_name": "'$host'", "virtual_router_ip_address": "'$MINION_OVERLAY_NET_IP'", "name": "'$host'"}}' http://$OPENCONTRAIL_CONTROLLER_IP:8082/virtual-routers 2> >( cat <() > $stderr)
   err=$(cat $stderr)
   if [ -z "$err" ]; then
      log_info_msg "Provisioning of vrouter successful"
