@@ -119,7 +119,7 @@ function prep_to_install()
   if [ "$OS_TYPE" == $REDHAT ]; then
     yum update
     yum install -y git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r` \
-        libxml2-devel python-lxml sipcalc wget ethtool bridge-utils curl python-pip python-setuptools
+        libxml2-devel python-lxml sipcalc wget ethtool bridge-utils curl python-pip python-setuptools libxml2-utils
         python-setuptools host
   elif [ "$OS_TYPE" == $UBUNTU ]; then
     apt-get update
@@ -136,7 +136,7 @@ function prep_to_install()
        reboot
     fi
     apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r` \
-            libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl python-pip python-setuptools host
+            libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl python-pip python-setuptools host libxml2-utils
   fi
 }
 
@@ -507,6 +507,17 @@ function vrouter_agent_startup()
   if [ -f "$vra_manifest" ]; then
      rm -f "$vra_manifest"
   fi
+  # Wait for the control node to be up
+  # check 60 times in 5 min
+  cc=''
+  for (( i=0; i<60; i++ ))
+    do
+     cc=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8083/Snh_SandeshUVECacheReq?tname=NodeStatus | xmllint --format - | grep -ow "contrail-control")
+     if [ ! -z $cc ]; then
+       break
+     fi
+     sleep 5
+    done
   wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/cluster/contrail-vrouter-agent.manifest
   vragentfile=/tmp/contrail-vrouter-agent.manifest
   vrimg=$(cat $vragentfile | grep image | awk -F, '{print $1}' | awk '{print $2}')
@@ -529,10 +540,16 @@ function routeconfig()
 {
     if isGceVM ; then
        #configure point to point route
+       #asssuming the container is debian or ubuntu
        naddr=$(getGceNetAddr)
        defgw=$(ip route | grep default | awk '{print $3}')
        route add -host $defgw $VHOST
        route del -net $naddr dev $VHOST
+       up route add -host 10.240.0.1 dev vhost0
+       up route del -net 10.240.0.0/16 dev vhost0
+       hostroute="up route add -host $defgw dev $VHOST"
+       netdel="up route del -net $naddr dev $VHOST"
+       sed -i "/gateway/a \\\t$hostroute\n\t$netdel" /etc/network/interfaces
     fi
 }
 
@@ -553,7 +570,7 @@ function provision_vrouter()
   host=`hostname -s`
 
   # check if contrail-api is up 60 times, for 5 mins
-  vr='';i=0
+  vr=''
   for (( i=0; i<60; i++ ))
     do
      vr=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8082 | grep -ow "virtual-routers")
@@ -645,10 +662,10 @@ function main()
    stop_kube_svcs
    update_vhost_pre_up
    prereq_vrouter_agent
-   vrouter_agent_startup
    ifup_vhost
    routeconfig
    verify_vhost_setup
+   vrouter_agent_startup
    provision_vrouter
    verify_vrouter_agent
    discover_docc_addto_vrouter
