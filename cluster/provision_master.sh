@@ -151,10 +151,10 @@ function setup_contrail_master() {
 
 function setup_contrail_minion() {
     if [ -f /var/run/google.onboot ]; then
-        export PROVISION_CONTRAIL_VGW="TRUE"
+        export PROVISION_CONTRAIL_VGW=true
         wget -q -O - https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$OPENCONTRAIL_KUBERNETES_TAG/cluster/provision_minion.sh | bash -x
     fi
 }
 
 setup_contrail_master
-setup_contrail_minion
+#setup_contrail_minion
