@@ -554,17 +554,14 @@ function provision_vrouter()
   # check if contrail-api is up
   # check for 10 in 30 sec max
   vr='';i=0
-  while true
-      do
-       if [ $i < 10 ]; then
-          vr=$(curl http://$OPENCONTRAIL_CONTROLLER_IP:8082 | grep -ow "virtual-routers")
-          if [ ! -z $vr ]; then
-             break
-          fi
-          ((i++))
-          sleep 3
-       fi
-      done
+  for (( i=0; i<10; i++ ))
+    do
+     vr=$(curl http://$OPENCONTRAIL_CONTROLLER_IP:8082 | grep -ow "virtual-routers")
+     if [ ! -z $vr ]; then
+       break
+     fi
+     sleep 3
+    done
   curl -X POST -H "Content-Type: application/json; charset=UTF-8" -d '{"virtual-router": {"parent_type": "global-system-config", "fq_name": ["default-global-system-config", "'$host'" ], "display_name": "'$host'", "virtual_router_ip_address": "'$MINION_OVERLAY_NET_IP'", "name": "'$host'"}}' http://$OPENCONTRAIL_CONTROLLER_IP:8082/virtual-routers 2> >( cat <() > $stderr)
   err=$(cat $stderr)
   if [ -z "$err" ]; then
