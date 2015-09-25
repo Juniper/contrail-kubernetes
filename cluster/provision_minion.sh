@@ -358,7 +358,7 @@ function update_restart_kubelet()
     sed -i '/DAEMON_ARGS/d' /etc/default/kubelet
     echo 'DAEMON_ARGS="'$kubecf'"' > /etc/default/kubelet
   fi
-  echo 'PATH=/usr/local/bin:$PATH' > /etc/default/kubelet
+  echo 'PATH=/usr/local/bin:$PATH' >> /etc/default/kubelet
   service kubelet restart
 }
 
@@ -519,7 +519,7 @@ function ifup_vhost()
   ifup $VHOST
   intf=$(vif --list | grep vhost | awk '{print $3}')
   if [[ "$intf" == $VHOST ]]; then
-    log_info_msg "Vhost setuo successfuly"
+    log_info_msg "Vhost setup successfuly"
   else
     log_info_msg "Vhost setup - Error"
   fi
@@ -551,6 +551,20 @@ function provision_vrouter()
 {
   stderr="/tmp/stderr"
   host=`hostname -s`
+  # check if contrail-api is up
+  # check for 10 in 30 sec max
+  vr='';i=0
+  while true
+      do
+       if [ $i < 10 ]; then
+          vr=$(curl http://$OPENCONTRAIL_CONTROLLER_IP:8082 | grep -ow "virtual-routers")
+          if [ ! -z $vr ]; then
+             break
+          fi
+          ((i++))
+          sleep 3
+       fi
+      done
   curl -X POST -H "Content-Type: application/json; charset=UTF-8" -d '{"virtual-router": {"parent_type": "global-system-config", "fq_name": ["default-global-system-config", "'$host'" ], "display_name": "'$host'", "virtual_router_ip_address": "'$MINION_OVERLAY_NET_IP'", "name": "'$host'"}}' http://$OPENCONTRAIL_CONTROLLER_IP:8082/virtual-routers 2> >( cat <() > $stderr)
   err=$(cat $stderr)
   if [ -z "$err" ]; then
