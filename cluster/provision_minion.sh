@@ -328,6 +328,8 @@ function update_restart_kubelet()
      kubecf=`echo $KUBELET_OPTS`
   elif [ ! -z "$DAEMON_ARGS" ]; then
      kubecf=`echo $DAEMON_ARGS`
+  else
+     logger_error_msg "Kubelet default configuration missing. Please check kubelet and /etc/default/kubelet"
   fi
 
   # kubelet runtime args are imp. Make sure it is up
@@ -350,8 +352,10 @@ function update_restart_kubelet()
   fi
 
   if [ ! -z "$KUBELET_OPTS" ]; then
+    sed -i '/KUBELET_OPTS/d' /etc/default/kubelet
     echo 'KUBELET_OPTS="'$kubecf'"' > /etc/default/kubelet
   elif [ ! -z "$DAEMON_ARGS" ]; then
+    sed -i '/DAEMON_ARGS/d' /etc/default/kubelet
     echo 'DAEMON_ARGS="'$kubecf'"' > /etc/default/kubelet
   fi
   service kubelet restart
