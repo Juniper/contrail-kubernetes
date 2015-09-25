@@ -552,11 +552,11 @@ function provision_vrouter()
   stderr="/tmp/stderr"
   host=`hostname -s`
 
-  # check if contrail-api is up 40 times, for 2 mins
+  # check if contrail-api is up 40 times, for 5 mins
   vr='';i=0
-  for (( i=0; i<40; i++ ))
+  for (( i=0; i<100; i++ ))
     do
-     vr=$(curl http://$OPENCONTRAIL_CONTROLLER_IP:8082 | grep -ow "virtual-routers")
+     vr=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8082 | grep -ow "virtual-routers")
      if [ ! -z $vr ]; then
        break
      fi
