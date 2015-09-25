@@ -513,7 +513,8 @@ function vrouter_agent_startup()
   for (( i=0; i<60; i++ ))
     do
      cc=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8083/Snh_SandeshUVECacheReq?tname=NodeStatus | xmllint --format - | grep -ow "contrail-control")
-     if [ ! -z $cc ]; then
+     ifmapup=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8083/Snh_IFMapPeerServerInfoReq? | xmllint --format - | grep end_of_rib_computed | cut -d ">" -f2 | cut -d "<" -f1)
+     if [ ! -z $cc ] && $ifmapup ; then
        break
      fi
      sleep 5
