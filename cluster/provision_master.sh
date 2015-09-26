@@ -81,7 +81,7 @@ function check_contrail_services()
   vr=''
   for (( i=0; i<60; i++ ))
     do
-     vr=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8082 | grep -ow "virtual-routers")
+     vr=$(curl -s http://localhost:8082 | grep -ow "virtual-routers")
      if [ ! -z $vr ]; then
        break
      fi
@@ -95,8 +95,8 @@ function check_contrail_services()
   cc=''
   for (( i=0; i<60; i++ ))
     do
-     cc=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8083/Snh_SandeshUVECacheReq?tname=NodeStatus | xmllint --format - | grep -ow "contrail-control")
-     ifmapup=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8083/Snh_IFMapPeerServerInfoReq? | xmllint --format - | grep end_of_rib_computed | cut -d ">" -f2 | cut -d "<" -f1)
+     cc=$(curl -s http://localhost:8083/Snh_SandeshUVECacheReq?tname=NodeStatus | xmllint --format - | grep -ow "contrail-control")
+     ifmapup=$(curl -s http://localhost:8083/Snh_IFMapPeerServerInfoReq? | xmllint --format - | grep end_of_rib_computed | cut -d ">" -f2 | cut -d "<" -f1)
      if [ ! -z $cc ] && $ifmapup ; then
        break
      fi
