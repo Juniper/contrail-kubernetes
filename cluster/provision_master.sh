@@ -78,14 +78,15 @@ function verify_contrail_listen_services() {
 # and restart if not set
 function check_contrail_services()
 {
+  apt-get install -y libxml2-utils
   vr=''
-  for (( i=0; i<60; i++ ))
+  for (( i=0; i<40; i++ ))
     do
      vr=$(curl -s http://localhost:8082 | grep -ow "virtual-routers")
-     if [ ! -z $vr ]; then
+     if [ ! -z "$vr" ]; then
        break
      fi
-     sleep 5
+     sleep 3
     done
    if [ "$vr" != "virtual-routers" ]; then
      echo "Error: Contrail-API initialization failure. Restart once"
@@ -93,16 +94,16 @@ function check_contrail_services()
    fi
 
   cc=''
-  for (( i=0; i<60; i++ ))
+  for (( i=0; i<40; i++ ))
     do
      cc=$(curl -s http://localhost:8083/Snh_SandeshUVECacheReq?tname=NodeStatus | xmllint --format - | grep -ow "contrail-control")
      ifmapup=$(curl -s http://localhost:8083/Snh_IFMapPeerServerInfoReq? | xmllint --format - | grep end_of_rib_computed | cut -d ">" -f2 | cut -d "<" -f1)
      if [ ! -z $cc ] && $ifmapup ; then
        break
      fi
-     sleep 5
+     sleep 3
     done
-  if [ ! $ifmapup ] ; then
+  if ! $ifmapup ; then
      echo "Error: Contrail-Control intialization failure. Restart once"
      docker restart `docker ps | grep -v pause | grep contrail-control | awk '{print $1}'`
   fi
