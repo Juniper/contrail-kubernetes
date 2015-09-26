@@ -421,7 +421,7 @@ function prereq_vrouter_agent()
      docon=$(dpkg -l | grep docker)
   fi
 
-  if [ -z $docon ]; then
+  if [ -z "$docon" ]; then
      curl -sSL https://get.docker.com/ | sh
   fi
 }
@@ -434,7 +434,7 @@ function check_docker()
    docpid=`pidof docker`
   fi
 
-  if  [ -z $docpid ]; then
+  if  [ -z "$docpid" ]; then
     (exec /usr/bin/docker -d)&
   fi
 }
@@ -521,7 +521,7 @@ function vr_agent_manifest_setup()
   # Wait for the control node to be up
   # check 60 times in 5 min
   cc=''
-  for (( i=0; i<60; i++ ))
+  for (( i=0; i<120; i++ ))
     do
      cc=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8083/Snh_SandeshUVECacheReq?tname=NodeStatus | xmllint --format - | grep -ow "contrail-control")
      ifmapup=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8083/Snh_IFMapPeerServerInfoReq? | xmllint --format - | grep end_of_rib_computed | cut -d ">" -f2 | cut -d "<" -f1)
@@ -554,8 +554,6 @@ function routeconfig()
        defgw=$(ip route | grep default | awk '{print $3}')
        route add -host $defgw $VHOST
        route del -net $naddr dev $VHOST
-       up route add -host 10.240.0.1 dev vhost0
-       up route del -net 10.240.0.0/16 dev vhost0
        hostroute="up route add -host $defgw dev $VHOST"
        netdel="up route del -net $naddr dev $VHOST"
        grep -q 'up route add -host' /etc/network/interfaces || sed -i "/gateway/a \\\t$hostroute\n\t$netdel" /etc/network/interfaces
@@ -678,10 +676,12 @@ function main()
    verify_vhost_setup
    vr_agent_manifest_setup
    provision_vrouter
+   check_docker
    verify_vrouter_agent
    discover_docc_addto_vrouter
    provision_virtual_gateway
    cleanup
+   check_docker
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
 }
 
