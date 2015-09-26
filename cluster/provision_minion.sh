@@ -58,6 +58,8 @@ if [[ -z $ockver ]]; then
    ockver="master"
 fi
 
+hname=`hostname`
+
 function detect_os()
 {
    OS=`uname`
@@ -259,7 +261,7 @@ function setup_vhost()
       fi
     fi
   elif [ "$OS_TYPE" == $UBUNTU ]; then
-     if [ "$phy_itf" != $VHOST ]; then
+     if [ "$phy_itf" != "$VHOST" ]; then
         itf="/etc/network/interfaces"
         rt=$(cat $itf | grep route |grep $phy_itf)
         rtv=$(sed "s/$phy_itf/$VHOST/g" <<<"$rt")
@@ -457,6 +459,11 @@ function vr_agent_conf_image_pull()
   if [ -z $cidr ]; then
     # check on vhost0 assuming its a rerun
     cidr=$(sipcalc $VHOST | grep "Network mask (bits)" | awk '{print $5}')
+    if GceVM ; then
+       # Its assumed to be a /32 point to point interface
+       # cidr will be /32 for host
+       cidr=32
+    fi
   fi
   if [ -z $cidr ]; then
     log_error_msg "Unable to get CIDR for networks on $OPENCONTRAIL_VROUTER_INTF and $VHOST. Please check interface and network and rerun"
@@ -656,6 +663,14 @@ function provision_virtual_gateway
     fi
 }
 
+function persist_hostname()
+{
+   if [ ! -f /etc/hostname ]; then
+     echo "$hname" > /etc/hostname
+     hostname $hname
+   fi
+}
+
 function main()
 {
    detect_os
@@ -664,7 +679,6 @@ function main()
    build_vrouter
    setup_vhost
    modprobe_vrouter
-   update_restart_kubelet
    stop_kube_svcs
    update_vhost_pre_up
    prereq_vrouter_agent
@@ -673,8 +687,9 @@ function main()
    ifup_vhost
    routeconfig
    verify_vhost_setup
-   vr_agent_manifest_setup
    setup_opencontrail_kubelet
+   update_restart_kubelet
+   vr_agent_manifest_setup
    provision_vrouter
    check_docker
    verify_vrouter_agent
@@ -682,6 +697,7 @@ function main()
    provision_virtual_gateway
    cleanup
    check_docker
+   persist_hostname
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
 }
 
