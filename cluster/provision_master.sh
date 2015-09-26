@@ -74,6 +74,40 @@ function verify_contrail_listen_services() {
 #   retry master 'netstat -anp | grep LISTEN | grep -w 53'   # named
 }
 
+# Check for internal statemachines of API and contrail-control
+# and restart if not set
+function check_contrail_services()
+{
+  vr=''
+  for (( i=0; i<60; i++ ))
+    do
+     vr=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8082 | grep -ow "virtual-routers")
+     if [ ! -z $vr ]; then
+       break
+     fi
+     sleep 5
+    done
+   if [ "$vr" != "virtual-routers" ]; then
+     echo "Error: Contrail-API initialization failure. Restart once"
+     docker restart `docker ps | grep -v pause | grep contrail-api | awk '{print $1}'`
+   fi
+
+  cc=''
+  for (( i=0; i<60; i++ ))
+    do
+     cc=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8083/Snh_SandeshUVECacheReq?tname=NodeStatus | xmllint --format - | grep -ow "contrail-control")
+     ifmapup=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8083/Snh_IFMapPeerServerInfoReq? | xmllint --format - | grep end_of_rib_computed | cut -d ">" -f2 | cut -d "<" -f1)
+     if [ ! -z $cc ] && $ifmapup ; then
+       break
+     fi
+     sleep 5
+    done
+  if [ ! $ifmapup ] ; then
+     echo "Error: Contrail-Control intialization failure. Restart once"
+     docker restart `docker ps | grep -v pause | grep contrail-control | awk '{print $1}'`
+  fi
+}
+
 # Provision controller
 function provision_controller() {
     cmd='docker ps | grep contrail-api | grep -v pause | awk "{print \"docker exec \" \$1 \" python /usr/share/contrail-utils/provision_control.py  --router_asn 64512 --host_name `hostname` --host_ip `hostname --ip-address` --oper add --api_server_ip `hostname --ip-address` --api_server_port 8082\"}" | sudo sh'
@@ -135,6 +169,9 @@ function setup_contrail_master() {
 
     # Wait for contrail-control to be ready.
     verify_contrail_listen_services
+
+    # Check for internal states of API and contrail-control
+    check_contrail_services
 
     # Provision controller
     provision_controller

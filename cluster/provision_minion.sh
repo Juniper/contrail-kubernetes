@@ -424,7 +424,10 @@ function prereq_vrouter_agent()
   if [ -z $docon ]; then
      curl -sSL https://get.docker.com/ | sh
   fi
+}
 
+function check_docker()
+{
   docpid=`pidof docker`
   if [ -z $docpid ]; then
    service docker restart
@@ -436,7 +439,7 @@ function prereq_vrouter_agent()
   fi
 }
 
-function vrouter_agent_startup()
+function vr_agent_conf_image_pull()
 {
   etcc="/etc/contrail"
   vra_file="$etcc/contrail-vrouter-agent.conf"
@@ -500,6 +503,14 @@ function vrouter_agent_startup()
           sed -i 's/# ip_blocks=1\.1\.1\.1\/24$/ip_blocks='$PUBLIC_IP'\/'$PUBLIC_LEN'/g' $vrac
       fi
   fi
+  wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/cluster/contrail-vrouter-agent.manifest
+  vragentfile=/tmp/contrail-vrouter-agent.manifest
+  vrimg=$(cat $vragentfile | grep image | awk -F, '{print $1}' | awk '{print $2}')
+  echo $vrimg | xargs -n1 sudo docker pull
+}
+
+function vr_agent_manifest_setup()
+{
   if [ ! -f /etc/kubernetes/manifests ]; then
      mkdir -p /etc/kubernetes/manifests
   fi
@@ -515,15 +526,12 @@ function vrouter_agent_startup()
      cc=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8083/Snh_SandeshUVECacheReq?tname=NodeStatus | xmllint --format - | grep -ow "contrail-control")
      ifmapup=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8083/Snh_IFMapPeerServerInfoReq? | xmllint --format - | grep end_of_rib_computed | cut -d ">" -f2 | cut -d "<" -f1)
      if [ ! -z $cc ] && $ifmapup ; then
+       log_info_msg "IFMAP and Contrail-Control are up are ready for processing agent subscriptions"
        break
      fi
      sleep 5
     done
-  wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/cluster/contrail-vrouter-agent.manifest
-  vragentfile=/tmp/contrail-vrouter-agent.manifest
-  vrimg=$(cat $vragentfile | grep image | awk -F, '{print $1}' | awk '{print $2}')
-  echo $vrimg | xargs -n1 sudo docker pull
-  mv /tmp/contrail-vrouter-agent.manifest /etc/kubernetes/manifests  
+  mv /tmp/contrail-vrouter-agent.manifest /etc/kubernetes/manifests
 }
 
 function ifup_vhost()
@@ -550,7 +558,7 @@ function routeconfig()
        up route del -net 10.240.0.0/16 dev vhost0
        hostroute="up route add -host $defgw dev $VHOST"
        netdel="up route del -net $naddr dev $VHOST"
-       sed -i "/gateway/a \\\t$hostroute\n\t$netdel" /etc/network/interfaces
+       grep -q 'up route add -host' /etc/network/interfaces || sed -i "/gateway/a \\\t$hostroute\n\t$netdel" /etc/network/interfaces
     fi
 }
 
@@ -663,10 +671,12 @@ function main()
    stop_kube_svcs
    update_vhost_pre_up
    prereq_vrouter_agent
+   check_docker
+   vr_agent_conf_image_pull
    ifup_vhost
    routeconfig
    verify_vhost_setup
-   vrouter_agent_startup
+   vr_agent_manifest_setup
    provision_vrouter
    verify_vrouter_agent
    discover_docc_addto_vrouter
