@@ -80,7 +80,7 @@ function check_contrail_services()
 {
   apt-get install -y libxml2-utils
   vr=''
-  for (( i=0; i<40; i++ ))
+  for (( i=0; i<20; i++ ))
     do
      vr=$(curl -s http://localhost:8082 | grep -ow "virtual-routers")
      if [ ! -z "$vr" ]; then
@@ -94,7 +94,7 @@ function check_contrail_services()
    fi
 
   cc=''
-  for (( i=0; i<40; i++ ))
+  for (( i=0; i<20; i++ ))
     do
      cc=$(curl -s http://localhost:8083/Snh_SandeshUVECacheReq?tname=NodeStatus | xmllint --format - | grep -ow "contrail-control")
      ifmapup=$(curl -s http://localhost:8083/Snh_IFMapPeerServerInfoReq? | xmllint --format - | grep end_of_rib_computed | cut -d ">" -f2 | cut -d "<" -f1)

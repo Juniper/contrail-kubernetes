@@ -664,7 +664,6 @@ function main()
    build_vrouter
    setup_vhost
    modprobe_vrouter
-   setup_opencontrail_kubelet
    update_restart_kubelet
    stop_kube_svcs
    update_vhost_pre_up
@@ -675,6 +674,7 @@ function main()
    routeconfig
    verify_vhost_setup
    vr_agent_manifest_setup
+   setup_opencontrail_kubelet
    provision_vrouter
    check_docker
    verify_vrouter_agent
