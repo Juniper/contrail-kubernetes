@@ -437,7 +437,7 @@ function check_docker()
   fi
 
   if  [ -z "$docpid" ]; then
-    (exec /usr/bin/docker -d)&
+    (/usr/bin/docker -d -p /var/run/docker.pid --bridge=cbr0 --iptables=false --ip-masq=false)&
   fi
 }
 
@@ -699,6 +699,7 @@ function main()
    check_docker
    persist_hostname
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
+   check_docker
 }
 
 main
