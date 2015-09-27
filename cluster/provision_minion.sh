@@ -689,7 +689,7 @@ function main()
    verify_vhost_setup
    setup_opencontrail_kubelet
    update_restart_kubelet
-   vr_agent_manifest_setup
+   #vr_agent_manifest_setup
    provision_vrouter
    check_docker
    verify_vrouter_agent
