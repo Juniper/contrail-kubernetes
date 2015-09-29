@@ -435,7 +435,7 @@ function check_docker()
    service docker restart
    docpid=`pidof docker`
   fi
-  if  [ -z "$docpid" ] && [ ! -f "/usr/local/bin/kubelet" ]; then
+  if  [ -z "$docpid" ]; then
     (/usr/bin/docker -d -p /var/run/docker.pid --bridge=cbr0 --iptables=false --ip-masq=false)&
   fi
 }

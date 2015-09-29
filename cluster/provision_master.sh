@@ -133,6 +133,18 @@ function setup_kube_dns_endpoints() {
     master kubectl --namespace=kube-system create -f /etc/kubernetes/addons/kube-ui/kube-ui-svc-address.yaml || true
 }
 
+function check_docker()
+{
+  docpid=`pidof docker`
+  if [ -z $docpid ]; then
+   service docker restart
+   docpid=`pidof docker`
+  fi
+  if  [ -z "$docpid" ]; then
+    (/usr/bin/docker -d -p /var/run/docker.pid --bridge=cbr0 --iptables=false --ip-masq=false)&
+  fi
+}
+
 # Setup contrail manifest files under kubernetes
 function setup_contrail_manifest_files() {
     mkdir -p /etc/contrail
@@ -158,6 +170,7 @@ function setup_contrail_manifest_files() {
     RETRY=20
     WAIT=3
     retry master $cmd
+    check_docker
     cmd='mv /etc/contrail/manifests/* /etc/kubernetes/manifests/'
     master $cmd
 }
