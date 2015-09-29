@@ -541,6 +541,37 @@ function vr_agent_manifest_setup()
   mv /tmp/contrail-vrouter-agent.manifest /etc/kubernetes/manifests
 }
 
+function vrouter_nh_rt_prov()
+{
+  if isGceVM ; then
+     phy_itf=$(ip a |grep $MINION_OVERLAY_NET_IP | awk '{print $7}')
+     while true
+      do
+       ccc=$(netstat -natp |grep 5269 | awk '{print $6}')
+       if [ -z "$ccc" ]; then
+         naddr=$(getGceNetAddr)
+         defgw=$(ip route | grep default | awk '{print $3}')
+         docid=$(docker ps | grep contrail-vrouter-agent | grep -v pause | awk '{print $1}')
+         if [ -n $docid ]; then
+            vmac=$(ip link show $VHOST | grep link | awk '{print $2}')
+            gwmac=$(arp -a | grep $defgw | awk '{print $4}')
+            prefix=$($naddr | cut -d/ -f1)
+            len=$($naddr | cut -d/ -f2)
+            nhexists=$(/usr/bin/nh --list | grep 1000)
+            if [ -z "$nhexists" ]; then
+               /usr/bin/nh --create 1000 --type 2 --smac $vmac --dmac $gwmac --oif $phy_itf
+            fi
+            nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $4}')
+            /usr/bin/rt -d -f AF_INET -r $len -p $OPENCONTRAIL_CONTROLLER_IP -l 32 -n $nhid -v 0
+            /usr/bin/rt -c -f AF_INET -n 1000 -p $prefix -l $len -v 0
+         fi
+       elif [ "$ccc" == "ESTABLISHED" ]; then
+            break
+       fi
+      done
+  fi
+}
+
 function ifup_vhost()
 {
   ifup $VHOST
@@ -689,7 +720,8 @@ function main()
    verify_vhost_setup
    setup_opencontrail_kubelet
    update_restart_kubelet
-   #vr_agent_manifest_setup
+   vr_agent_manifest_setup
+   vrouter_nh_rt_prov
    provision_vrouter
    check_docker
    verify_vrouter_agent
