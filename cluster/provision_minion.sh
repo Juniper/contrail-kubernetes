@@ -716,7 +716,7 @@ function main()
    setup_opencontrail_kubelet
    update_restart_kubelet
    vr_agent_manifest_setup
-   vrouter_nh_rt_prov
+   #vrouter_nh_rt_prov
    provision_vrouter
    check_docker
    verify_vrouter_agent
