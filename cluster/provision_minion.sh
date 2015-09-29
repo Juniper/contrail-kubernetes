@@ -549,9 +549,9 @@ function vrouter_nh_rt_prov()
      while true
       do
        ccc=$(netstat -natp |grep 5269 | awk '{print $6}')
+       rtdata=$(rt --dump 0 |grep $OPENCONTRAIL_CONTROLLER_IP)
        if [ -z "$ccc" ] || [ "$ccc" != "ESTABLISHED" ]; then
          docid=$(docker ps | grep contrail-vrouter-agent | grep -v pause | awk '{print $1}')
-         rtdata=$(rt --dump 0 |grep $OPENCONTRAIL_CONTROLLER_IP)
          if [ -n $docid ] && [ -n "$rtdata" ]; then
             nhexists=$(/usr/bin/nh --list | grep 1000)
             if [ -z "$nhexists" ]; then
@@ -563,7 +563,7 @@ function vrouter_nh_rt_prov()
             /usr/bin/rt -d -f AF_INET -r $len -p $OPENCONTRAIL_CONTROLLER_IP -l 32 -n $nhid -v 0
             /usr/bin/rt -c -f AF_INET -n 1000 -p $prefix -l $len -v 0
          fi
-       elif [ "$ccc" == "ESTABLISHED" ]; then
+       elif [ "$ccc" == "ESTABLISHED" ] && [ -z "$rtdata" ]; then
             break
        fi
        sleep 3
