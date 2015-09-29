@@ -459,11 +459,6 @@ function vr_agent_conf_image_pull()
   if [ -z $cidr ]; then
     # check on vhost0 assuming its a rerun
     cidr=$(sipcalc $VHOST | grep "Network mask (bits)" | awk '{print $5}')
-    if GceVM ; then
-       # Its assumed to be a /32 point to point interface
-       # cidr will be /32 for host
-       cidr=32
-    fi
   fi
   if [ -z $cidr ]; then
     log_error_msg "Unable to get CIDR for networks on $OPENCONTRAIL_VROUTER_INTF and $VHOST. Please check interface and network and rerun"
@@ -714,9 +709,9 @@ function main()
    update_vhost_pre_up
    prereq_vrouter_agent
    check_docker
-   vr_agent_conf_image_pull
    ifup_vhost
    routeconfig
+   vr_agent_conf_image_pull
    verify_vhost_setup
    setup_opencontrail_kubelet
    update_restart_kubelet
