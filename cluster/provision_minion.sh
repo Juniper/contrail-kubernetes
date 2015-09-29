@@ -538,30 +538,34 @@ function vr_agent_manifest_setup()
 function vrouter_nh_rt_prov()
 {
   if isGceVM ; then
-     phy_itf=$(ip a |grep $MINION_OVERLAY_NET_IP | awk '{print $7}')
+     vmac=$(ip link show $VHOST | grep link | awk '{print $2}')
+     defgw=$(ip route | grep default | awk '{print $3}')
+     gwmac=$(arp -a | grep $defgw | awk '{print $4}')
+     intf=$(ip link show |grep $vmac -B 1 | grep -i "eth\|bond" | awk '{print $2}' | cut -d: -f1 | head -1)
+     naddr=$(getGceNetAddr)
+     prefix=$(echo $naddr | cut -d/ -f1)
+     len=$(echo $naddr | cut -d/ -f2)
+     echo "LENGTH is $len"
      while true
       do
        ccc=$(netstat -natp |grep 5269 | awk '{print $6}')
-       if [ -z "$ccc" ]; then
-         naddr=$(getGceNetAddr)
-         defgw=$(ip route | grep default | awk '{print $3}')
+       if [ -z "$ccc" ] || [ "$ccc" != "ESTABLISHED" ]; then
          docid=$(docker ps | grep contrail-vrouter-agent | grep -v pause | awk '{print $1}')
          if [ -n $docid ]; then
-            vmac=$(ip link show $VHOST | grep link | awk '{print $2}')
-            gwmac=$(arp -a | grep $defgw | awk '{print $4}')
-            prefix=$($naddr | cut -d/ -f1)
-            len=$($naddr | cut -d/ -f2)
+            docker restart $docid
+            sleep 3
             nhexists=$(/usr/bin/nh --list | grep 1000)
             if [ -z "$nhexists" ]; then
-               /usr/bin/nh --create 1000 --type 2 --smac $vmac --dmac $gwmac --oif $phy_itf
+               /usr/bin/nh --create 1000 --type 2 --smac $vmac --dmac $gwmac --oif $intf
             fi
-            nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $4}')
+            nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $5}')
             /usr/bin/rt -d -f AF_INET -r $len -p $OPENCONTRAIL_CONTROLLER_IP -l 32 -n $nhid -v 0
             /usr/bin/rt -c -f AF_INET -n 1000 -p $prefix -l $len -v 0
          fi
        elif [ "$ccc" == "ESTABLISHED" ]; then
             break
        fi
+       sleep 3
       done
   fi
 }
@@ -715,7 +719,7 @@ function main()
    setup_opencontrail_kubelet
    update_restart_kubelet
    vr_agent_manifest_setup
-   #vrouter_nh_rt_prov
+   vrouter_nh_rt_prov
    provision_vrouter
    check_docker
    verify_vrouter_agent
