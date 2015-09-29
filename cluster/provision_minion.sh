@@ -551,11 +551,12 @@ function vrouter_nh_rt_prov()
        ccc=$(netstat -natp |grep 5269 | awk '{print $6}')
        if [ -z "$ccc" ] || [ "$ccc" != "ESTABLISHED" ]; then
          docid=$(docker ps | grep contrail-vrouter-agent | grep -v pause | awk '{print $1}')
-         if [ -n $docid ]; then
-            docker restart $docid
-            sleep 3
+         rtdata=$(rt --dump 0 |grep $OPENCONTRAIL_CONTROLLER_IP)
+         if [ -n $docid ] && [ -n "$rtdata" ]; then
             nhexists=$(/usr/bin/nh --list | grep 1000)
             if [ -z "$nhexists" ]; then
+               docker restart $docid
+               sleep 7
                /usr/bin/nh --create 1000 --type 2 --smac $vmac --dmac $gwmac --oif $intf
             fi
             nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $5}')
