@@ -548,16 +548,27 @@ function vrouter_nh_rt_prov()
      while true
       do
        ccc=$(netstat -natp |grep 5269 | awk '{print $6}')
-       rtdata32=$(rt --dump 0 |grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $5}' | head -1)
+       rtdata32=$(rt --dump 0 |grep $OPENCONTRAIL_CONTROLLER_IP/32 | awk '{print $5}' | head -1)
+       if [ "$rtdata32" == "-" ]; then
+          rtdata32=$(rt --dump 0 |grep $OPENCONTRAIL_CONTROLLER_IP/32 | awk '{print $4}' | head -1)
+       fi
        oc=$OPENCONTRAIL_CONTROLLER_IP
        sub=$(echo ${oc%.*} ${oc##*.}  | awk '{print $1}').0
-       rtdata24=$(rt --dump 0 |grep $sub | awk '{print $4}' | head -1)
+       rtdata24=$(rt --dump 0 |grep $sub | awk '{print $5}' | head -1)
+       if [ "$rtdata24" == "-" ]; then
+          rtdata24=$(rt --dump 0 |grep $sub | awk '{print $4}' | head -1)
+       fi
        if [ -z "$ccc" ] || [ "$ccc" != "ESTABLISHED" ]; then
          if [ "$rtdata32" != 1000 ] || [ "$rtdata24" != 1000 ]; then
             nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $5}' | head -1)
+            if [ "$nhid" == "-" ]; then
+               nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $4}' | head -1)
+            fi
             /usr/bin/nh --delete $nhid
             /usr/bin/nh --create 1000 --type 2 --smac $vmac --dmac $gwmac --oif $intf
+            sleep 2
             /usr/bin/rt -d -f AF_INET -r $len -p $OPENCONTRAIL_CONTROLLER_IP -l 32 -n $nhid -v 0
+            sleep 2
             /usr/bin/rt -c -f AF_INET -n 1000 -p $prefix -l $len -v 0
          fi
        elif [ "$ccc" == "ESTABLISHED" ] && [ "$rtdata32" == 1000 ] || [ "$rtdata24" == 1000 ]; then
@@ -567,7 +578,7 @@ function vrouter_nh_rt_prov()
       done
     wget -P /etc/contrail https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/scripts/opencontrail-install/gce_ocvr_rt_chk.sh
     chmod +x /etc/contrail/gce_ocvr_rt_chk.sh
-    cron="*/1 * * * * /etc/contrail/gce_ocvr_rt_chk.sh 2>&1 | logger" 
+    cron="*/1 * * * * /etc/contrail/gce_ocvr_rt_chk.sh 2>&1 | logger"
     (crontab -u root -l; echo "$cron" ) | crontab -u root -
   fi
 }
@@ -721,7 +732,6 @@ function main()
    setup_opencontrail_kubelet
    update_restart_kubelet
    vr_agent_manifest_setup
-   exit
    vrouter_nh_rt_prov
    provision_vrouter
    check_docker
