@@ -17,8 +17,10 @@ limitations under the License.
 package opencontrail
 
 import (
+	"fmt"
 	"io"
 	"net"
+	"strings"
 
 	flag "github.com/spf13/pflag"
 
@@ -52,6 +54,8 @@ type Config struct {
 	NetworkTag string `gcfg:"network-label"`
 	// Label used to connect pods with services
 	NetworkAccessTag string `gcfg:"service-label"`
+
+	ClusterServices []string `gcfg:"cluster-service"`
 }
 
 func NewConfig() *Config {
@@ -95,6 +99,14 @@ type configWrapper struct {
 	OpenContrail Config
 }
 
+func validateClusterServiceName(name string) error {
+	serviceName := strings.Split(name, "/")
+	if len(serviceName) != 2 {
+		return fmt.Errorf("Expected 'namespace/service', got \"%s\"", name)
+	}
+	return nil
+}
+
 func (c *Config) Validate() error {
 	if _, _, err := net.ParseCIDR(c.PrivateSubnet); err != nil {
 		return err
@@ -106,6 +118,13 @@ func (c *Config) Validate() error {
 	}
 	if _, _, err := net.ParseCIDR(c.ServiceSubnet); err != nil {
 		return err
+	}
+
+	for _, svc := range c.ClusterServices {
+		err := validateClusterServiceName(svc)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

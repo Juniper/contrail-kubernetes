@@ -18,6 +18,7 @@ package opencontrail
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -56,5 +57,30 @@ public-ip-range = 192.168.0.0/24
 	}
 	if config.PublicSubnet != "192.168.0.0/24" {
 		t.Errorf("expected 192.168.0.0/24, got %s", config.PublicSubnet)
+	}
+}
+
+func TestClusterServices(t *testing.T) {
+	content := `
+[opencontrail]
+cluster-service = kube-system/dns
+cluster-service = kube-system/monitoring
+`
+	buffer := bytes.NewBufferString(content)
+	config := NewConfig()
+	err := config.ReadConfiguration(nil, buffer)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(config.ClusterServices) != 2 {
+		t.Errorf("expected 2 entries in cluster-services list, got %d", len(config.ClusterServices))
+	}
+	values := []string{"dns", "monitoring"}
+	for i, v := range values {
+		fqn := strings.Split(config.ClusterServices[i], "/")
+		if fqn[len(fqn)-1] != v {
+			t.Errorf("expected %s, got %s", v, fqn[len(fqn)-1])
+		}
 	}
 }

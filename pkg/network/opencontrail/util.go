@@ -21,6 +21,38 @@ import (
 	"strings"
 )
 
+type ServiceId struct {
+	Namespace string
+	Service   string
+}
+
+type ServiceIdList []ServiceId
+
+func (s *ServiceIdList) Contains(namespace, service string) bool {
+	for _, entry := range *s {
+		if entry.Namespace == namespace && entry.Service == service {
+			return true
+		}
+	}
+	return false
+}
+func (s *ServiceIdList) Add(namespace, service string) {
+	if s.Contains(namespace, service) {
+		return
+	}
+	*s = append(*s, ServiceId{namespace, service})
+}
+
+func MakeServiceIdList() ServiceIdList {
+	return make(ServiceIdList, 0)
+}
+
+// serviceIdFromName splits a prevalidated string in the form namespace/service-name.
+func serviceIdFromName(name string) (string, string) {
+	tuple := strings.Split(name, "/")
+	return tuple[0], tuple[1]
+}
+
 func AppendConst(slice []string, element string) []string {
 	newSlice := make([]string, len(slice), len(slice)+1)
 	copy(newSlice, slice)
