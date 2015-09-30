@@ -553,7 +553,7 @@ function vrouter_nh_rt_prov()
        rtdata24=$(rt --dump 0 |grep $sub | awk '{print $4}')
        if [ -z "$ccc" ] || [ "$ccc" != "ESTABLISHED" ]; then
          if [ "$rtdata32" != 1000 ] || [ "$rtdata24" != 1000 ]; then
-            nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $4}')
+            nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $4}' | head -1)
             /usr/bin/nh --delete $nhid
             /usr/bin/nh --create 1000 --type 2 --smac $vmac --dmac $gwmac --oif $intf
             /usr/bin/rt -d -f AF_INET -r $len -p $OPENCONTRAIL_CONTROLLER_IP -l 32 -n $nhid -v 0
