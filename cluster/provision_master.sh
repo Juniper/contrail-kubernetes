@@ -135,10 +135,10 @@ function setup_kube_dns_endpoints() {
 
 function check_docker()
 {
-  docpid=`pidof docker`
+  docpid=$(ps -ef|grep "docker -d" | grep -v grep | awk '{print $2}')
   if [ -z $docpid ]; then
    service docker restart
-   docpid=`pidof docker`
+   docpid=$(ps -ef|grep "docker -d" | grep -v grep | awk '{print $2}')
   fi
   if  [ -z "$docpid" ]; then
     (/usr/bin/docker -d -p /var/run/docker.pid --bridge=cbr0 --iptables=false --ip-masq=false)&
