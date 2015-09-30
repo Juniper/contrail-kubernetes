@@ -89,7 +89,7 @@ function check_contrail_services()
      sleep 3
     done
    if [ "$vr" != "virtual-routers" ]; then
-     echo "Error: Contrail-API initialization failure. Restart once"
+     echo "Debug: Contrail-API initialization failure. Restart once"
      docker restart `docker ps | grep -v pause | grep contrail-api | awk '{print $1}'`
    fi
 
@@ -104,7 +104,7 @@ function check_contrail_services()
      sleep 3
     done
   if ! $ifmapup ; then
-     echo "Error: Contrail-Control intialization failure. Restart once"
+     echo "Debug: Contrail-Control intialization failure. Restart once"
      docker restart `docker ps | grep -v pause | grep contrail-control | awk '{print $1}'`
   fi
 }
