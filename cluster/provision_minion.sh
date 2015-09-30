@@ -545,29 +545,29 @@ function vrouter_nh_rt_prov()
      naddr=$(getGceNetAddr)
      prefix=$(echo $naddr | cut -d/ -f1)
      len=$(echo $naddr | cut -d/ -f2)
-     echo "LENGTH is $len"
      while true
       do
        ccc=$(netstat -natp |grep 5269 | awk '{print $6}')
-       rtdata=$(rt --dump 0 |grep $OPENCONTRAIL_CONTROLLER_IP)
+       rtdata32=$(rt --dump 0 |grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $4}')
+       sub=$(echo ${oc%.*} ${oc##*.}  | awk '{print $1}').0
+       rtdata24=$(rt --dump 0 |grep $sub | awk '{print $4}')
        if [ -z "$ccc" ] || [ "$ccc" != "ESTABLISHED" ]; then
-         docid=$(docker ps | grep contrail-vrouter-agent | grep -v pause | awk '{print $1}')
-         if [ -n $docid ] && [ -n "$rtdata" ]; then
-            nhexists=$(/usr/bin/nh --list | grep 1000)
-            if [ -z "$nhexists" ]; then
-               docker restart $docid
-               sleep 7
-               /usr/bin/nh --create 1000 --type 2 --smac $vmac --dmac $gwmac --oif $intf
-            fi
+         if [ "$rtdata32" != 1000 ] || [ "$rtdata24" != 1000 ]; then
             nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $5}')
+            /usr/bin/nh --delete $nhid
+            /usr/bin/nh --create 1000 --type 2 --smac $vmac --dmac $gwmac --oif $intf
             /usr/bin/rt -d -f AF_INET -r $len -p $OPENCONTRAIL_CONTROLLER_IP -l 32 -n $nhid -v 0
             /usr/bin/rt -c -f AF_INET -n 1000 -p $prefix -l $len -v 0
          fi
-       elif [ "$ccc" == "ESTABLISHED" ] && [ -z "$rtdata" ]; then
+       elif [ "$ccc" == "ESTABLISHED" ] && [ "$rtdata32" == 100 ] || [ "$rtdata24" == 100 ]; then
             break
        fi
        sleep 3
       done
+    wget -P /etc/contrail https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/scripts/opencontrail-install/gce_ocvr_rt_chk.sh
+    chmod +x /etc/contrail/gce_ocvr_rt_chk.sh
+    cron="*/1 * * * * /etc/contrail/gce_ocvr_rt_chk.sh 2>&1 | logger" 
+    (crontab -u root -l; echo "$cron" ) | crontab -u root -
   fi
 }
 
