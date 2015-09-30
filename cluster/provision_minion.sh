@@ -559,7 +559,7 @@ function vrouter_nh_rt_prov()
             /usr/bin/rt -d -f AF_INET -r $len -p $OPENCONTRAIL_CONTROLLER_IP -l 32 -n $nhid -v 0
             /usr/bin/rt -c -f AF_INET -n 1000 -p $prefix -l $len -v 0
          fi
-       elif [ "$ccc" == "ESTABLISHED" ] && [ "$rtdata32" == 100 ] || [ "$rtdata24" == 100 ]; then
+       elif [ "$ccc" == "ESTABLISHED" ] && [ "$rtdata32" == 1000 ] || [ "$rtdata24" == 1000 ]; then
             break
        fi
        sleep 3
