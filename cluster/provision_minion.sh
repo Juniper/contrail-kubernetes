@@ -548,12 +548,13 @@ function vrouter_nh_rt_prov()
      while true
       do
        ccc=$(netstat -natp |grep 5269 | awk '{print $6}')
-       rtdata32=$(rt --dump 0 |grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $4}')
+       rtdata32=$(rt --dump 0 |grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $5}' | head -1)
+       oc=$OPENCONTRAIL_CONTROLLER_IP
        sub=$(echo ${oc%.*} ${oc##*.}  | awk '{print $1}').0
-       rtdata24=$(rt --dump 0 |grep $sub | awk '{print $4}')
+       rtdata24=$(rt --dump 0 |grep $sub | awk '{print $4}' | head -1)
        if [ -z "$ccc" ] || [ "$ccc" != "ESTABLISHED" ]; then
          if [ "$rtdata32" != 1000 ] || [ "$rtdata24" != 1000 ]; then
-            nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $4}' | head -1)
+            nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $5}' | head -1)
             /usr/bin/nh --delete $nhid
             /usr/bin/nh --create 1000 --type 2 --smac $vmac --dmac $gwmac --oif $intf
             /usr/bin/rt -d -f AF_INET -r $len -p $OPENCONTRAIL_CONTROLLER_IP -l 32 -n $nhid -v 0
