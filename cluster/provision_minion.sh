@@ -494,6 +494,10 @@ function vr_agent_conf_image_pull()
          fi
       fi
       sed -i 's,# gateway=10.1.1.254,gateway='$defgw',g' $vrac
+      if isGceVM ; then
+          sed -i 's,# subnet_hosts_resolvable=0,subnet_hosts_resolvable=1,g' $vrac
+          grep -q 'subnet_hosts_resolvable=1' $vrac || sed -i "/gateway=/a subnet_hosts_resolvable=1" $vrac
+      fi
       sed -i 's/# physical_interface=vnet0/physical_interface='$OPENCONTRAIL_VROUTER_INTF'/g' $vrac
       sed -i 's/compute_node_address = 10.204.216.28/# compute_node_address = /g' $vrac
 
