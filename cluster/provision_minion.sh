@@ -89,6 +89,8 @@ if [[ -z $OPENCONTRAIL_CONTROLLER_IP ]]; then
    if [[ -n $kube_api_server ]]; then
        OPENCONTRAIL_CONTROLLER_IP=$(host $kube_api_server | grep address | awk '{print $4}')
        echo "OPENCONTRAIL_CONTROLLER_IP=$OPENCONTRAIL_CONTROLLER_IP" >> $rcfile
+   elif [ -z "$kube_api_server" ]; then
+        OPENCONTRAIL_CONTROLLER_IP=`hostname -i`
    else
       log_error_msg "Unable to resolve to contrail controller which is deployed on Kubernetes master"
    fi
