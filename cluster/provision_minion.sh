@@ -726,7 +726,7 @@ function persist_hostname()
    fi
 }
 
-funtion rpf_disable()
+function rpf_disable()
 {
  echo 0 > /proc/sys/net/ipv4/conf/all/rp_filter
  echo 0 > /proc/sys/net/ipv4/conf/$OPENCONTRAIL_VROUTER_INTF/rp_filter
