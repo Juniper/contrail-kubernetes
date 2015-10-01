@@ -35,12 +35,18 @@ if [ ! -z $rtdata32 ] && [ ! -z $rtdata24 ]; then
      /usr/bin/nh --create 1000 --type 2 --smac $vmac --dmac $gwmac --oif $intf
      while true
       do
-        err=$(/usr/bin/rt -d -f AF_INET -r $len -p $OPENCONTRAIL_CONTROLLER_IP -l 32 -n $nhid -v 0 | grep -ow Error)
-        if [ "$err" == Error ]; then
-           sleep 3
-           continue
-        else
-           break
+        rtdata32=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP/32 | awk '{print $5}' | head -1)
+        if [ "$rtdata32" == "-" ]; then
+           rtdata32=$(rt --dump 0 |grep $OPENCONTRAIL_CONTROLLER_IP/32 | awk '{print $4}' | head -1)
+        fi
+        if [ "$rtdata32" != 1000 ]; then
+           err=$(/usr/bin/rt -d -f AF_INET -r $len -p $OPENCONTRAIL_CONTROLLER_IP -l 32 -n $nhid -v 0 | grep -ow Error)
+           if [ "$err" == Error ]; then
+             sleep 3
+             continue
+           else
+             break
+           fi
         fi
       done
      /usr/bin/rt -c -f AF_INET -n 1000 -p $prefix -l $len -v 0
