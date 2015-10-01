@@ -566,9 +566,16 @@ function vrouter_nh_rt_prov()
             fi
             /usr/bin/nh --delete $nhid
             /usr/bin/nh --create 1000 --type 2 --smac $vmac --dmac $gwmac --oif $intf
-            sleep 2
-            /usr/bin/rt -d -f AF_INET -r $len -p $OPENCONTRAIL_CONTROLLER_IP -l 32 -n $nhid -v 0
-            sleep 2
+            while true
+             do
+              err=$(/usr/bin/rt -d -f AF_INET -r $len -p $OPENCONTRAIL_CONTROLLER_IP -l 32 -n $nhid -v 0 | grep -ow Error)
+              if [ "$err" == Error ]; then
+                 sleep 3
+                 continue
+              else
+                 break
+              fi
+            done
             /usr/bin/rt -c -f AF_INET -n 1000 -p $prefix -l $len -v 0
          fi
        elif [ "$ccc" == "ESTABLISHED" ] && [ "$rtdata32" == 1000 ] || [ "$rtdata24" == 1000 ]; then
