@@ -209,4 +209,4 @@ function setup_contrail_minion() {
 }
 
 setup_contrail_master
-#setup_contrail_minion
+setup_contrail_minion

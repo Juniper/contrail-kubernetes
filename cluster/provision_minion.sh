@@ -726,6 +726,16 @@ function persist_hostname()
    fi
 }
 
+funtion rpf_disable()
+{
+ echo 0 > /proc/sys/net/ipv4/conf/all/rp_filter
+ echo 0 > /proc/sys/net/ipv4/conf/$OPENCONTRAIL_VROUTER_INTF/rp_filter
+ echo 0 > /proc/sys/net/ipv4/conf/$VHOST/rp_filter
+ echo "net.ipv4.conf.all.rp_filter=0" >> /etc/sysctl.conf
+ echo "net.ipv4.conf."$OPENCONTRAIL_VROUTER_INTF".rp_filter=0" >> /etc/sysctl.conf
+ echo "net.ipv4.conf."$VHOST".rp_filter=0" >> /etc/sysctl.conf
+}
+
 function main()
 {
    detect_os
@@ -754,6 +764,7 @@ function main()
    cleanup
    check_docker
    persist_hostname
+   rpf_disable
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
    check_docker
 }
