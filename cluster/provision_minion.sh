@@ -671,7 +671,7 @@ function cleanup()
 function verify_vrouter_agent()
 {
   status=$(lsmod |grep vrouter | awk '{print $3}')
-  if [ "$status" != 0 ]; then
+  if [ "$status" != 1 ]; then
     log_error_msg "contrail-vrouter-agent not launched successfuly. Please check contrail-vrouter-agent docker and vrouter kernel module"
     return
   fi
@@ -681,11 +681,11 @@ function verify_vrouter_agent()
   vrestb=false
   while true
     do
-       vra_introspect_status=$(netstat -natp | grep 8085 | grep contrail | awk '{print $6}')
-       vra_api_status=$(netstat -natp | grep 9090 | grep contrail | awk '{print $6}')
-       vra_thrift_status=$(netstat -natp | grep 9091 | grep contrail | awk '{print $6}')
-       vra_ctrl_status=$(netstat -natp | grep 5269 | grep contrail | awk '{print $6}')
-       vra_coll_status=$(netstat -natp | grep 8086 | grep contrail | awk '{print $6}')
+       vra_introspect_status=$(netstat -natp | grep 8085 | grep contrail-vr | awk '{print $6}')
+       vra_api_status=$(netstat -natp | grep 9090 | grep contrail-vr | awk '{print $6}')
+       vra_thrift_status=$(netstat -natp | grep 9091 | grep contrail-vr | awk '{print $6}')
+       vra_ctrl_status=$(netstat -natp | grep 5269 | grep contrail-vr | awk '{print $6}')
+       vra_coll_status=$(netstat -natp | grep 8086 | grep contrail-vr | awk '{print $6}')
        if [ "$vra_introspect_status" == $lstn ] && [ "$vra_api_status" == $lstn ] && [ "$vra_thrift_status" == $lstn ]; then
           vrlstn=true
        fi
