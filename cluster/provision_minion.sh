@@ -672,26 +672,39 @@ function verify_vrouter_agent()
 {
   status=$(lsmod |grep vrouter | awk '{print $3}')
   if [ "$status" != 0 ]; then
-    log_error_msg "Vrouter agent not launched successfuly. Please check contrail-vrouter-agent docker and vrouter kernel module"
+    log_error_msg "contrail-vrouter-agent not launched successfuly. Please check contrail-vrouter-agent docker and vrouter kernel module"
     return
   fi
-  vra_introspect_status=$(netstat -natp | grep 8085 | grep contrail | awk '{print $6}')
-  vra_api_status=$(netstat -natp | grep 9090 | grep contrail | awk '{print $6}')
-  vra_thrift_status=$(netstat -natp | grep 9091 | grep contrail | awk '{print $6}')
-  if [[ $vra_introspect_status && $vra_api_status && $vra_thrift_status ]]; then
-     log_info_msg "Vrouter agent is up and running"
-  else
-     log_error_msg "Issue with vrouter agent container. Please check vrouter agent configuration and the contrainer"
-  fi
-
-  vra_ctrl_status=$(netstat -natp | grep 5269 | grep contrail | awk '{print $6}')
-  vra_coll_status=$(netstat -natp | grep 8086 | grep contrail | awk '{print $6}')
-  vra_dns_status=$(netstat -natp | grep 53 | grep contrail | awk '{print $6}')
-  if [[ $vra_ctrl_status && $vra_coll_status && $vra_dns_status ]]; then
-      log_info_msg "Vrouter agent is successfully connected to contrail-control, contrail-collector and skyDNS"
-  else
-      log_error_msg "Vrouter agent is not connected to either contrail-control(port-5269), contrail-collector(port-8086) OR skyDNS(port-53). Please check services and connectivity"
-  fi
+  lstn="LISTEN"
+  estb="ESTABLISHED"
+  vrlstn=false
+  vrestb=false
+  while true
+    do
+       vra_introspect_status=$(netstat -natp | grep 8085 | grep contrail | awk '{print $6}')
+       vra_api_status=$(netstat -natp | grep 9090 | grep contrail | awk '{print $6}')
+       vra_thrift_status=$(netstat -natp | grep 9091 | grep contrail | awk '{print $6}')
+       vra_ctrl_status=$(netstat -natp | grep 5269 | grep contrail | awk '{print $6}')
+       vra_coll_status=$(netstat -natp | grep 8086 | grep contrail | awk '{print $6}')
+       if [ "$vra_introspect_status" == $lstn ] && [ "$vra_api_status" == $lstn ] && [ "$vra_thrift_status" == $lstn ]; then
+          vrlstn=true
+       fi
+       if [ "$vra_ctrl_status" == $estb ] && [ "$vra_coll_status" == $estb ]; then
+          vrestb=true
+       fi
+       if [ "$vrlstn" == true ] && [ "$vrestb" == true ]; then
+          log_info_msg "contrail-vrouter-agent is up and running"
+          break
+       else
+          id=$(docker ps |grep contrail-vrouter-agent | grep -v pause | awk '{print $1}')
+          if [ -n $id ]; then
+            log_info_msg "contrail-vrouter-agent container up. Wait for additional time for setup"
+          else
+            log_info_msg "contrail-vrouter-agent container is not up. Wait for additional time"
+          fi
+          sleep 5
+       fi
+    done
 }
 
 # Discover and add containers to vrouter
@@ -765,8 +778,8 @@ function main()
    provision_vrouter
    check_docker
    verify_vrouter_agent
-   discover_docc_addto_vrouter
    provision_virtual_gateway
+   discover_docc_addto_vrouter
    cleanup
    check_docker
    persist_hostname
