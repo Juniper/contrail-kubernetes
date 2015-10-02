@@ -574,6 +574,10 @@ function vrouter_nh_rt_prov()
             /usr/bin/nh --create 1000 --type 2 --smac $vmac --dmac $gwmac --oif $intf
             while true
              do
+              nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $5}' | head -1)
+              if [ "$nhid" == "-" ]; then
+                 nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $4}' | head -1)
+              fi
               rtdata32=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP/32 | awk '{print $5}' | head -1)
               if [ "$rtdata32" == "-" ]; then
                  rtdata32=$(rt --dump 0 |grep $OPENCONTRAIL_CONTROLLER_IP/32 | awk '{print $4}' | head -1)
