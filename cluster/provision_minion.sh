@@ -88,12 +88,12 @@ if [[ -z $OPENCONTRAIL_CONTROLLER_IP ]]; then
    # Try to resolve
    if [[ -n $kube_api_server ]]; then
        OPENCONTRAIL_CONTROLLER_IP=$(host $kube_api_server | grep address | awk '{print $4}')
-       echo "OPENCONTRAIL_CONTROLLER_IP=$OPENCONTRAIL_CONTROLLER_IP" >> $rcfile
    elif [ -z "$kube_api_server" ]; then
-        OPENCONTRAIL_CONTROLLER_IP=`hostname -i`
+       OPENCONTRAIL_CONTROLLER_IP=`hostname -i`
    else
       log_error_msg "Unable to resolve to contrail controller which is deployed on Kubernetes master"
    fi
+   echo "OPENCONTRAIL_CONTROLLER_IP=$OPENCONTRAIL_CONTROLLER_IP" >> $rcfile
 fi
 if [[ -z $OPENCONTRAIL_VROUTER_INTF ]];then
    OPENCONTRAIL_VROUTER_INTF="eth0"
@@ -496,7 +496,6 @@ function vr_agent_conf_image_pull()
       sed -i 's,# gateway=10.1.1.254,gateway='$defgw',g' $vrac
       if isGceVM ; then
           sed -i 's,# subnet_hosts_resolvable=0,subnet_hosts_resolvable=0,g' $vrac
-          grep -q 'subnet_hosts_resolvable=0' $vrac || sed -i "/gateway=/a subnet_hosts_resolvable=0" $vrac
       fi
       sed -i 's/# physical_interface=vnet0/physical_interface='$OPENCONTRAIL_VROUTER_INTF'/g' $vrac
       sed -i 's/compute_node_address = 10.204.216.28/# compute_node_address = /g' $vrac
@@ -758,14 +757,13 @@ function main()
    update_vhost_pre_up
    prereq_vrouter_agent
    check_docker
+   vr_agent_conf_image_pull
    ifup_vhost
    routeconfig
-   vr_agent_conf_image_pull
    verify_vhost_setup
    setup_opencontrail_kubelet
    update_restart_kubelet
    vr_agent_manifest_setup
-   vrouter_nh_rt_prov
    provision_vrouter
    check_docker
    verify_vrouter_agent
