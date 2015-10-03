@@ -670,15 +670,11 @@ function cleanup()
 
 function verify_vrouter_agent()
 {
-  status=$(lsmod |grep vrouter | awk '{print $3}')
-  if [ "$status" != 1 ]; then
-    log_error_msg "contrail-vrouter-agent not launched successfuly. Please check contrail-vrouter-agent docker and vrouter kernel module"
-    return
-  fi
   lstn="LISTEN"
   estb="ESTABLISHED"
   vrlstn=false
   vrestb=false
+  kernmodstat=false
   while true
     do
        vra_introspect_status=$(netstat -natp | grep 8085 | grep contrail-vr | awk '{print $6}')
@@ -692,7 +688,11 @@ function verify_vrouter_agent()
        if [ "$vra_ctrl_status" == $estb ] && [ "$vra_coll_status" == $estb ]; then
           vrestb=true
        fi
-       if [ "$vrlstn" == true ] && [ "$vrestb" == true ]; then
+       status=$(lsmod |grep vrouter | awk '{print $3}')
+       if [ "$status" == 1 ]; then
+          kernmodstat=true
+       fi
+       if [ "$vrlstn" == true ] && [ "$vrestb" == true ] && [ "$kernmodstat" == true ]; then
           log_info_msg "contrail-vrouter-agent is up and running"
           break
        else
