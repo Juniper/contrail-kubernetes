@@ -159,6 +159,7 @@ function setup_contrail_manifest_files() {
     echo "[opencontrail]" >> /etc/kubernetes/network.conf
     echo "public-ip-range = $OPENCONTRAIL_PUBLIC_SUBNET" >> /etc/kubernetes/network.conf
     echo "private-ip-range = 10.10.0.0/16" >> /etc/kubernetes/network.conf
+    echo "cluster-service  = kube-system/dns" >> /etc/kubernetes/network.conf
 
     cmd1='wget -qO - https://raw.githubusercontent.com/juniper/contrail-kubernetes/'
     cmd2='/cluster/manifests.hash | grep -v contrail-vrouter-agent | grep -v provision | awk "{print \"https://raw.githubusercontent.com/juniper/contrail-kubernetes/'
