@@ -805,7 +805,7 @@ function main()
    discover_docc_addto_vrouter
    persist_hostname
    rpf_disable
-   add_static_route
+   #add_static_route
    cleanup
    check_docker
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
