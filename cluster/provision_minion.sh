@@ -15,6 +15,7 @@ readonly PROGNAME=$(basename "$0")
 
 ocver=$OPENCONTRAIL_TAG
 ockver=$OPENCONTRAIL_KUBERNETES_TAG
+OPENCONTRAIL_PUBLIC_SUBNET="${OPENCONTRAIL_PUBLIC_SUBNET:-10.1.0.0/16}"
 
 timestamp() {
     date
@@ -727,7 +728,6 @@ function provision_virtual_gateway
     if $PROVISION_CONTRAIL_VGW ; then
         vrac="/etc/contrail/contrail-vrouter-agent.conf"
         wget -q --directory-prefix=/etc/contrail https://raw.githubusercontent.com/Juniper/contrail-controller/R2.20/src/config/utils/provision_vgw_interface.py
-       OPENCONTRAIL_PUBLIC_SUBNET="${OPENCONTRAIL_PUBLIC_SUBNET:-10.1.0.0/16}"
        `sudo docker ps |\grep contrail-vrouter-agent | \grep -v pause | awk '{print "sudo docker exec -it " $1 " python /etc/contrail/provision_vgw_interface.py --oper create --interface vgw --subnets '$OPENCONTRAIL_PUBLIC_SUBNET' --routes 0.0.0.0/0 --vrf default-domain:default-project:Public:Public"}'`
         # Setup virtual-gateway
         sed -i 's/# routing_instance=default-domain:admin:public:public$/routing_instance=default-domain:default-project:Public:Public/g' $vrac
@@ -756,6 +756,24 @@ function rpf_disable()
  echo "net.ipv4.conf."$VHOST".rp_filter=0" >> /etc/sysctl.conf
 }
 
+function add_static_route()
+{
+  if isGceVM ; then
+     ocpubgw=$(sipcalc $OPENCONTRAIL_PUBLIC_SUBNET | grep "Usable range" | awk '{print $4}')
+     ocpubgwname=$(echo $ocpubgw | sed 's/\./-/g')
+     ocpubmask=$(sipcalc $OPENCONTRAIL_PUBLIC_SUBNET | grep "Network mask" | head -n 1 | awk '{print $4}')
+     zone=$(gcloud compute instances list | grep minion -A 1 | awk '{print $2}')
+     gcloud compute routes create ip-$ocpubgwname --next-hop-instance `hostname` --next-hop-instance-zone $zone --destination-range $OPENCONTRAIL_PUBLIC_SUBNET
+     cat <<EOF >>/etc/network/interfaces
+      auto eth0:0
+      iface eth0:0 inet static
+      address $ocpubgw
+      netmask $ocpubmask
+EOF
+     /etc/init.d/networking restart
+  fi
+}
+
 function main()
 {
    detect_os
@@ -780,12 +798,12 @@ function main()
    verify_vrouter_agent
    provision_virtual_gateway
    discover_docc_addto_vrouter
-   cleanup
-   check_docker
    persist_hostname
    rpf_disable
-   log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
+   add_static_route
+   cleanup
    check_docker
+   log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
 }
 
 main
