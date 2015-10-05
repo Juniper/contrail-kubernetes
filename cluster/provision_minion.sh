@@ -321,7 +321,7 @@ function update_restart_kubelet()
 {
   #check for manifests in kubelet config
   kubeappendoc=" --network-plugin=opencontrail"
-  kubeappendpv=" --allow_privileged=true"
+  kubeappendpv=" --allow-privileged=true"
   kubeappendmf=" --config=/etc/kubernetes/manifests"
   if [ ! -f /etc/kubernetes/manifests ]; then
      mkdir -p /etc/kubernetes/manifests
@@ -347,7 +347,7 @@ function update_restart_kubelet()
       mkdir -p /etc/kubernetes/manifests
       kubecf="$kubecf $kubeappendmf"
   fi
-  kubepid=$(ps -ef|grep kubelet |grep allow_privileged | awk '{print $2}')
+  kubepid=$(ps -ef|grep kubelet |grep allow-privileged | awk '{print $2}')
   if [[ $kubepid != `pidof kubelet` ]]; then 
      kubecf="$kubecf $kubeappendpv"
   fi
