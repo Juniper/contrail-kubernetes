@@ -758,18 +758,23 @@ function rpf_disable()
 
 function add_static_route()
 {
+  itf="/etc/network/interfaces"
   if isGceVM ; then
+     # Assuming the the default kubernetes container used is debain based
+     # works only for debian / ubuntu
      ocpubgw=$(sipcalc $OPENCONTRAIL_PUBLIC_SUBNET | grep "Usable range" | awk '{print $4}')
      ocpubgwname=$(echo $ocpubgw | sed 's/\./-/g')
      ocpubmask=$(sipcalc $OPENCONTRAIL_PUBLIC_SUBNET | grep "Network mask" | head -n 1 | awk '{print $4}')
      zone=$(gcloud compute instances list | grep minion -A 1 | awk '{print $2}')
-     gcloud compute routes create ip-$ocpubgwname --next-hop-instance `hostname` --next-hop-instance-zone $zone --destination-range $OPENCONTRAIL_PUBLIC_SUBNET
-     cat <<EOF >>/etc/network/interfaces
-      auto eth0:0
-      iface eth0:0 inet static
-      address $ocpubgw
-      netmask $ocpubmask
-EOF
+     srt=$(gcloud compute routes list | grep -ow ip-$ocpubgwname)
+     if [ "$srt" != "ip-$ocpubmask" ]; then
+         gcloud compute routes create ip-$ocpubgwname --next-hop-instance `hostname` --next-hop-instance-zone $zone --destination-range $OPENCONTRAIL_PUBLIC_SUBNET
+     fi
+     # create and configure eth0:0
+     grep -q 'auto eth0:0' $itf || echo -e "\nauto eth0:0" >> $itf
+     grep -q 'iface eth0:0 inet static' $itf || echo "iface eth0:0 inet static" >> $itf
+     grep -q 'address $ocpubgw' $itf || echo "    address $ocpubgw" >> $itf
+     grep -q 'netmask $ocpubmask' $itf || echo "    netmask $ocpubmask" >> $itf
      /etc/init.d/networking restart
   fi
 }
