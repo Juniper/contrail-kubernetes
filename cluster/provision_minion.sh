@@ -440,12 +440,12 @@ function check_docker()
   cbr=$(cat /etc/default/kubelet | grep -ow "configure-cbr0=true" | cut -d= -f 2)
   if [ "$cbr" == true ]; then
       kubeletpid=`pidof kubelet`
-      if [ -z $kubeletpid ]; then
+      if [ -z "$kubeletpid" ]; then
          service kubelet restart
       fi
   else
     docpid=`pidof docker`
-    if [ -z $docpid ]; then
+    if [ -z "$docpid" ]; then
       (/usr/bin/docker -d -p /var/run/docker.pid --bridge=cbr0 --iptables=false --ip-masq=false)&
     fi
   fi
