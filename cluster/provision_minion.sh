@@ -527,11 +527,14 @@ function vr_agent_manifest_setup()
   # Wait for the control node to be up
   # check 60 times in 5 min
   cc=''
+  ifmapup=false
   for (( i=0; i<120; i++ ))
     do
      cc=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8083/Snh_SandeshUVECacheReq?tname=NodeStatus | xmllint --format - | grep -ow "contrail-control")
-     ifmapup=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8083/Snh_IFMapPeerServerInfoReq? | xmllint --format - | grep end_of_rib_computed | cut -d ">" -f2 | cut -d "<" -f1)
-     if [ ! -z $cc ] && $ifmapup ; then
+     if [ ! -z $cc ]; then
+         ifmapup=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8083/Snh_IFMapPeerServerInfoReq? | xmllint --format - | grep end_of_rib_computed | cut -d ">" -f2 | cut -d "<" -f1)
+     fi
+     if [ "$ifmapup" == true ]; then
        log_info_msg "IFMAP and Contrail-Control are up are ready for processing agent subscriptions"
        break
      fi
