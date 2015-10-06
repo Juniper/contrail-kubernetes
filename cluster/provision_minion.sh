@@ -782,14 +782,15 @@ function add_static_route()
      ocpubmask=$(sipcalc $OPENCONTRAIL_PUBLIC_SUBNET | grep "Network mask" | head -n 1 | awk '{print $4}')
      zone=$(gcloud compute instances list | grep minion -A 1 | awk '{print $2}')
      srt=$(gcloud compute routes list | grep -ow ip-$ocpubgwname)
-     if [ "$srt" != "ip-$ocpubgw" ]; then
-         gcloud compute routes create ip-$ocpubgwname --next-hop-instance `hostname` --next-hop-instance-zone $zone --destination-range $OPENCONTRAIL_PUBLIC_SUBNET
+     if [ "$srt" == "ip-$ocpubgw" ]; then
+         gcloud compute routes delete ip-$ocpubgwname
      fi
+     gcloud compute routes create ip-$ocpubgwname --next-hop-instance `hostname` --next-hop-instance-zone $zone --destination-range $OPENCONTRAIL_PUBLIC_SUBNET
      # create and configure eth0:0
      grep -q 'auto eth0:0' $itf || echo -e "\nauto eth0:0" >> $itf
      grep -q 'iface eth0:0 inet static' $itf || echo "iface eth0:0 inet static" >> $itf
-     grep -q 'address $ocpubgw' $itf || echo "    address $ocpubgw" >> $itf
-     grep -q 'netmask $ocpubmask' $itf || echo "    netmask $ocpubmask" >> $itf
+     grep -q "address $ocpubgw" $itf || echo "    address $ocpubgw" >> $itf
+     grep -q "netmask $ocpubmask" $itf || echo "    netmask $ocpubmask" >> $itf
      /etc/init.d/networking restart
   fi
 }
