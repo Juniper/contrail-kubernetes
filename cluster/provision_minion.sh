@@ -739,13 +739,13 @@ function provision_virtual_gateway
         wget -q --directory-prefix=/etc/contrail https://raw.githubusercontent.com/Juniper/contrail-controller/R2.20/src/config/utils/provision_vgw_interface.py
        `sudo docker ps |\grep contrail-vrouter-agent | \grep -v pause | awk '{print "sudo docker exec -it " $1 " python /etc/contrail/provision_vgw_interface.py --oper create --interface vgw --subnets '$OPENCONTRAIL_PUBLIC_SUBNET' --routes 0.0.0.0/0 --vrf default-domain:default-project:Public:Public"}'`
         # Setup virtual-gateway
-        grep -q 'routing_instance=default-domain:default-project:Public:Public' $vrac || sed -i 's/# routing_instance=default-domain:admin:public:public$/routing_instance=default-domain:default-project:Public:Public/g' $vrac
-        grep -q 'interface=vgw' $vrac || sed -i 's/# interface=vgw$/interface=vgw/g' $vrac
+        sed -i 's/# routing_instance=default-domain:admin:public:public$/routing_instance=default-domain:default-project:Public:Public/g' $vrac
+        sed -i 's/# interface=vgw$/interface=vgw/g' $vrac
         PUBLIC_IP=$(echo $OPENCONTRAIL_PUBLIC_SUBNET | cut -d '/' -f 1)
         PUBLIC_LEN=$(echo $OPENCONTRAIL_PUBLIC_SUBNET | cut -d '/' -f 2)
         vgwipblk="'$PUBLIC_IP'\/'$PUBLIC_LEN'"
-        grep -q 'ip_blocks=$vgwipblk' sed -i 's/# ip_blocks=1\.1\.1\.1\/24$/ip_blocks='$PUBLIC_IP'\/'$PUBLIC_LEN'/g' $vrac
-        grep -q 'routes=0.0.0.0/0' $vrac || sed -i "/ip_blocks=$vgwipblk/a routes=0.0.0.0/0" $vrac
+        sed -i 's/# ip_blocks=1\.1\.1\.1\/24$/ip_blocks='$PUBLIC_IP'\/'$PUBLIC_LEN'/g' $vrac
+        sed -i "/ip_blocks=$vgwipblk/a routes=0.0.0.0/0" $vrac
     fi
 }
 
