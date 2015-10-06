@@ -707,8 +707,8 @@ function verify_vrouter_agent()
           break
        else
           id=$(docker ps |grep contrail-vrouter-agent | grep -v pause | awk '{print $1}')
-          if [ -n $id ]; then
-            log_info_msg "contrail-vrouter-agent container up. Wait for additional time for setup"
+          if [[ -n $id ]]; then
+            log_info_msg "contrail-vrouter-agent container up. Wait for additional time for agent to establish connections"
           else
             log_info_msg "contrail-vrouter-agent container is not up. Wait for additional time"
             check_docker
