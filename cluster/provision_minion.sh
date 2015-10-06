@@ -538,6 +538,7 @@ function vr_agent_manifest_setup()
      sleep 5
     done
   mv /tmp/contrail-vrouter-agent.manifest /etc/kubernetes/manifests
+  check_docker
 }
 
 function vrouter_nh_rt_prov()
@@ -745,7 +746,7 @@ function provision_virtual_gateway
         PUBLIC_LEN=$(echo $OPENCONTRAIL_PUBLIC_SUBNET | cut -d '/' -f 2)
         vgwipblk="'$PUBLIC_IP'\/'$PUBLIC_LEN'"
         sed -i 's/# ip_blocks=1\.1\.1\.1\/24$/ip_blocks='$PUBLIC_IP'\/'$PUBLIC_LEN'/g' $vrac
-        sed -i "/ip_blocks=$vgwipblk/a routes=0.0.0.0/0" $vrac
+        sed -i "/GATEWAY-0/a routes=0.0.0.0/0" $vrac
     fi
 }
 
@@ -817,9 +818,8 @@ function main()
    check_docker
    persist_hostname
    rpf_disable
-   #add_static_route
+   add_static_route
    cleanup
-   check_docker
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
    check_docker
 }
