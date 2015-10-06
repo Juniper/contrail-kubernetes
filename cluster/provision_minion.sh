@@ -324,7 +324,7 @@ function update_restart_kubelet()
      return
   fi
   #check for manifests in kubelet config
-  kubeappendoc=" --network-plugin=opencontrail"
+  kubeappendoc=" --network_plugin=opencontrail"
   kubeappendpv=" --allow-privileged=true"
   kubeappendmf=" --config=/etc/kubernetes/manifests"
   if [ ! -f /etc/kubernetes/manifests ]; then
