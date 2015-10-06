@@ -135,13 +135,17 @@ function setup_kube_dns_endpoints() {
 
 function check_docker()
 {
-  docpid=$(ps -ef|grep "docker -d" | grep -v grep | awk '{print $2}')
-  if [ -z $docpid ]; then
-   service docker restart
-   docpid=$(ps -ef|grep "docker -d" | grep -v grep | awk '{print $2}')
-  fi
-  if  [ -z "$docpid" ]; then
-    (/usr/bin/docker -d -p /var/run/docker.pid --bridge=cbr0 --iptables=false --ip-masq=false)&
+  cbr=$(cat /etc/default/kubelet | grep -ow "configure-cbr0=true" | cut -d= -f 2)
+  if [ "$cbr" == true ]; then
+      kubeletpid=$(ps -ef|grep "kubelet --enable-debugging-handlers" | grep -v grep | awk '{print $2}')
+      if [ -z "$kubeletpid" ]; then
+         service kubelet restart
+      fi
+  else
+    docpid=docpid=$(ps -ef|grep "docker -d" | grep -v grep | awk '{print $2}')
+    if [ -z "$docpid" ]; then
+      (/usr/bin/docker -d -p /var/run/docker.pid --bridge=cbr0 --iptables=false --ip-masq=false)&
+    fi
   fi
 }
 
