@@ -535,7 +535,7 @@ function vr_agent_manifest_setup()
        log_info_msg "IFMAP and Contrail-Control are up are ready for processing agent subscriptions"
        break
      fi
-     sleep 5
+     sleep 3
     done
   mv /tmp/contrail-vrouter-agent.manifest /etc/kubernetes/manifests
   check_docker
@@ -711,9 +711,9 @@ function verify_vrouter_agent()
             log_info_msg "contrail-vrouter-agent container up. Wait for additional time for setup"
           else
             log_info_msg "contrail-vrouter-agent container is not up. Wait for additional time"
+            check_docker
           fi
-          check_docker
-          sleep 5
+          sleep 3
        fi
     done
 }
