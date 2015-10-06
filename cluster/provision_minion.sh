@@ -437,6 +437,9 @@ function prereq_vrouter_agent()
 
 function check_docker()
 {
+  if isGceVM ; then
+     return
+  fi
   docpid=`pidof docker`
   if [ -z $docpid ]; then
     (/usr/bin/docker -d -p /var/run/docker.pid --bridge=cbr0 --iptables=false --ip-masq=false)&
@@ -703,7 +706,6 @@ function verify_vrouter_agent()
           else
             log_info_msg "contrail-vrouter-agent container is not up. Wait for additional time"
           fi
-          check_docker
           sleep 5
        fi
     done
