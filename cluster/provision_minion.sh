@@ -319,6 +319,10 @@ function setup_opencontrail_kubelet()
 
 function update_restart_kubelet()
 {
+  # In GCE salt will provision kubelet config
+  if isGceVM ; then
+     return
+  fi
   #check for manifests in kubelet config
   kubeappendoc=" --network-plugin=opencontrail"
   kubeappendpv=" --allow-privileged=true"
@@ -703,6 +707,7 @@ function verify_vrouter_agent()
           else
             log_info_msg "contrail-vrouter-agent container is not up. Wait for additional time"
           fi
+          check_docker
           sleep 5
        fi
     done
@@ -730,11 +735,13 @@ function provision_virtual_gateway
         wget -q --directory-prefix=/etc/contrail https://raw.githubusercontent.com/Juniper/contrail-controller/R2.20/src/config/utils/provision_vgw_interface.py
        `sudo docker ps |\grep contrail-vrouter-agent | \grep -v pause | awk '{print "sudo docker exec -it " $1 " python /etc/contrail/provision_vgw_interface.py --oper create --interface vgw --subnets '$OPENCONTRAIL_PUBLIC_SUBNET' --routes 0.0.0.0/0 --vrf default-domain:default-project:Public:Public"}'`
         # Setup virtual-gateway
-        sed -i 's/# routing_instance=default-domain:admin:public:public$/routing_instance=default-domain:default-project:Public:Public/g' $vrac
-        sed -i 's/# interface=vgw$/interface=vgw/g' $vrac
+        grep -q 'routing_instance=default-domain:default-project:Public:Public' $vrac || sed -i 's/# routing_instance=default-domain:admin:public:public$/routing_instance=default-domain:default-project:Public:Public/g' $vrac
+        grep -q 'interface=vgw' $vrac || sed -i 's/# interface=vgw$/interface=vgw/g' $vrac
         PUBLIC_IP=$(echo $OPENCONTRAIL_PUBLIC_SUBNET | cut -d '/' -f 1)
         PUBLIC_LEN=$(echo $OPENCONTRAIL_PUBLIC_SUBNET | cut -d '/' -f 2)
-        sed -i 's/# ip_blocks=1\.1\.1\.1\/24$/ip_blocks='$PUBLIC_IP'\/'$PUBLIC_LEN'/g' $vrac
+        vgwipblk="'$PUBLIC_IP'\/'$PUBLIC_LEN'"
+        grep -q 'ip_blocks=$vgwipblk' sed -i 's/# ip_blocks=1\.1\.1\.1\/24$/ip_blocks='$PUBLIC_IP'\/'$PUBLIC_LEN'/g' $vrac
+        grep -q 'routes=0.0.0.0/0' $vrac || sed -i "/ip_blocks=$vgwipblk/a routes=0.0.0.0/0" $vrac
     fi
 }
 
@@ -767,7 +774,7 @@ function add_static_route()
      ocpubmask=$(sipcalc $OPENCONTRAIL_PUBLIC_SUBNET | grep "Network mask" | head -n 1 | awk '{print $4}')
      zone=$(gcloud compute instances list | grep minion -A 1 | awk '{print $2}')
      srt=$(gcloud compute routes list | grep -ow ip-$ocpubgwname)
-     if [ "$srt" != "ip-$ocpubmask" ]; then
+     if [ "$srt" != "ip-$ocpubgw" ]; then
          gcloud compute routes create ip-$ocpubgwname --next-hop-instance `hostname` --next-hop-instance-zone $zone --destination-range $OPENCONTRAIL_PUBLIC_SUBNET
      fi
      # create and configure eth0:0
@@ -803,12 +810,14 @@ function main()
    verify_vrouter_agent
    provision_virtual_gateway
    discover_docc_addto_vrouter
+   check_docker
    persist_hostname
    rpf_disable
    #add_static_route
    cleanup
    check_docker
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
+   check_docker
 }
 
 main
