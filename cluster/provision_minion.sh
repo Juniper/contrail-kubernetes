@@ -131,8 +131,7 @@ function prep_to_install()
     # in case of an interrupt during execution of apt-get
     dpkg --configure -a
     kver=$(uname -r)
-    # Sometimes observerd in GCE 
-    if [ "$kver" == "3.2.0-4-amd64" ]; then
+    if [ "$kver" == "3.2.0-4-amd64" ] && [ ! isGceVM ]; then
        log_error_msg "Kernel version 3.2.4 not supported. Upgrading to 3.16.0-0.bpo.4-amd64 and rebooting. Restart provisioning after reboot"
        echo "deb http://http.debian.net/debian wheezy-backports main" >> /etc/apt/sources.list
        apt-get update
