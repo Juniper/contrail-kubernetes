@@ -782,8 +782,11 @@ function add_static_route()
      ocpubmask=$(sipcalc $OPENCONTRAIL_PUBLIC_SUBNET | grep "Network mask" | head -n 1 | awk '{print $4}')
      zone=$(gcloud compute instances list | grep minion -A 1 | awk '{print $2}')
      srt=$(gcloud compute routes list | grep -ow ip-$ocpubgwname)
-     if [ "$srt" == "ip-$ocpubgw" ]; then
-         gcloud compute routes delete ip-$ocpubgwname
+     if [ ! -z "$srt" ]; then
+         gcloud compute routes delete ip-$ocpubgwname <<< "y
+y
+y
+"
      fi
      gcloud compute routes create ip-$ocpubgwname --next-hop-instance `hostname` --next-hop-instance-zone $zone --destination-range $OPENCONTRAIL_PUBLIC_SUBNET
      # create and configure eth0:0
