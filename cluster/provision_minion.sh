@@ -789,8 +789,7 @@ function add_static_route()
      # create and configure eth0:0
      grep -q 'auto eth0:0' $itf || echo -e "\nauto eth0:0" >> $itf
      grep -q 'iface eth0:0 inet static' $itf || echo "iface eth0:0 inet static" >> $itf
-     grep -q "address $ocpubgw" $itf || echo "    address $ocpubgw" >> $itf
-     grep -q "netmask $ocpubmask" $itf || echo "    netmask $ocpubmask" >> $itf
+     grep -q "address $ocpubgw" $itf || echo -e "    address $ocpubgw\n    netmask $ocpubmask" >> $itf
      /etc/init.d/networking restart
   fi
 }
