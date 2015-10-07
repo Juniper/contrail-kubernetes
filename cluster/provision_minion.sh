@@ -511,6 +511,7 @@ function vr_agent_conf_image_pull()
   wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/cluster/contrail-vrouter-agent.manifest
   vragentfile=/tmp/contrail-vrouter-agent.manifest
   vrimg=$(cat $vragentfile | grep image | awk -F, '{print $1}' | awk '{print $2}')
+  check_docker
   echo $vrimg | xargs -n1 sudo docker pull
 }
 

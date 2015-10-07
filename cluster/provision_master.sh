@@ -175,12 +175,12 @@ function setup_contrail_manifest_files() {
     cmd="$cmd1$OPENCONTRAIL_KUBERNETES_TAG$cmd2$OPENCONTRAIL_KUBERNETES_TAG$cmd3"
     master $cmd
 
-    #check_docker
+    check_docker
     cmd='grep \"image\": /etc/contrail/manifests/* | cut -d "\"" -f 4 | sort -u | xargs -n1 sudo docker pull'
     RETRY=20
     WAIT=3
     retry master $cmd
-    #check_docker
+    check_docker
     cmd='mv /etc/contrail/manifests/* /etc/kubernetes/manifests/'
     master $cmd
 }
@@ -205,6 +205,9 @@ function setup_contrail_master() {
 
     # Provision vrouter encap order
     provision_vrouter_encap
+
+    #check docker
+    check_docker
 
     # Setip kube-dns
     setup_kube_dns_endpoints
