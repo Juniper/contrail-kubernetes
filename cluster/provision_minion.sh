@@ -364,7 +364,7 @@ function update_restart_kubelet()
     sed -i '/DAEMON_ARGS/d' /etc/default/kubelet
     echo 'DAEMON_ARGS="'$kubecf'"' > /etc/default/kubelet
   fi
-  wget -P $saltstore https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/cluster/kubelet.default -O default
+  wget https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/cluster/kubelet.default -O $saltstore/default
   service kubelet restart
 }
 
