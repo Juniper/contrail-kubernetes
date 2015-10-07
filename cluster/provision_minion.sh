@@ -323,7 +323,6 @@ function update_restart_kubelet()
   kubeappendoc=" --network_plugin=opencontrail"
   kubeappendpv=" --allow-privileged=true"
   kubeappendmf=" --config=/etc/kubernetes/manifests"
-  saltstore="/srv/salt/kubelet"
   if [ ! -f /etc/kubernetes/manifests ]; then
      mkdir -p /etc/kubernetes/manifests
   fi
@@ -364,7 +363,6 @@ function update_restart_kubelet()
     sed -i '/DAEMON_ARGS/d' /etc/default/kubelet
     echo 'DAEMON_ARGS="'$kubecf'"' > /etc/default/kubelet
   fi
-  wget https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/cluster/kubelet.default -O $saltstore/default
   service kubelet restart
 }
 
