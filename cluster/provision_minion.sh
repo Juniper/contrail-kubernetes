@@ -809,8 +809,10 @@ function main()
    ifup_vhost
    routeconfig
    verify_vhost_setup
-   setup_opencontrail_kubelet
-   update_restart_kubelet
+   if [ ! isGceVM ]; then
+     setup_opencontrail_kubelet
+     update_restart_kubelet
+   fi
    vr_agent_manifest_setup
    provision_vrouter
    check_docker
