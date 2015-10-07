@@ -125,7 +125,7 @@ function prep_to_install()
     yum update
     yum install -y git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r` \
         libxml2-devel python-lxml sipcalc wget ethtool bridge-utils curl python-pip python-setuptools libxml2-utils
-        python-setuptools host
+        python-setuptools host aufs-tools
   elif [ "$OS_TYPE" == $UBUNTU ]; then
     apt-get update
     # in case of an interrupt during execution of apt-get
@@ -140,7 +140,8 @@ function prep_to_install()
        reboot
     fi
     apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r` \
-            libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl python-pip python-setuptools host libxml2-utils
+            libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl python-pip python-setuptools host libxml2-utils \
+            aufs-tools
   fi
 }
 
