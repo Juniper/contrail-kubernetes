@@ -319,14 +319,11 @@ function setup_opencontrail_kubelet()
 
 function update_restart_kubelet()
 {
-  # In GCE salt will provision kubelet config
-  if isGceVM ; then
-     return
-  fi
   #check for manifests in kubelet config
   kubeappendoc=" --network_plugin=opencontrail"
   kubeappendpv=" --allow-privileged=true"
   kubeappendmf=" --config=/etc/kubernetes/manifests"
+  saltstore="/srv/salt/kubelet/default"
   if [ ! -f /etc/kubernetes/manifests ]; then
      mkdir -p /etc/kubernetes/manifests
   fi
@@ -367,7 +364,7 @@ function update_restart_kubelet()
     sed -i '/DAEMON_ARGS/d' /etc/default/kubelet
     echo 'DAEMON_ARGS="'$kubecf'"' > /etc/default/kubelet
   fi
-  echo 'PATH=/usr/local/bin:$PATH' >> /etc/default/kubelet
+  wget -P $saltstore https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/cluster/kubelet.default
   service kubelet restart
 }
 
