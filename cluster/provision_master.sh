@@ -133,8 +133,10 @@ function provision_vrouter_encap() {
 
 # Setup kube dns endpoints
 function setup_kube_dns_endpoints() {
-    master /usr/local/bin/kubectl --namespace=kube-system create -f /etc/kubernetes/addons/kube-ui/kube-ui-rc.yaml || true
+    master /usr/local/bin/kubectl --namespace=kube-system delete service kube-ui
     master /usr/local/bin/kubectl --namespace=kube-system create -f /etc/kubernetes/addons/kube-ui/kube-ui-svc.yaml || true
+    master /usr/local/bin/kubectl --namespace=kube-system delete rc kube-ui-v2
+    master /usr/local/bin/kubectl --namespace=kube-system create -f /etc/kubernetes/addons/kube-ui/kube-ui-rc.yaml || true
 }
 
 function check_docker()
