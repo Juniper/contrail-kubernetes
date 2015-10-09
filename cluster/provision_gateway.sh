@@ -1,6 +1,6 @@
 #!/bin/bash
 ##############################################################
-# opencontrail-kubernetes minion setup and provisioning script. 
+# opencontrail-gateway setup and provisioning script. 
 # For more info, please refer to the following link
 # https://github.com/Juniper/contrail-kubernetes
 #
@@ -369,7 +369,6 @@ function vr_agent_conf_image_pull()
   wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/cluster/contrail-vrouter-agent.manifest
   vragentfile=/tmp/contrail-vrouter-agent.manifest
   vrimg=$(cat $vragentfile | grep image | awk -F, '{print $1}' | awk '{print $2}')
-  check_docker
   echo $vrimg | xargs -n1 sudo docker pull
 }
 
@@ -399,7 +398,6 @@ function vr_agent_manifest_setup()
      sleep 3
     done
   mv /tmp/contrail-vrouter-agent.manifest /etc/kubernetes/manifests
-  check_docker
 }
 
 function ifup_vhost()
@@ -507,7 +505,6 @@ function verify_vrouter_agent()
             log_info_msg "contrail-vrouter-agent container up. Wait for additional time for agent to establish connections"
           else
             log_info_msg "contrail-vrouter-agent container is not up. Wait for additional time"
-            check_docker
           fi
           sleep 3
        fi
