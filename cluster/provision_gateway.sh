@@ -419,7 +419,7 @@ function vr_agent_manifest_setup()
   img=$(docker images | grep vrouter | awk '{print $1}')
   ver=$(docker images | grep vrouter | awk '{print $2}')
   
-  docker run --privileged -d -P --name contrail-vrouter --net="host" -t -i -e sysimage=/host -v /etc/contrail:/etc/contrail -v /var/log/contrail:/var/log/contrail $img$ver /usr/bin/contrail-vrouter-agent
+  docker run --privileged -d -P --name contrail_vrouter_agent --net="host" -t -i -e sysimage=/host -v /etc/contrail:/etc/contrail -v /var/log/contrail:/var/log/contrail $img:$ver /usr/bin/contrail-vrouter-agent
 
   # start monitoring
   wget -P /etc/contrail https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/scripts/opencontrail-install/contrail_vr_agent_mon.sh
