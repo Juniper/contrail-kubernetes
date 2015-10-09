@@ -14,9 +14,7 @@ source /etc/contrail/opencontrail-rc
 readonly PROGNAME=$(basename "$0")
 
 ocver=$OPENCONTRAIL_TAG
-ockver=$OPENCONTRAIL_KUBERNETES_TAG
 OPENCONTRAIL_PUBLIC_SUBNET="${OPENCONTRAIL_PUBLIC_SUBNET:-10.1.0.0/16}"
-OPENCONTRAIL_GATEWAY_ON_MINION="${OPENCONTRAIL_GATEWAY_ON_MINION:-false}"
 
 timestamp() {
     date
@@ -56,10 +54,6 @@ if [[ -z $ocver ]]; then
    ocver="R2.20"
 fi
 
-if [[ -z $ockver ]]; then
-   ockver="master"
-fi
-
 hname=`hostname`
 
 function detect_os()
@@ -84,16 +78,15 @@ if [ ! -f "$rcdir" ]; then
     mkdir -p "$rcdir"
 fi
 if [[ -z $OPENCONTRAIL_CONTROLLER_IP ]]; then
-    kube_api_port=$(cat /etc/default/kubelet | grep -o 'api-servers=[^;]*' | awk -F// '{print $2}' | awk '{print $1}')
-    kube_api_server=$(echo $kube_api_port| awk -F':' '{print $1}')
+    if isGceVM ; then
+       api_server="kubernetes-master"
+    fi
 
    # Try to resolve
-   if [[ -n $kube_api_server ]]; then
-       OPENCONTRAIL_CONTROLLER_IP=$(host $kube_api_server | grep address | awk '{print $4}')
-   elif [ -z "$kube_api_server" ]; then
-       OPENCONTRAIL_CONTROLLER_IP=`hostname -i`
+   if [[ -n $api_server ]]; then
+       OPENCONTRAIL_CONTROLLER_IP=$(host $api_server | grep address | awk '{print $4}')
    else
-      log_error_msg "Unable to resolve to contrail controller which is deployed on Kubernetes master"
+      log_error_msg "Unable to find contrail controller"
    fi
    echo "OPENCONTRAIL_CONTROLLER_IP=$OPENCONTRAIL_CONTROLLER_IP" >> $rcfile
 fi
@@ -294,109 +287,6 @@ function setup_vhost()
   fi   
 }
 
-function setup_opencontrail_kubelet()
-{
-  ockub=$(pip freeze | grep kubelet | awk -F= '{print $1}')
-  if [ ! -z "$ockub" ]; then
-     pip uninstall -y opencontrail-kubelet
-  fi
-  (exec pip install --upgrade opencontrail-kubelet)
-  
-  mkdir -p /usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail
-  if [ ! -f /usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail/config ]; then
-     touch /usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail/config
-  fi
-  config="/usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail/config"
-  ocp="/usr/local/bin/opencontrail-kubelet-plugin"
-  if [ ! -f "$ocp" ]; then
-     log_info_msg "Opencontrail-kubelet-plugin not found. Please check the package opencontrail-kubelet"
-     exit 1
-  fi
-  grep -q 'DEFAULTS' $config || echo "[DEFAULTS]" >> $config
-  sed -i '/api_server/d' $config
-  echo "api_server=$OPENCONTRAIL_CONTROLLER_IP" >> $config
-  (cd /usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail; `ln -s $ocp opencontrail`) && cd
-}
-
-function update_restart_kubelet()
-{
-  #check for manifests in kubelet config
-  kubeappendoc=" --network_plugin=opencontrail"
-  kubeappendpv=" --allow-privileged=true"
-  kubeappendmf=" --config=/etc/kubernetes/manifests"
-  if [ ! -f /etc/kubernetes/manifests ]; then
-     mkdir -p /etc/kubernetes/manifests
-  fi
-  # Note: KUBELET_OPTS is used in Ubuntu
-  #       DAEMON_ARGS is ised in AWS
-  source /etc/default/kubelet
-  if [ ! -z "$KUBELET_OPTS" ]; then
-     kubecf=`echo $KUBELET_OPTS`
-  elif [ ! -z "$DAEMON_ARGS" ]; then
-     kubecf=`echo $DAEMON_ARGS`
-  else
-     logger_error_msg "Kubelet default configuration missing. Please check kubelet and /etc/default/kubelet"
-  fi
-
-  # kubelet runtime args are imp. Make sure it is up
-  kubepid=$(ps -ef|grep kubelet |grep manifests | awk '{print $2}')
-  ln -sf /usr/local/bin/kubectl /usr/bin/kubectl # temp hack
-  if [ -z $kubepid ]; then
-    service restart kubelet
-  fi
-  if [[ $kubepid != `pidof kubelet` ]]; then
-      mkdir -p /etc/kubernetes/manifests
-      kubecf="$kubecf $kubeappendmf"
-  fi
-  kubepid=$(ps -ef|grep kubelet |grep allow-privileged | awk '{print $2}')
-  if [[ $kubepid != `pidof kubelet` ]]; then 
-     kubecf="$kubecf $kubeappendpv"
-  fi
-  kubepid=$(ps -ef|grep kubelet |grep opencontrail | awk '{print $2}')
-  if [[ $kubepid != `pidof kubelet` ]]; then
-     kubecf="$kubecf $kubeappendoc"
-  fi
-
-  if [ ! -z "$KUBELET_OPTS" ]; then
-    sed -i '/KUBELET_OPTS/d' /etc/default/kubelet
-    echo 'KUBELET_OPTS="'$kubecf'"' > /etc/default/kubelet
-  elif [ ! -z "$DAEMON_ARGS" ]; then
-    sed -i '/DAEMON_ARGS/d' /etc/default/kubelet
-    echo 'DAEMON_ARGS="'$kubecf'"' > /etc/default/kubelet
-  fi
-  service kubelet restart
-}
-
-function stop_kube_svcs()
-{
-   if [[ -n `pidof kube-proxy` ]]; then
-      log_info_msg "Kube-proxy is running. Opencontrail does not use kube-proxy as it provides the function. Stoping it."
-      `service kube-proxy stop`
-      if [ "$OS_TYPE" == $UBUNTU ]; then
-         `update-rc.d -f kube-proxy disable`
-         `update-rc.d -f kube-proxy remove`
-      else
-         `chkconfig kube-proxy off`
-      fi
-   fi
-
-   if [[ -n `pidof flanneld` ]]; then
-      log_info_msg "flanneld is running. Opencontrail does not use flannel as it provides the function. Stoping it."
-      service flanneld stop
-      intf=$(ifconfig flannel | awk 'NR==1{print $1}')
-      if [ $intf == "flannel0" ]; then
-         `ifconfig $intf down`
-         `ifdown $intf`
-         if [ "$OS_TYPE" == $UBUNTU ]; then
-            `update-rc.d -f flanneld disable`
-            `update-rc.d -f flanneld remove`
-         else
-            `chkconfig flanneld off`
-         fi
-      fi
-   fi
-}
-
 function update_vhost_pre_up()
 {
   preup="/etc/network/if-pre-up.d"
@@ -416,35 +306,6 @@ function update_vhost_pre_up()
   fi
   wget -P $preup https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/scripts/opencontrail-install/ifup-vhost
   `chmod +x $preup/ifup-vhost`
-}
-
-function prereq_vrouter_agent()
-{
-  if [ "$OS_TYPE" == $REDHAT ]; then
-     docon=$(rpm -qa | grep docker)
-  elif [ "$OS_TYPE" == $UBUNTU ]; then
-     docon=$(dpkg -l | grep docker)
-  fi
-
-  if [ -z "$docon" ]; then
-     curl -sSL https://get.docker.com/ | sh
-  fi
-}
-
-function check_docker()
-{
-  cbr=$(cat /etc/default/kubelet | grep -ow "configure-cbr0=true" | cut -d= -f 2)
-  if [ "$cbr" == true ]; then
-      kubeletpid=`pidof kubelet`
-      if [ -z "$kubeletpid" ]; then
-         service kubelet restart
-      fi
-  else
-    docpid=`pidof docker`
-    if [ -z "$docpid" ]; then
-      (/usr/bin/docker -d -p /var/run/docker.pid --bridge=cbr0 --iptables=false --ip-masq=false)&
-    fi
-  fi
 }
 
 function vr_agent_conf_image_pull()
@@ -539,71 +400,6 @@ function vr_agent_manifest_setup()
     done
   mv /tmp/contrail-vrouter-agent.manifest /etc/kubernetes/manifests
   check_docker
-}
-
-function vrouter_nh_rt_prov()
-{
-  if isGceVM ; then
-     vmac=$(ip link show $VHOST | grep link | awk '{print $2}')
-     defgw=$(ip route | grep default | awk '{print $3}')
-     gwmac=$(arp -a | grep $defgw | awk '{print $4}')
-     intf=$(ip link show |grep $vmac -B 1 | grep -i "eth\|bond" | awk '{print $2}' | cut -d: -f1 | head -1)
-     naddr=$(getGceNetAddr)
-     prefix=$(echo $naddr | cut -d/ -f1)
-     len=$(echo $naddr | cut -d/ -f2)
-     while true
-      do
-       ccc=$(netstat -natp |grep 5269 | awk '{print $6}')
-       rtdata32=$(rt --dump 0 |grep $OPENCONTRAIL_CONTROLLER_IP/32 | awk '{print $5}' | head -1)
-       if [ "$rtdata32" == "-" ]; then
-          rtdata32=$(rt --dump 0 |grep $OPENCONTRAIL_CONTROLLER_IP/32 | awk '{print $4}' | head -1)
-       fi
-       oc=$OPENCONTRAIL_CONTROLLER_IP
-       sub=$(echo ${oc%.*} ${oc##*.}  | awk '{print $1}').0
-       rtdata24=$(rt --dump 0 |grep $sub | awk '{print $5}' | head -1)
-       if [ "$rtdata24" == "-" ]; then
-          rtdata24=$(rt --dump 0 |grep $sub | awk '{print $4}' | head -1)
-       fi
-       if [ -z "$ccc" ] || [ "$ccc" != "ESTABLISHED" ]; then
-         if [ "$rtdata32" != 1000 ] || [ "$rtdata24" != 1000 ]; then
-            nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $5}' | head -1)
-            if [ "$nhid" == "-" ]; then
-               nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $4}' | head -1)
-            fi
-            /usr/bin/nh --delete $nhid
-            /usr/bin/nh --create 1000 --type 2 --smac $vmac --dmac $gwmac --oif $intf
-            while true
-             do
-              nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $5}' | head -1)
-              if [ "$nhid" == "-" ]; then
-                 nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $4}' | head -1)
-              fi
-              rtdata32=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP/32 | awk '{print $5}' | head -1)
-              if [ "$rtdata32" == "-" ]; then
-                 rtdata32=$(rt --dump 0 |grep $OPENCONTRAIL_CONTROLLER_IP/32 | awk '{print $4}' | head -1)
-              fi
-              if [ "$rtdata32" != 1000 ]; then
-                 err=$(/usr/bin/rt -d -f AF_INET -r $len -p $OPENCONTRAIL_CONTROLLER_IP -l 32 -n $nhid -v 0 | grep -ow Error)
-                 if [ "$err" == Error ]; then
-                    sleep 3
-                    continue
-                 else
-                    break
-                 fi
-              fi
-             done
-            /usr/bin/rt -c -f AF_INET -n 1000 -p $prefix -l $len -v 0
-         fi
-       elif [ "$ccc" == "ESTABLISHED" ] && [ "$rtdata32" == 1000 ] || [ "$rtdata24" == 1000 ]; then
-            break
-       fi
-       sleep 3
-      done
-    wget -P /etc/contrail https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/scripts/opencontrail-install/gce_ocvr_rt_chk.sh
-    chmod +x /etc/contrail/gce_ocvr_rt_chk.sh
-    cron="*/1 * * * * /etc/contrail/gce_ocvr_rt_chk.sh 2>&1 | logger"
-    (crontab -u root -l; echo "$cron" ) | crontab -u root -
-  fi
 }
 
 function ifup_vhost()
@@ -718,21 +514,6 @@ function verify_vrouter_agent()
     done
 }
 
-# Discover and add containers to vrouter
-function discover_docc_addto_vrouter() {
-    vrouter_agent=$(cat /etc/kubernetes/manifests/contrail-vrouter-agent.manifest | grep metadata | awk '{print $2}' | tr -d '{}",' | awk -F: '{print $2}')
-    KUBE_PLUGIN=/usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail/opencontrail
-    CONTAINERS=$(docker ps | grep -v "/pause" | grep -v $vrouter_agent | awk '/[0-9a-z]{12} /{print $1;}')
-
-    for i in $CONTAINERS; do
-        NAME=$(docker inspect -f '{{.Name}}' $i)
-        ID=$(docker inspect -f '{{.Id}}' $i)
-        PODNAME=$(echo $NAME | awk '//{split($0, arr, "_"); print arr[3]}')
-        NAMESPACE=$(echo $NAME | awk '//{split($0, arr, "_"); print arr[4]}')
-        $KUBE_PLUGIN setup $NAMESPACE $PODNAME $ID
-    done
-}
-
 function provision_virtual_gateway
 {
     if $PROVISION_CONTRAIL_VGW ; then
@@ -802,36 +583,20 @@ function main()
    build_vrouter
    setup_vhost
    modprobe_vrouter
-   stop_kube_svcs
    update_vhost_pre_up
-   prereq_vrouter_agent
-   check_docker
    vr_agent_conf_image_pull
    ifup_vhost
    routeconfig
    verify_vhost_setup
-   if [ ! isGceVM ]; then
-     setup_opencontrail_kubelet
-     update_restart_kubelet
-   fi
    vr_agent_manifest_setup
    provision_vrouter
-   check_docker
    verify_vrouter_agent
-   discover_docc_addto_vrouter
-   check_docker
+   provision_virtual_gateway
+   add_static_route
    persist_hostname
    rpf_disable
-   if [ "$OPENCONTRAIL_GATEWAY_ON_MINION" == true ]; then
-      vrhost=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8082/virtual-routers | python -c 'import sys, json; print json.load(sys.stdin)["virtual-routers"][0]["fq_name"][1]')
-      if [ "$vrhost" == `hostname` ]; then
-         provision_virtual_gateway
-         add_static_route
-      fi
-   fi
    cleanup
-   log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
-   check_docker
+   log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent and gateway is done."
 }
 
 main
