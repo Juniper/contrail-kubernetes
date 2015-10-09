@@ -16,6 +16,7 @@ readonly PROGNAME=$(basename "$0")
 ocver=$OPENCONTRAIL_TAG
 ockver=$OPENCONTRAIL_KUBERNETES_TAG
 OPENCONTRAIL_PUBLIC_SUBNET="${OPENCONTRAIL_PUBLIC_SUBNET:-10.1.0.0/16}"
+GCLOUD_NET_ADDR=""
 
 timestamp() {
     date
@@ -205,8 +206,10 @@ function isGceVM()
 
 function getGceNetAddr()
 {
-  netAddr=$(gcloud compute networks list | grep default | awk '{print $2}')
-  echo $netAddr
+  if [ -z "$GCLOUD_NET_ADDR" ]; then
+     GCLOUD_NET_ADDR=$(gcloud compute networks list | grep default | awk '{print $2}')
+  fi
+  echo $GCLOUD_NET_ADDR
   return 1
 }
 
