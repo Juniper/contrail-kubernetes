@@ -308,6 +308,19 @@ function update_vhost_pre_up()
   `chmod +x $preup/ifup-vhost`
 }
 
+function prereq_vrouter_agent()
+{
+  if [ "$OS_TYPE" == $REDHAT ]; then
+     docon=$(rpm -qa | grep docker)
+  elif [ "$OS_TYPE" == $UBUNTU ]; then
+     docon=$(dpkg -l | grep docker)
+  fi
+
+  if [ -z "$docon" ]; then
+     curl -sSL https://get.docker.com/ | sh
+  fi
+}
+
 function vr_agent_conf_image_pull()
 {
   etcc="/etc/contrail"
@@ -581,6 +594,7 @@ function main()
    setup_vhost
    modprobe_vrouter
    update_vhost_pre_up
+   prereq_vrouter_agent
    vr_agent_conf_image_pull
    ifup_vhost
    routeconfig
