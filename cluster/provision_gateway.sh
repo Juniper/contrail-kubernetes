@@ -14,6 +14,7 @@ source /etc/contrail/opencontrail-rc
 readonly PROGNAME=$(basename "$0")
 
 ocver=$OPENCONTRAIL_TAG
+ockver=$OPENCONTRAIL_KUBERNETES_TAG
 OPENCONTRAIL_PUBLIC_SUBNET="${OPENCONTRAIL_PUBLIC_SUBNET:-10.1.0.0/16}"
 
 timestamp() {
@@ -387,6 +388,8 @@ function vr_agent_conf_image_pull()
 
 function vr_agent_manifest_setup()
 {
+  # Keeping the manifest as in a minion
+  # there is no kubelet on a gateway node
   if [ ! -f /etc/kubernetes/manifests ]; then
      mkdir -p /etc/kubernetes/manifests
   fi
@@ -398,7 +401,7 @@ function vr_agent_manifest_setup()
   # check 60 times in 5 min
   cc=''
   ifmapup=false
-  for (( i=0; i<120; i++ ))
+  while true
     do
      cc=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8083/Snh_SandeshUVECacheReq?tname=NodeStatus | xmllint --format - | grep -ow "contrail-control")
      if [ ! -z $cc ]; then
@@ -411,6 +414,18 @@ function vr_agent_manifest_setup()
      sleep 3
     done
   mv /tmp/contrail-vrouter-agent.manifest /etc/kubernetes/manifests
+  
+  # start docker 
+  img=$(docker images | grep vrouter | awk '{print $1}')
+  ver=$(docker images | grep vrouter | awk '{print $2}')
+  
+  docker run --privileged -d -P --name contrail-vrouter --net="host" -t -i -e sysimage=/host -v /etc/contrail:/etc/contrail -v /var/log/contrail:/var/log/contrail $img$ver /usr/bin/contrail-vrouter-agent
+
+  # start monitoring
+  wget -P /etc/contrail https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/scripts/opencontrail-install/contrail_vr_agent_mon.sh
+  chmod +x /etc/contrail/contrail_vr_agent_mon.sh
+  cron="*/3 * * * * /etc/contrail/contrail_vr_agent_mon.sh  2>&1 | logger"
+  (crontab -u root -l; echo "$cron" ) | crontab -u root -
 }
 
 function ifup_vhost()
