@@ -437,6 +437,7 @@ function check_docker()
   if [ "$cbr" == true ]; then
       kubeletpid=`pidof kubelet`
       if [ -z "$kubeletpid" ]; then
+         service docker stop
          service kubelet restart
       fi
   else
@@ -508,8 +509,22 @@ function vr_agent_conf_image_pull()
   wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/cluster/contrail-vrouter-agent.manifest
   vragentfile=/tmp/contrail-vrouter-agent.manifest
   vrimg=$(cat $vragentfile | grep image | awk -F, '{print $1}' | awk '{print $2}')
-  check_docker
   echo $vrimg | xargs -n1 sudo docker pull
+  i=0
+  while true
+    do
+      dvrimg=$(docker images | grep -ow vrouter-agent)
+      if [ ! -z  "$dvrimg" ]; then
+         break
+      fi
+      sleep 5
+      ((i++))
+      if [ $i == 12 ]; then
+       check_docker
+       log_info_msg "pulling of opencontrail/vrouter-agent image was not successful in the initial attempt. Restarting docker to recover"
+       break
+      fi
+    done
 }
 
 function vr_agent_manifest_setup()
@@ -538,7 +553,6 @@ function vr_agent_manifest_setup()
      sleep 3
     done
   mv /tmp/contrail-vrouter-agent.manifest /etc/kubernetes/manifests
-  check_docker
 }
 
 function vrouter_nh_rt_prov()
@@ -711,7 +725,6 @@ function verify_vrouter_agent()
             log_info_msg "contrail-vrouter-agent container up. Wait for additional time for agent to establish connections"
           else
             log_info_msg "contrail-vrouter-agent container is not up. Wait for additional time"
-            check_docker
           fi
           sleep 3
        fi
@@ -816,7 +829,6 @@ function main()
    fi
    vr_agent_manifest_setup
    provision_vrouter
-   check_docker
    verify_vrouter_agent
    discover_docc_addto_vrouter
    check_docker
