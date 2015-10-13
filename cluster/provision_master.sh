@@ -133,7 +133,7 @@ function provision_vrouter_encap() {
 
 # Setup kube dns
 function setup_kube_dns() {
-  master /bin/sed -e s/kube_master_url//g -i /etc/kubernetes/addons/dns/skydns-rc.yaml
+  master /bin/sed -i '/kube_master_url/d' /etc/kubernetes/addons/dns/skydns-rc.yaml
   master /usr/local/bin/kubectl --namespace=kube-system delete rc kube-dns-v9
   master /usr/local/bin/kubectl  create -f /etc/kubernetes/addons/dns/skydns-rc.yaml || true
 }
