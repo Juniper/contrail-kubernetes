@@ -16,7 +16,7 @@ readonly PROGNAME=$(basename "$0")
 ocver=$OPENCONTRAIL_TAG
 ockver=$OPENCONTRAIL_KUBERNETES_TAG
 OPENCONTRAIL_PUBLIC_SUBNET="${OPENCONTRAIL_PUBLIC_SUBNET:-10.1.0.0/16}"
-OPENCONTRAIL_GATEWAY_ON_MINION="${OPENCONTRAIL_GATEWAY_ON_MINION:-false}"
+NETWORK_PROVIDER_GATEWAY_ON_MINION="${NETWORK_PROVIDER_GATEWAY_ON_MINION:-false}"
 
 timestamp() {
     date
@@ -834,7 +834,7 @@ function main()
    check_docker
    persist_hostname
    rpf_disable
-   if [ "$OPENCONTRAIL_GATEWAY_ON_MINION" == true ]; then
+   if [ "$NETWORK_PROVIDER_GATEWAY_ON_MINION" == true ]; then
       vrhost=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8082/virtual-routers | python -c 'import sys, json; print json.load(sys.stdin)["virtual-routers"][0]["fq_name"][1]')
       if [ "$vrhost" == `hostname` ]; then
          provision_virtual_gateway
