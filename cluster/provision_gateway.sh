@@ -22,9 +22,9 @@ timestamp() {
     date
 }
 
-if [ ! -f /var/log/contrail/provision_minion.log ]; then
+if [ ! -f /var/log/contrail/provision_gateway.log ]; then
    mkdir -p /var/log/contrail
-   touch /var/log/contrail/provision_minion.log
+   touch /var/log/contrail/provision_gateway.log
 fi
 
 log_error_msg() {
@@ -44,7 +44,7 @@ log_info_msg() {
 
 log_info_msg "Start Provisioning VROUTER kernel module and agent in container"
 
-LOG_FILE=/var/log/contrail/provision_minion.log
+LOG_FILE=/var/log/contrail/provision_gateway.log
 exec 2>&1 &> >(tee -a "$LOG_FILE")
 
 REDHAT="redhat"
