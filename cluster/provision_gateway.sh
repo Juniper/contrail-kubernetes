@@ -81,7 +81,7 @@ if [ ! -f "$rcdir" ]; then
 fi
 if [[ -z $OPENCONTRAIL_CONTROLLER_IP ]]; then
     if isGceVM ; then
-       api_server="kubernetes-master"
+       api_server=$(cat /etc/salt/minion.d/grains.conf | grep api_servers | awk '{print $2}' | tr -d "'")
     fi
 
    # Try to resolve
