@@ -173,6 +173,13 @@ class PodNetworkStatus(object):
         self.ip = None
 
 
+def podHasLivenessProbe(podInfo):
+    for container in podInfo['spec']['containers']:
+        if 'livenessProbe' in container:
+            return True
+    return False
+
+
 def status(pod_namespace, pod_name, docker_id):
     status = PodNetworkStatus()
     uid, podName = getDockerPod(docker_id)
@@ -181,7 +188,12 @@ def status(pod_namespace, pod_name, docker_id):
         setup(pod_namespace, pod_name, docker_id)
         return
 
-    localaddr = data.find('mdata_ip_addr')
+    podInfo = getPodInfo(pod_namespace, podName)
+    if podInfo and podHasLivenessProbe(podInfo):
+        localaddr = data.find('mdata_ip_addr')
+    else:
+        localaddr = data.find('ip_addr')
+
     if localaddr is not None:
         status.ip = localaddr.text
     print json.dumps(status.__dict__)
