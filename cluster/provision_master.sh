@@ -78,7 +78,7 @@ function verify_contrail_listen_services() {
 # and restart if not set
 function check_contrail_services()
 {
-  apt-get install -y libxml2-utils
+  apt-get install -y libxml2-utils host
   vr=''
   for (( i=0; i<20; i++ ))
     do
@@ -194,6 +194,24 @@ function setup_contrail_manifest_files() {
     master $cmd
 }
 
+# Provision config
+function setup_opencontrail_config() {
+    cmd='docker ps | grep contrail-api | grep -v pause | awk "{print \"docker exec \" \$1 \" python /usr/share/contrail-utils/provision_config_node.py --api_server_ip `hostname --ip-address` --host_name `hostname` --host_ip `hostname --ip-address` --oper add  --admin_user admin --admin_password contrail123 --admin_tenant_name kube-system\"}" | sudo sh'
+    master $cmd
+}
+
+# Provision database
+function setup_opencontrail_database() {
+    cmd='docker ps | grep contrail-api | grep -v pause | awk "{print \"docker exec \" \$1 \" python /usr/share/contrail-utils/provision_database_node.py --api_server_ip `hostname --ip-address` --host_name `hostname` --host_ip `hostname --ip-address` --oper add  --admin_user admin --admin_password contrail123 --admin_tenant_name kube-system\"}" | sudo sh'
+    master $cmd
+}
+
+# Provision analytics
+function setup_opencontrail_analytics() {
+    cmd='docker ps | grep contrail-api | grep -v pause | awk "{print \"docker exec \" \$1 \" python /usr/share/contrail-utils/provision_analytics_node.py --api_server_ip `hostname --ip-address` --host_name `hostname` --host_ip `hostname --ip-address` --oper add  --admin_user admin --admin_password contrail123 --admin_tenant_name kube-system\"}" | sudo sh'
+    master $cmd
+}
+
 # Setup contrail-controller components
 function setup_contrail_master() {
 
@@ -218,6 +236,11 @@ function setup_contrail_master() {
     # Setip kube-dns
     setup_kube_dns
     setup_kube_dns_endpoints
+
+    # provision
+    setup_opencontrail_config
+    setup_opencontrail_database
+    setup_opencontrail_analytics
 }
 
 setup_contrail_master

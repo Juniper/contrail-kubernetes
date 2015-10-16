@@ -802,9 +802,10 @@ y
 "
      fi
      gcloud compute routes create ip-$ocpubgwname --next-hop-instance `hostname` --next-hop-instance-zone $zone --destination-range $OPENCONTRAIL_PUBLIC_SUBNET
-     # create and configure eth0:0
-     grep -q 'auto eth0:0' $itf || echo -e "\nauto eth0:0" >> $itf
-     grep -q 'iface eth0:0 inet static' $itf || echo "iface eth0:0 inet static" >> $itf
+     # create and configure vgw with static IP
+     # vgw will act as the gateway for public subnet
+     grep -q 'auto vgw' $itf || echo -e "\nauto vgw" >> $itf
+     grep -q 'iface vgw inet static' $itf || echo "iface vgw inet static" >> $itf
      grep -q "address $ocpubgw" $itf || echo -e "    address $ocpubgw\n    netmask $ocpubmask" >> $itf
      /etc/init.d/networking restart
   fi
