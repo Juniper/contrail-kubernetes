@@ -813,6 +813,7 @@ y
 
 function main()
 {
+   persist_hostname
    detect_os
    prep_to_install
    generate_rc
@@ -836,7 +837,6 @@ function main()
    verify_vrouter_agent
    discover_docc_addto_vrouter
    check_docker
-   persist_hostname
    rpf_disable
    if [ "$NETWORK_PROVIDER_GATEWAY_ON_MINION" == true ]; then
       vrhost=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8082/virtual-routers | python -c 'import sys, json; print json.load(sys.stdin)["virtual-routers"][0]["fq_name"][1]')

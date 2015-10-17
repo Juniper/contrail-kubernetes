@@ -52,6 +52,14 @@ fi
 
 hname=`hostname`
 
+function persist_hostname()
+{
+   if [ ! -f /etc/hostname ]; then
+     echo "$hname" > /etc/hostname
+     hostname $hname
+   fi
+}
+
 function detect_os()
 {
    OS=`uname`
@@ -102,6 +110,7 @@ function setup_opencontrail_kubelet()
 
 function main()
 {
+   persist_hostname
    detect_os
    prep_to_install
    setup_opencontrail_kubelet

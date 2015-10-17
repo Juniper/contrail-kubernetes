@@ -606,6 +606,7 @@ y
 
 function main()
 {
+   persist_hostname
    detect_os
    prep_to_install
    generate_rc
@@ -623,7 +624,6 @@ function main()
    verify_vrouter_agent
    provision_virtual_gateway
    add_static_route
-   persist_hostname
    rpf_disable
    cleanup
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent and gateway is done."
