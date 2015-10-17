@@ -512,7 +512,7 @@ function vr_agent_conf_image_pull()
   wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/cluster/contrail-vrouter-agent.manifest
   vragentfile=/tmp/contrail-vrouter-agent.manifest
   vrimg=$(cat $vragentfile | grep image | awk -F, '{print $1}' | awk '{print $2}')
-  echo $vrimg | xargs -n1 sudo docker pull
+  (echo $vrimg | xargs -n1 sudo docker pull) & pullpid=$!
   i=0
   while true
     do
@@ -522,10 +522,11 @@ function vr_agent_conf_image_pull()
       fi
       sleep 5
       ((i++))
-      if [ $i == 12 ]; then
+      if [ $i == 12 ] && [ -d "/proc/${pullpid}" ]; then
+       (exec kill -9 $pullpid)&
        check_docker
-       log_info_msg "pulling of opencontrail/vrouter-agent image was not successful in the initial attempt. Restarting docker to recover"
-       break
+       log_info_msg "pulling of opencontrail/vrouter-agent image was not successful in the initial attempt. Restarting docker to recover and retrying"
+       (echo $vrimg | xargs -n1 sudo docker pull) & pullpid=$!
       fi
     done
 }
