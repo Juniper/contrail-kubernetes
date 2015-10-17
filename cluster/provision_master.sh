@@ -127,7 +127,7 @@ function provision_linklocal() {
 
 # Provision vrouter encap order
 function provision_vrouter_encap() {
-    cmd='docker ps | grep contrail-api | grep -v pause | awk "{print \"docker exec \" \$1 \" python /usr/share/contrail-utils/provision_encap.py --api_server_ip `hostname --ip-address` --api_server_port 8082 --encap_priority MPLSoUDP,MPLSoGRE,VXLAN --admin_user myuser --admin_password mypass --oper add\"}" | sudo sh'
+    cmd='docker ps | grep contrail-api | grep -v pause | awk "{print \"docker exec \" \$1 \" python /usr/share/contrail-utils/provision_encap.py --api_server_ip `hostname --ip-address` --api_server_port 8082 --encap_priority MPLSoGRE,MPLSoUDP,VXLAN --admin_user myuser --admin_password mypass --oper add\"}" | sudo sh'
     master $cmd
 }
 

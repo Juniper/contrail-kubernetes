@@ -790,7 +790,7 @@ function add_static_route()
   if isGceVM ; then
      # Assuming the the default kubernetes container used is debain based
      # works only for debian / ubuntu
-     ocpubgw=$(sipcalc $OPENCONTRAIL_PUBLIC_SUBNET | grep "Usable range" | awk '{print $4}')
+     ocpubgw=$(sipcalc $OPENCONTRAIL_PUBLIC_SUBNET | grep "Usable range" | awk '{print $6}')
      ocpubgwname=$(echo $ocpubgw | sed 's/\./-/g')
      ocpubmask=$(sipcalc $OPENCONTRAIL_PUBLIC_SUBNET | grep "Network mask" | head -n 1 | awk '{print $4}')
      zone=$(gcloud compute instances list | grep minion -A 1 | awk '{print $2}')
