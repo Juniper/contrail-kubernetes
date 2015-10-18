@@ -522,7 +522,7 @@ function vr_agent_conf_image_pull()
       fi
       sleep 5
       ((i++))
-      if (( $# )) && (( $i == 12 )) && [ -d "/proc/${pullpid}" ]; then
+      if (( $i == 12 )) && [ -d "/proc/${pullpid}" ]; then
        (exec kill -9 $pullpid)&
        check_docker
        log_info_msg "pulling of opencontrail/vrouter-agent image was not successful in the initial attempt. Restarting docker to recover and retrying"
