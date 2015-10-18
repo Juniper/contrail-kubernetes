@@ -108,12 +108,20 @@ function setup_opencontrail_kubelet()
   (cd /usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail; `ln -s $ocp opencontrail`) && cd
 }
 
+function kube_manifest_setup()
+{
+  if [ ! -f /etc/kubernetes/manifests ]; then
+     mkdir -p /etc/kubernetes/manifests
+  fi
+}
+
 function main()
 {
    persist_hostname
    detect_os
    prep_to_install
    setup_opencontrail_kubelet
+   kube_manifest_setup
    log_info_msg "Provisioning of opencontrail-kubelet-plugin completed."
 }
 
