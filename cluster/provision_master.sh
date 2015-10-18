@@ -50,6 +50,15 @@ function master() {
     bash -c "sudo $*"
 }
 
+function isGceVM()
+{
+  if [ -f /var/run/google.onboot ]; then
+   return 0
+  else
+   return 1
+  fi
+}
+
 # Verify that contrail infra components are up and listening
 function verify_contrail_listen_services() {
     RETRY=20
@@ -127,7 +136,11 @@ function provision_linklocal() {
 
 # Provision vrouter encap order
 function provision_vrouter_encap() {
-    cmd='docker ps | grep contrail-api | grep -v pause | awk "{print \"docker exec \" \$1 \" python /usr/share/contrail-utils/provision_encap.py --api_server_ip `hostname --ip-address` --api_server_port 8082 --encap_priority MPLSoGRE,MPLSoUDP,VXLAN --admin_user myuser --admin_password mypass --oper add\"}" | sudo sh'
+    if isGceVM ; then
+       cmd='docker ps | grep contrail-api | grep -v pause | awk "{print \"docker exec \" \$1 \" python /usr/share/contrail-utils/provision_encap.py --api_server_ip `hostname --ip-address` --api_server_port 8082 --encap_priority MPLSoUDP --admin_user myuser --admin_password mypass --oper add\"}" | sudo sh'
+    else
+       cmd='docker ps | grep contrail-api | grep -v pause | awk "{print \"docker exec \" \$1 \" python /usr/share/contrail-utils/provision_encap.py --api_server_ip `hostname --ip-address` --api_server_port 8082 --encap_priority MPLSoUDP,MPLSoGRE,VXLAN --admin_user myuser --admin_password mypass --oper add\"}" | sudo sh'
+    fi
     master $cmd
 }
 
