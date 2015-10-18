@@ -228,7 +228,6 @@ function setup_opencontrail_analytics() {
 
 function check_kube_api()
 {
-  sltapifix=false
   mnf="/etc/kubernetes/kube-apiserver.manifest"
   apilisten=$(netstat -natp |grep 8080 | grep LISTEN | awk '{print $6}')
   if [ -z "$apilisten" ] || [ "$apilisten" != "LISTEN" ]; then
