@@ -228,15 +228,14 @@ function setup_opencontrail_analytics() {
 function check_kube_api()
 {
   apilisten=$(netstat -natp |grep 8080 | grep LISTEN | awk '{print $6}')
-  if [ -z "$apilisten" ] && [ "$apilisten" != "LISTEN" ]; then
-    docker restart `docker ps |grep kube-api | grep -v pause | awk '{print $1}'`
+  if [ -z "$apilisten" ] || [ "$apilisten" != "LISTEN" ]; then
+    apisrvr=$(docker ps |grep kube-api | grep -v pause | awk '{print $1}')
+    (exec docker restart $apisrvr)&
   fi
 }
 
 # Setup contrail-controller components
 function setup_contrail_master() {
-    # Check for kube api server
-    check_kube_api
 
     # Pull all contrail images and copy the manifest files
     setup_contrail_manifest_files
@@ -264,6 +263,9 @@ function setup_contrail_master() {
     setup_opencontrail_config
     setup_opencontrail_database
     setup_opencontrail_analytics
+
+    # Check for kube api server
+    check_kube_api
 }
 
 setup_contrail_master
