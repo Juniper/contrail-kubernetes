@@ -111,7 +111,7 @@ function check_contrail_services()
          ifmapup=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8083/Snh_IFMapPeerServerInfoReq? | xmllint --format - | grep end_of_rib_computed | cut -d ">" -f2 | cut -d "<" -f1)
      fi
      if [ "$ifmapup" == true ]; then
-       log_info_msg "IFMAP and Contrail-Control are up are ready for processing agent subscriptions"
+       echo "IFMAP and Contrail-Control are up are ready for processing agent subscriptions"
        break
      fi
      sleep 3
@@ -165,6 +165,7 @@ function check_docker()
   if [ "$cbr" == true ]; then
       kubeletpid=$(ps -ef|grep "kubelet --enable-debugging-handlers" | grep -v grep | awk '{print $2}')
       if [ -z "$kubeletpid" ]; then
+         service docker stop
          service kubelet restart
       fi
   else
@@ -197,12 +198,12 @@ function setup_contrail_manifest_files() {
     cmd="$cmd1$OPENCONTRAIL_KUBERNETES_TAG$cmd2$OPENCONTRAIL_KUBERNETES_TAG$cmd3"
     master $cmd
 
-    #check_docker
+    check_docker
     cmd='grep \"image\": /etc/contrail/manifests/* | cut -d "\"" -f 4 | sort -u | xargs -n1 sudo docker pull'
     RETRY=20
     WAIT=3
     retry master $cmd
-    #check_docker
+    check_docker
     cmd='mv /etc/contrail/manifests/* /etc/kubernetes/manifests/'
     master $cmd
 }
@@ -227,15 +228,26 @@ function setup_opencontrail_analytics() {
 
 function check_kube_api()
 {
+  sltapifix=false
+  mnf="/etc/kubernetes/kube-apiserver.manifest"
   apilisten=$(netstat -natp |grep 8080 | grep LISTEN | awk '{print $6}')
   if [ -z "$apilisten" ] || [ "$apilisten" != "LISTEN" ]; then
     apisrvr=$(docker ps |grep kube-api | grep -v pause | awk '{print $1}')
-    (exec docker restart $apisrvr)&
+    if [ -n "$apisrvr" ]; then
+      (exec docker restart $apisrvr)&
+    else
+      # salt should copy the manifest. If its not found there could be an issue
+      if [ ! -f $mnf ]; then
+         salt-call --local state.highstate
+      fi
+    fi
   fi
 }
 
 # Setup contrail-controller components
 function setup_contrail_master() {
+    # Check for kube api server
+    check_kube_api
 
     # Pull all contrail images and copy the manifest files
     setup_contrail_manifest_files
@@ -263,9 +275,6 @@ function setup_contrail_master() {
     setup_opencontrail_config
     setup_opencontrail_database
     setup_opencontrail_analytics
-
-    # Check for kube api server
-    check_kube_api
 }
 
 setup_contrail_master
