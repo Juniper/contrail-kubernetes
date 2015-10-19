@@ -207,31 +207,9 @@ function setup_opencontrail_analytics() {
     master $cmd
 }
 
-function check_kube_api()
-{
-  set +e
-  mnf="/etc/kubernetes/kube-apiserver.manifest"
-  apilisten=$(netstat -natp |grep 8080 | grep LISTEN | awk '{print $6}')
-  if [ -z "$apilisten" ] || [ "$apilisten" != "LISTEN" ]; then
-    apisrvr=$(docker ps |grep kube-api | grep -v pause | awk '{print $1}')
-    if [ -n "$apisrvr" ]; then
-      echo "API server running but its not listening. Restarting API server"
-      (exec docker restart $apisrvr)&
-    else
-      # salt should copy the manifest. If its not found there could be an issue
-      if [ ! -f $mnf ]; then
-         (exec salt-call --local state.sls docker,kubelet,kube-apiserver concurrent=True)&
-      fi
-    fi
-  fi
-  sleep 10
-  set -e
-}
-
 # Setup contrail-controller components
 function setup_contrail_master() {
     # Give additional time for kube_api to be up
-    #check_kube_api
     sleep 15
     # Pull all contrail images and copy the manifest files
     setup_contrail_manifest_files
