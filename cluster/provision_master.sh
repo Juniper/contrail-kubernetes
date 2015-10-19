@@ -159,25 +159,6 @@ function setup_kube_dns_endpoints() {
     master /usr/local/bin/kubectl --namespace=kube-system create -f /etc/kubernetes/addons/kube-ui/kube-ui-rc.yaml || true
 }
 
-function check_docker()
-{
-  set +e
-  cbr=$(cat /etc/default/kubelet | grep -ow "configure-cbr0=true" | cut -d= -f 2)
-  if [ "$cbr" == true ]; then
-      kubeletpid=$(ps -ef|grep "kubelet --enable-debugging-handlers" | grep -v grep | awk '{print $2}')
-      if [ -z "$kubeletpid" ]; then
-         service docker stop
-         service kubelet restart
-      fi
-  else
-    docpid=docpid=$(ps -ef|grep "docker -d" | grep -v grep | awk '{print $2}')
-    if [ -z "$docpid" ]; then
-      (/usr/bin/docker -d -p /var/run/docker.pid --bridge=cbr0 --iptables=false --ip-masq=false)&
-    fi
-  fi
-  set -e
-}
-
 # Setup contrail manifest files under kubernetes
 function setup_contrail_manifest_files() {
     mkdir -p /etc/contrail
@@ -200,12 +181,10 @@ function setup_contrail_manifest_files() {
     cmd="$cmd1$OPENCONTRAIL_KUBERNETES_TAG$cmd2$OPENCONTRAIL_KUBERNETES_TAG$cmd3"
     master $cmd
 
-    check_docker
     cmd='grep \"image\": /etc/contrail/manifests/* | cut -d "\"" -f 4 | sort -u | xargs -n1 sudo docker pull'
     RETRY=20
     WAIT=3
     retry master $cmd
-    check_docker
     cmd='mv /etc/contrail/manifests/* /etc/kubernetes/manifests/'
     master $cmd
 }
@@ -250,9 +229,6 @@ function check_kube_api()
 
 # Setup contrail-controller components
 function setup_contrail_master() {
-    # Check for kube api server
-    check_kube_api
-
     # Pull all contrail images and copy the manifest files
     setup_contrail_manifest_files
 
@@ -282,3 +258,5 @@ function setup_contrail_master() {
 }
 
 setup_contrail_master
+# Check for kube api server
+check_kube_api
