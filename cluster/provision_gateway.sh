@@ -13,6 +13,7 @@ source /etc/contrail/opencontrail-rc
 
 readonly PROGNAME=$(basename "$0")
 
+runok="/var/run/vrouter-sgw.ok"
 ocver=$OPENCONTRAIL_TAG
 ockver=$OPENCONTRAIL_KUBERNETES_TAG
 OPENCONTRAIL_PUBLIC_SUBNET="${OPENCONTRAIL_PUBLIC_SUBNET:-10.1.0.0/16}"
@@ -627,6 +628,7 @@ function main()
    rpf_disable
    cleanup
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent and gateway is done."
+   touch "$runok"
 }
 
 main

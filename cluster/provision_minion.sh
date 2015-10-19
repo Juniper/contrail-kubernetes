@@ -13,6 +13,7 @@ source /etc/contrail/opencontrail-rc
 
 readonly PROGNAME=$(basename "$0")
 
+runok="/var/run/vrouter.ok"
 ocver=$OPENCONTRAIL_TAG
 ockver=$OPENCONTRAIL_KUBERNETES_TAG
 OPENCONTRAIL_PUBLIC_SUBNET="${OPENCONTRAIL_PUBLIC_SUBNET:-10.1.0.0/16}"
@@ -852,6 +853,7 @@ function main()
    cleanup
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
    check_docker
+   touch "$runok"
 }
 
 main
