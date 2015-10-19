@@ -224,11 +224,15 @@ function check_kube_api()
       fi
     fi
   fi
+  sleep 10
   set -e
 }
 
 # Setup contrail-controller components
 function setup_contrail_master() {
+    # Check for kube api server
+    check_kube_api
+
     # Pull all contrail images and copy the manifest files
     setup_contrail_manifest_files
 
@@ -255,9 +259,6 @@ function setup_contrail_master() {
     setup_opencontrail_config
     setup_opencontrail_database
     setup_opencontrail_analytics
-
-    # Check for kube api server
-    check_kube_api
 }
 
 setup_contrail_master
