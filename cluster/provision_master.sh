@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -ex
+set -x
 set -o pipefail
 
 LOG_FILE=/var/log/contrail/provision_master.log
