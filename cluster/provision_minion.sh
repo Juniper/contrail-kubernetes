@@ -528,7 +528,7 @@ function vr_agent_conf_image_pull()
           pkill -TERM -P $pullpid
        fi
        #check_docker
-       service docker restart
+       #service docker restart
        log_info_msg "pulling of opencontrail/vrouter-agent image was not successful in the initial attempt. Restarting docker to recover and retrying"
        (echo $vrimg | xargs -n1 sudo docker pull) & pullpid=$!
        i=0
