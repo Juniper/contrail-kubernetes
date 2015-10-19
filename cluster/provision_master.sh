@@ -230,14 +230,18 @@ function check_kube_api()
 {
   mnf="/etc/kubernetes/kube-apiserver.manifest"
   apilisten=$(netstat -natp |grep 8080 | grep LISTEN | awk '{print $6}')
+  echo "API server listening - $apilisten"
   if [ -z "$apilisten" ] || [ "$apilisten" != "LISTEN" ]; then
+    echo "API server is not listening"
     apisrvr=$(docker ps |grep kube-api | grep -v pause | awk '{print $1}')
     if [ -n "$apisrvr" ]; then
+      echo "API server running but its not listening. Restarting API server"
       (exec docker restart $apisrvr)&
     else
       # salt should copy the manifest. If its not found there could be an issue
       if [ ! -f $mnf ]; then
-         salt-call --local state.highstate
+         echo "Manifest file for Kube API server not found. Calling salt to provision it right"
+         (exec salt-call state.highstate)&
       fi
     fi
   fi
