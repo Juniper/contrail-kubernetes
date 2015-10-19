@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -x
+set -ex
 set -o pipefail
 
 LOG_FILE=/var/log/contrail/provision_master.log
@@ -161,6 +161,7 @@ function setup_kube_dns_endpoints() {
 
 function check_docker()
 {
+  set +e
   cbr=$(cat /etc/default/kubelet | grep -ow "configure-cbr0=true" | cut -d= -f 2)
   if [ "$cbr" == true ]; then
       kubeletpid=$(ps -ef|grep "kubelet --enable-debugging-handlers" | grep -v grep | awk '{print $2}')
@@ -174,6 +175,7 @@ function check_docker()
       (/usr/bin/docker -d -p /var/run/docker.pid --bridge=cbr0 --iptables=false --ip-masq=false)&
     fi
   fi
+  set -e
 }
 
 # Setup contrail manifest files under kubernetes
@@ -228,11 +230,10 @@ function setup_opencontrail_analytics() {
 
 function check_kube_api()
 {
+  set +e
   mnf="/etc/kubernetes/kube-apiserver.manifest"
   apilisten=$(netstat -natp |grep 8080 | grep LISTEN | awk '{print $6}')
-  echo "API server listening - $apilisten"
   if [ -z "$apilisten" ] || [ "$apilisten" != "LISTEN" ]; then
-    echo "API server is not listening"
     apisrvr=$(docker ps |grep kube-api | grep -v pause | awk '{print $1}')
     if [ -n "$apisrvr" ]; then
       echo "API server running but its not listening. Restarting API server"
@@ -240,11 +241,11 @@ function check_kube_api()
     else
       # salt should copy the manifest. If its not found there could be an issue
       if [ ! -f $mnf ]; then
-         echo "Manifest file for Kube API server not found. Calling salt to provision it right"
          (exec salt-call state.highstate)&
       fi
     fi
   fi
+  set -e
 }
 
 # Setup contrail-controller components
