@@ -220,7 +220,7 @@ function check_kube_api()
     else
       # salt should copy the manifest. If its not found there could be an issue
       if [ ! -f $mnf ]; then
-         (exec salt-call state.highstate)&
+         (exec salt-call --local state.sls docker,kubelet,kube-apiserver)&
       fi
     fi
   fi
@@ -229,6 +229,7 @@ function check_kube_api()
 
 # Setup contrail-controller components
 function setup_contrail_master() {
+    check_kube_api
     # Pull all contrail images and copy the manifest files
     setup_contrail_manifest_files
 
@@ -257,7 +258,7 @@ function setup_contrail_master() {
     setup_opencontrail_analytics
 
     # Check for kube api server
-    check_kube_api
+    #check_kube_api
 }
 
 setup_contrail_master
