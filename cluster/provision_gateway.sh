@@ -13,7 +13,7 @@ source /etc/contrail/opencontrail-rc
 
 readonly PROGNAME=$(basename "$0")
 
-runok="/var/run/vrouter-sgw.ok"
+runok="/etc/contrail/vrouter_sgw_prov_run.ok"
 ocver=$OPENCONTRAIL_TAG
 ockver=$OPENCONTRAIL_KUBERNETES_TAG
 OPENCONTRAIL_PUBLIC_SUBNET="${OPENCONTRAIL_PUBLIC_SUBNET:-10.1.0.0/16}"

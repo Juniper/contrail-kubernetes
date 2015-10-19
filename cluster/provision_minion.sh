@@ -13,7 +13,7 @@ source /etc/contrail/opencontrail-rc
 
 readonly PROGNAME=$(basename "$0")
 
-runok="/var/run/vrouter.ok"
+runok="/etc/contrail/vrouter_prov_run.ok"
 ocver=$OPENCONTRAIL_TAG
 ockver=$OPENCONTRAIL_KUBERNETES_TAG
 OPENCONTRAIL_PUBLIC_SUBNET="${OPENCONTRAIL_PUBLIC_SUBNET:-10.1.0.0/16}"
@@ -435,23 +435,6 @@ function prereq_vrouter_agent()
   fi
 }
 
-function check_docker()
-{
-  cbr=$(cat /etc/default/kubelet | grep -ow "configure-cbr0=true" | cut -d= -f 2)
-  if [ "$cbr" == true ]; then
-      kubeletpid=`pidof kubelet`
-      if [ -z "$kubeletpid" ]; then
-         service docker stop
-         service kubelet restart
-      fi
-  else
-    docpid=`pidof docker`
-    if [ -z "$docpid" ]; then
-      (/usr/bin/docker -d -p /var/run/docker.pid --bridge=cbr0 --iptables=false --ip-masq=false)&
-    fi
-  fi
-}
-
 function vr_agent_conf_image_pull()
 {
   etcc="/etc/contrail"
@@ -527,8 +510,6 @@ function vr_agent_conf_image_pull()
        if [ -d "/proc/${pullpid}" ]; then
           pkill -TERM -P $pullpid
        fi
-       #check_docker
-       #service docker restart
        log_info_msg "pulling of opencontrail/vrouter-agent image was not successful in the initial attempt. Restarting docker to recover and retrying"
        (echo $vrimg | xargs -n1 sudo docker pull) & pullpid=$!
        i=0
@@ -829,7 +810,6 @@ function main()
    stop_kube_svcs
    update_vhost_pre_up
    prereq_vrouter_agent
-   #check_docker
    vr_agent_conf_image_pull
    ifup_vhost
    routeconfig
@@ -842,7 +822,6 @@ function main()
    provision_vrouter
    verify_vrouter_agent
    discover_docc_addto_vrouter
-   #check_docker
    rpf_disable
    if [ "$NETWORK_PROVIDER_GATEWAY_ON_MINION" == true ]; then
       vrhost=$(curl -s http://$OPENCONTRAIL_CONTROLLER_IP:8082/virtual-routers | python -c 'import sys, json; print json.load(sys.stdin)["virtual-routers"][0]["fq_name"][1]')
@@ -853,7 +832,6 @@ function main()
    fi
    cleanup
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
-   #check_docker
    touch "$runok"
 }
 
