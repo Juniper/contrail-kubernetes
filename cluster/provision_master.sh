@@ -5,6 +5,7 @@ set -o pipefail
 
 LOG_FILE=/var/log/contrail/provision_master.log
 mkdir -p /var/log/contrail
+runok="/etc/contrail/opencontrail_control_prov_run.ok"
 exec 1<&- # Close STDOUT file descriptor
 exec 2<&- # Close STDERR FD
 exec 1<>$LOG_FILE # Open STDOUT as $LOG_FILE file for read and write.
@@ -237,6 +238,7 @@ function setup_contrail_master() {
     setup_opencontrail_config
     setup_opencontrail_database
     setup_opencontrail_analytics
+    touch "$runok"
 }
 
 setup_contrail_master
