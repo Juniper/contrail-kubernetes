@@ -255,8 +255,9 @@ function setup_contrail_master() {
     setup_opencontrail_config
     setup_opencontrail_database
     setup_opencontrail_analytics
+
+    # Check for kube api server
+    check_kube_api
 }
 
 setup_contrail_master
-# Check for kube api server
-check_kube_api
