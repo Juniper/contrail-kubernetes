@@ -17,7 +17,10 @@ limitations under the License.
 package mocks
 
 import (
+	"github.com/emicklei/go-restful/swagger"
+
 	"k8s.io/kubernetes/pkg/api"
+	"k8s.io/kubernetes/pkg/api/unversioned"
 	kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
 	"k8s.io/kubernetes/pkg/version"
 )
@@ -80,7 +83,7 @@ func (c *KubeClient) PersistentVolumeClaims(namespace string) kubeclient.Persist
 func (c *KubeClient) ServerVersion() (*version.Info, error) {
 	return nil, nil
 }
-func (c *KubeClient) ServerAPIVersions() (*api.APIVersions, error) {
+func (c *KubeClient) ServerAPIVersions() (*unversioned.APIVersions, error) {
 	return nil, nil
 }
 func (c *KubeClient) ComponentStatuses() kubeclient.ComponentStatusInterface {
@@ -92,6 +95,19 @@ func (c *KubeClient) PodTemplates(namespace string) kubeclient.PodTemplateInterf
 func (c *KubeClient) ServiceAccounts(namespace string) kubeclient.ServiceAccountsInterface {
 	return nil
 }
-func (c *KubeClient) Experimental() kubeclient.ExperimentalInterface {
+
+func (c *KubeClient) ValidateComponents() (*api.ComponentStatusList, error) {
+	return nil, nil
+}
+
+func (c *KubeClient) SwaggerSchema(version string) (*swagger.ApiDeclaration, error) {
+	return nil, nil
+}
+
+func (c *KubeClient) Extensions() kubeclient.ExtensionsInterface {
+	return nil
+}
+
+func (c *KubeClient) Discovery() kubeclient.DiscoveryInterface {
 	return nil
 }
