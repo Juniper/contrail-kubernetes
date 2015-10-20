@@ -23,7 +23,7 @@ import (
 	"github.com/golang/glog"
 
 	"k8s.io/kubernetes/pkg/api"
-	"k8s.io/kubernetes/pkg/kubelet"
+	kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
 )
 
 func EqualTags(m1, m2 map[string]string, tags []string) bool {
@@ -41,11 +41,12 @@ func EqualTags(m1, m2 map[string]string, tags []string) bool {
 // IgnorePod returns true if this pod should not be managed by OpenContrail.
 // Pods that use host networking on kubelet static pods fall into this category.
 func IgnorePod(pod *api.Pod) bool {
-	if pod.Spec.HostNetwork {
+	context := pod.Spec.SecurityContext
+	if context != nil && context.HostNetwork {
 		return true
 	}
 
-	if value, ok := pod.Annotations[kubelet.ConfigMirrorAnnotationKey]; ok && value == kubelet.MirrorType {
+	if value, ok := pod.Annotations[kubetypes.ConfigMirrorAnnotationKey]; ok && value == kubetypes.MirrorType {
 		return true
 	}
 	return false

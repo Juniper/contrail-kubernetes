@@ -14,8 +14,8 @@ type KubeServiceInterface struct {
 	mock.Mock
 }
 
-func (m *KubeServiceInterface) List(selector labels.Selector) (*api.ServiceList, error) {
-	ret := m.Called(selector)
+func (m *KubeServiceInterface) List(selector labels.Selector, fieldSelector fields.Selector) (*api.ServiceList, error) {
+	ret := m.Called(selector, fieldSelector)
 
 	var r0 *api.ServiceList
 	if ret.Get(0) != nil {
