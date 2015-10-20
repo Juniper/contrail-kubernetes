@@ -725,7 +725,7 @@ function verify_vrouter_agent()
 function discover_docc_addto_vrouter() {
     vrouter_agent=$(cat /etc/kubernetes/manifests/contrail-vrouter-agent.manifest | grep metadata | awk '{print $2}' | tr -d '{}",' | awk -F: '{print $2}')
     KUBE_PLUGIN=/usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail/opencontrail
-    CONTAINERS=$(docker ps | grep -v "/pause" | grep -v $vrouter_agent | awk '/[0-9a-z]{12} /{print $1;}')
+    CONTAINERS=$(docker ps | grep -v "/pause" | grep -v contrail | grep -v $vrouter_agent | awk '{print $1}' | grep -v CONTAINER)
 
     for i in $CONTAINERS; do
         NAME=$(docker inspect -f '{{.Name}}' $i)
@@ -795,6 +795,14 @@ y
      grep -q 'iface vgw inet static' $itf || echo "iface vgw inet static" >> $itf
      grep -q "address $ocpubgw" $itf || echo -e "    address $ocpubgw\n    netmask $ocpubmask" >> $itf
      /etc/init.d/networking restart
+  fi
+  # Since we have vgw plumbed by both gke and vrouter there will
+  # 2 routes for the same prefix. It will not have any issue though.
+  # just for keeping it clean, delete the duplicate route
+  net=$(echo $OPENCONTRAIL_PUBLIC_SUBNET | cut -d "/" -f 1)
+  dups=$(route -n | grep vgw | grep $net | wc -l)
+  if [ $dups -gt 1 ]; then
+    route delete -net $OPENCONTRAIL_PUBLIC_SUBNET dev vgw
   fi
 }
 

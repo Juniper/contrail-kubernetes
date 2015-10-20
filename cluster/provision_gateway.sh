@@ -603,6 +603,14 @@ y
      grep -q "address $ocpubgw" $itf || echo -e "    address $ocpubgw\n    netmask $ocpubmask" >> $itf
      /etc/init.d/networking restart
   fi
+  # Since we have external network plumbed by both gke and vrouter there will
+  # be 2 routes for the same prefix. It will not have any issue though.
+  # just for keeping it clean, delete the duplicate route
+  net=$(echo $OPENCONTRAIL_PUBLIC_SUBNET | cut -d "/" -f 1)
+  dups=$(route -n | grep vgw | grep $net | wc -l)
+  if [ $dups -gt 1 ]; then
+    route delete -net $OPENCONTRAIL_PUBLIC_SUBNET dev vgw
+  fi
 }
 
 function main()
