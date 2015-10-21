@@ -323,6 +323,14 @@ function prereq_vrouter_agent()
 
   if [ -z "$docon" ]; then
      curl -sSL https://get.docker.com/ | sh
+     if [ ! -f /usr/bin/docker ]; then
+         if [ "$OS_TYPE" == $REDHAT ]; then
+            yum update
+         elif [ "$OS_TYPE" == $UBUNTU ]; then
+            apt-get update --fix-missing
+         fi
+         curl -sSL https://get.docker.com/ | sh
+     fi
   fi
 }
 
