@@ -131,7 +131,7 @@ function provision_controller() {
 
 # Provision link local service
 function provision_linklocal() {
-    cmd='docker ps | grep contrail-api | grep -v pause | awk "{print \"docker exec \" \$1 \" python /usr/share/contrail-utils/provision_linklocal.py --api_server_ip `hostname --ip-address` --api_server_port 8082 --linklocal_service_name kubernetes-dns-ssl --linklocal_service_ip 10.0.0.1 --linklocal_service_port 443 --ipfabric_service_ip `hostname --ip-` --ipfabric_service_port 443 --oper add\"}" | sudo sh'
+    cmd='docker ps | grep contrail-api | grep -v pause | awk "{print \"docker exec \" \$1 \" python /usr/share/contrail-utils/provision_linklocal.py --api_server_ip `hostname --ip-address` --api_server_port 8082 --linklocal_service_name kubernetes-dns --linklocal_service_ip 10.0.0.1 --linklocal_service_port 8080 --ipfabric_service_ip `hostname --ip-` --ipfabric_service_port 8080 --oper add\"}" | sudo sh'
     master $cmd
 }
 
