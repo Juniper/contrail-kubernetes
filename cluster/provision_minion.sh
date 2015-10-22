@@ -509,7 +509,15 @@ function vr_agent_conf_image_pull()
       if [ $i -eq 12 ]; then
        if [ -d "/proc/${pullpid}" ]; then
           pkill -TERM -P $pullpid
+          cnt=$(ps -ef|grep "docker pull" | grep vrouter-agent | wc -l)
+          if [ $cnt -gt 1 ]; then
+             # This is assuming docker_checker is up
+             # docker checker will restart docker
+             service docker restart
+          fi
        fi
+       # give time for docker to initialize
+       sleep 60
        log_info_msg "pulling of opencontrail/vrouter-agent image was not successful in the initial attempt. Restarting docker to recover and retrying"
        (echo $vrimg | xargs -n1 sudo docker pull) & pullpid=$!
        i=0
