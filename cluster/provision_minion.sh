@@ -463,6 +463,7 @@ function vr_agent_conf_image_pull()
   ur="Usable range"
   if [ -f $vrac ]; then
       sed -i 's/# tunnel_type=/tunnel_type=MPLSoUDP/g' $vrac
+      grep -q "server=$OPENCONTRAIL_CONTROLLER_IP" $vrac || sed -i "/CONTROL-NODE/a server=$OPENCONTRAIL_CONTROLLER_IP" $vrac
       sed -i 's/# collectors=127.0.0.1:8086/collectors='$OPENCONTRAIL_CONTROLLER_IP':8086/g' $vrac
       sed -i 's/# type=kvm/type=docker/g' $vrac
       sed -i 's/# control_network_ip=/control_network_ip='$MINION_OVERLAY_NET_IP'/g' $vrac
