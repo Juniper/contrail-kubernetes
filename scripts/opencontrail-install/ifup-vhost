@@ -1,5 +1,10 @@
 #!/bin/bash
+
+set -x
+
 source /etc/contrail/opencontrail-rc
+
+IFACE="${IFACE:-vhost0}"
 
 if [ -e /lib/lsb/init-functions ]; then
     . /lib/lsb/init-functions
@@ -100,6 +105,7 @@ function vif_create()
         $vif --create ${IFACE} --mac $(get_hwaddr ${OPENCONTRAIL_VROUTER_INTF})
         $vif --add ${OPENCONTRAIL_VROUTER_INTF} --mac $(get_hwaddr ${OPENCONTRAIL_VROUTER_INTF}) --vrf 0 --vhost-phys --type physical
         $vif --add ${IFACE} --mac $(get_hwaddr ${OPENCONTRAIL_VROUTER_INTF}) --vrf 0 --type vhost --xconnect ${OPENCONTRAIL_VROUTER_INTF}
+        ip link set dev ${IFACE} mtu `ip link list dev ${OPENCONTRAIL_VROUTER_INTF} | grep mtu | awk '{print $5}'`
         ip link set dev ${IFACE} up
    fi
    log_info_msg "vhost0 interface successfully instantiated"
@@ -110,9 +116,8 @@ function def_reroute()
   # If default route is on OPENCONTRAIL_VROUTER_INTF move it to vhost0
   def=$(ip route  | grep $OPENCONTRAIL_VROUTER_INTF | grep -o default)
   if [ "$def" == "default" ]; then
-      defgw=$(ip route | grep $OPENCONTRAIL_VROUTER_INTF | awk 'NR==1{print $3}')
-     `route add default gw $defgw dev $VHOST`
-     `route del default dev $OPENCONTRAIL_VROUTER_INTF`
+      defgw=$(ip route | grep $OPENCONTRAIL_VROUTER_INTF | grep $def | awk 'NR==1{print $3}')
+      ip addr flush $OPENCONTRAIL_VROUTER_INTF
   fi
 }
 

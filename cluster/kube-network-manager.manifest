@@ -1,0 +1,46 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+        "name": "kube-network-manager"
+    },
+    "spec": {
+        "containers": [
+            {
+                "command": [ "/go/kube-network-manager" ],
+                "image": "opencontrail/kube-network-manager",
+                "name": "kube-network-manager",
+                "volumeMounts": [
+                    {
+                        "name": "kubernetesconfig",
+                        "mountPath": "/etc/kubernetes"
+                    },
+                    {
+                        "name": "contrailconfig",
+                        "mountPath": "/etc/contrail"
+                    },
+                    {
+                        "name": "logs",
+                        "mountPath": "/var/log/contrail",
+                        "readOnly": false
+                    }
+                ]
+            }
+        ],
+        "hostNetwork": true,
+        "volumes": [
+            {
+                "name": "kubernetesconfig",
+                "hostPath": { "path": "/etc/kubernetes" }
+            },
+            {
+                "name": "contrailconfig",
+                "hostPath": { "path": "/etc/contrail" }
+            },
+            {
+                "name": "logs",
+                "hostPath": { "path": "/var/log/contrail" }
+            }
+        ]
+    }
+}

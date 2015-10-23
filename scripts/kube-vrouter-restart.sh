@@ -6,7 +6,7 @@
 #
 KUBE_PLUGIN=/usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail/opencontrail
 
-CONTAINERS=$(docker ps | grep -v "/pause" | awk '/[0-9a-z]{12} /{print $1;}')
+CONTAINERS=$(docker ps | grep -v "/pause" | \grep -v contrail-vrouter-agent | awk '/[0-9a-z]{12} /{print $1;}')
 
 for i in $CONTAINERS; do
     NAME=$(docker inspect -f '{{.Name}}' $i)
