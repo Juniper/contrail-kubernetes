@@ -5,6 +5,7 @@
 import subprocess
 import logging
 
+
 class Shell:
     # Run a shell command. Log the command run and its output.
     @staticmethod

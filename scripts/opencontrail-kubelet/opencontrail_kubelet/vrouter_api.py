@@ -1,8 +1,14 @@
+#
+# Copyright (c) 2015 Juniper Networks, Inc.
+#
+
 import json
 import logging
 import requests
 
-VROUTER_AGENT_PORT=9091
+
+VROUTER_AGENT_PORT = 9091
+
 
 class ContrailVRouterApi(object):
     def __init__(self):

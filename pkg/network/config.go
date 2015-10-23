@@ -30,6 +30,7 @@ import (
 
 type Config struct {
 	KubeUrl        string        `gcfg:"master"`
+	KubeConfig     string        `gcfg:"kubeconfig"`
 	ResyncPeriod   time.Duration `gcfg:"resync-interval"`
 	ClusterIpRange string        `gcfg:"service-cluster-ip-range"`
 }

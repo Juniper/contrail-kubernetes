@@ -27,6 +27,7 @@ import (
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/client/cache"
 	client "k8s.io/kubernetes/pkg/client/unversioned"
+	"k8s.io/kubernetes/pkg/client/unversioned/clientcmd"
 	"k8s.io/kubernetes/pkg/controller/framework"
 	"k8s.io/kubernetes/pkg/fields"
 
@@ -34,7 +35,6 @@ import (
 )
 
 const (
-	KubernetesApiDefault  = "http://localhost:8080"
 	ResyncTimeDefault     = time.Duration(5) * time.Minute
 	ClusterIpRangeDefault = "10.254.0.0/16"
 )
@@ -64,7 +64,6 @@ type NetworkManager struct {
 func NewNetworkManager() *NetworkManager {
 	manager := new(NetworkManager)
 	manager.config = network.Config{
-		KubeUrl:        KubernetesApiDefault,
 		ResyncPeriod:   ResyncTimeDefault,
 		ClusterIpRange: ClusterIpRangeDefault,
 	}
@@ -111,11 +110,20 @@ func (m *NetworkManager) init(args []string) {
 		}
 	}()
 
-	k8sClientConfig := &client.Config{
-		Host: m.config.KubeUrl,
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	if m.config.KubeConfig != "" {
+		loadingRules.ExplicitPath = m.config.KubeConfig
 	}
-	var err error
-	m.Client, err = client.New(k8sClientConfig)
+	configOverrides := &clientcmd.ConfigOverrides{}
+	if m.config.KubeUrl != "" {
+		configOverrides.ClusterInfo.Server = m.config.KubeUrl
+	}
+	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
+	config, err := kubeConfig.ClientConfig()
+	if err != nil {
+		glog.Fatal(err)
+	}
+	m.Client, err = client.New(config)
 	if err != nil {
 		glog.Fatalf("Invalid API configuratin: %v", err)
 	}

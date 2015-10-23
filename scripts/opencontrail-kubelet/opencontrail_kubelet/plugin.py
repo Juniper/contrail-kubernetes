@@ -3,12 +3,11 @@
 #
 
 import argparse
+import distutils.spawn
 import json
 import logging
 import os
-import re
 import requests
-import socket
 import sys
 import time
 import xml.etree.ElementTree as ElementTree
@@ -19,27 +18,10 @@ from shell import Shell
 
 opt_net_mode = "bridge"
 
+
 def docker_get_pid(docker_id):
     pid_str = Shell.run('docker inspect -f \'{{.State.Pid}}\' %s' % docker_id)
     return int(pid_str)
-
-
-# kubelet config is at different places in different envs, unfortunately
-def kubelet_get_api():
-    fp = None
-    try:
-        fp = open('/etc/sysconfig/kubelet', 'r')
-    except:
-        try:
-            fp = open('/etc/default/kubelet', 'r')
-        except:
-            fp = open('/etc/kubernetes/kubelet', 'r')
-
-    for line in fp.readlines():
-        m = re.search(r'--api-servers=http[s]?://(\d+\.\d+\.\d+\.\d+)', line)
-        if m:
-            return m.group(1)
-    return None
 
 
 def getDockerPod(docker_id):
@@ -56,12 +38,32 @@ def getDockerPod(docker_id):
 
 
 def getPodInfo(namespace, podName):
-    kubeapi = kubelet_get_api()
+    r = requests.get('http://localhost:10255/pods')
+    if r.status_code != requests.codes.ok:
+        logging.error("%s: %s", 'http://localhost:10255/pods', r.text)
+        return None
 
-    data = Shell.run(
-        'kubectl --server=%s:8080 get --namespace=%s -o json pod %s' % (
-            kubeapi, namespace, podName), True)
-    return json.loads(data)
+    podItems = json.loads(r.text)
+
+    for pod in podItems["items"]:
+        if 'metadata' not in pod:
+            continue
+        meta = pod['metadata']
+        if meta['namespace'] == namespace and meta['name'] == podName:
+            logging.debug('pod %s %s', podName, pod['status'])
+            return pod
+
+    logging.error('%s not present in kubelet cache' % podName)
+    return None
+
+
+def init():
+    """ Ensure that the following tools are available on the PATH """
+    executables = ['ethtool', 'brctl']
+    for prog in executables:
+        if distutils.spawn.find_executable(prog) is None:
+            logging.error('%s not in PATH' % prog)
+            sys.exit(1)
 
 
 def setup(pod_namespace, pod_name, docker_id):
@@ -93,8 +95,13 @@ def setup(pod_namespace, pod_name, docker_id):
     uid, podName = getDockerPod(docker_id)
     podInfo = None
     podState = None
-    for i in range(0, 120):
+    for i in range(0, 30):
         podInfo = getPodInfo(pod_namespace, podName)
+        if podInfo is None:
+            sys.exit(1)
+        if 'hostNetwork' in podInfo['spec'] and \
+           podInfo['spec']['hostNetwork']:
+            sys.exit(0)
         if 'annotations' in podInfo["metadata"] and \
            'opencontrail.org/pod-state' in podInfo["metadata"]["annotations"]:
             podState = json.loads(
@@ -115,8 +122,7 @@ def setup(pod_namespace, pod_name, docker_id):
         ifname = manager.create_interface(short_id, instance_ifname,
                                           mac_address)
     else:
-        ifname = manager.move_interface(short_id, pid, instance_ifname,
-                                        mac_address)
+        ifname = manager.move_interface(short_id, pid, mac_address)
 
     api = ContrailVRouterApi()
     api.add_port(uid, nic_uuid, ifname, mac_address,
@@ -167,6 +173,13 @@ class PodNetworkStatus(object):
         self.ip = None
 
 
+def podHasLivenessProbe(podInfo):
+    for container in podInfo['spec']['containers']:
+        if 'livenessProbe' in container:
+            return True
+    return False
+
+
 def status(pod_namespace, pod_name, docker_id):
     status = PodNetworkStatus()
     uid, podName = getDockerPod(docker_id)
@@ -175,7 +188,12 @@ def status(pod_namespace, pod_name, docker_id):
         setup(pod_namespace, pod_name, docker_id)
         return
 
-    localaddr = data.find('mdata_ip_addr')
+    podInfo = getPodInfo(pod_namespace, podName)
+    if podInfo and podHasLivenessProbe(podInfo):
+        localaddr = data.find('mdata_ip_addr')
+    else:
+        localaddr = data.find('ip_addr')
+
     if localaddr is not None:
         status.ip = localaddr.text
     print json.dumps(status.__dict__)
@@ -203,7 +221,7 @@ def main():
 
     try:
         if args.action == 'init':
-            pass
+            init()
         elif args.action == 'setup':
             setup(args.pod_namespace, args.pod_name, args.docker_id)
         elif args.action == 'teardown':
@@ -212,6 +230,8 @@ def main():
             status(args.pod_namespace, args.pod_name, args.docker_id)
     except Exception as ex:
         logging.error(ex)
+        if args.action == 'setup':
+            sys.exit(0)
         sys.exit(1)
 
 if __name__ == '__main__':

@@ -46,6 +46,17 @@ func testKeyFunc(obj interface{}) (string, error) {
 	return "", nil
 }
 
+func createTestClient() contrail.ApiClient {
+	client := new(contrail_mocks.ApiClient)
+	client.Init()
+
+	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
+	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
+	client.AddInterceptor("instance-ip", &IpInterceptor{})
+	client.AddInterceptor("floating-ip", &FloatingIpInterceptor{})
+	return client
+}
+
 func NewTestController(kube kubeclient.Interface, client contrail.ApiClient, allocator AddressAllocator, networkMgr NetworkManager) *Controller {
 	controller := new(Controller)
 	controller.serviceStore = cache.NewStore(testKeyFunc)
@@ -624,9 +635,9 @@ func TestPodUsesService(t *testing.T) {
 	assert.NoError(t, err)
 
 	poRefs, err := serviceNet.GetNetworkPolicyRefs()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, poRefs)
-	assert.Equal(t, policy.GetUuid(), poRefs[0].Uuid)
+	if assert.NoError(t, err) && assert.NotEmpty(t, poRefs) {
+		assert.Equal(t, policy.GetUuid(), poRefs[0].Uuid)
+	}
 
 	controller.AddPod(pod2)
 	time.Sleep(100 * time.Millisecond)
@@ -635,9 +646,9 @@ func TestPodUsesService(t *testing.T) {
 	assert.NoError(t, err)
 
 	clientRefs, err := clientNet.GetNetworkPolicyRefs()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, clientRefs)
-	assert.Equal(t, policy.GetUuid(), clientRefs[0].Uuid)
+	if assert.NoError(t, err) && assert.NotEmpty(t, clientRefs) {
+		assert.Equal(t, policy.GetUuid(), clientRefs[0].Uuid)
+	}
 
 	policy, err = types.NetworkPolicyByName(client, "default-domain:testns:x1")
 	if err == nil {
@@ -765,9 +776,9 @@ func TestPodUsesServiceCreatedAfter(t *testing.T) {
 	assert.NoError(t, err)
 
 	clientRefs, err := clientNet.GetNetworkPolicyRefs()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, clientRefs)
-	assert.Equal(t, policy.GetUuid(), clientRefs[0].Uuid)
+	if assert.NoError(t, err) && assert.NotEmpty(t, clientRefs) {
+		assert.Equal(t, policy.GetUuid(), clientRefs[0].Uuid)
+	}
 
 	controller.AddPod(pod1)
 	controller.AddService(service)
@@ -778,9 +789,9 @@ func TestPodUsesServiceCreatedAfter(t *testing.T) {
 	assert.NoError(t, err)
 
 	poRefs, err := serviceNet.GetNetworkPolicyRefs()
-	assert.NoError(t, err)
-	assert.NotEmpty(t, poRefs)
-	assert.Equal(t, policy.GetUuid(), poRefs[0].Uuid)
+	if assert.NoError(t, err) && assert.NotEmpty(t, poRefs) {
+		assert.Equal(t, policy.GetUuid(), poRefs[0].Uuid)
+	}
 
 	policy, err = types.NetworkPolicyByName(client, "default-domain:testns:x1")
 	assert.NoError(t, err)
@@ -1158,14 +1169,7 @@ func TestServiceWithMultipleBackends(t *testing.T) {
 func TestServiceWithLoadBalancer(t *testing.T) {
 	kube := mocks.NewKubeClient()
 
-	client := new(contrail_mocks.ApiClient)
-	client.Init()
-
-	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
-	client.AddInterceptor("instance-ip", &IpInterceptor{})
-	client.AddInterceptor("floating-ip", &FloatingIpInterceptor{})
-
+	client := createTestClient()
 	controller := NewTestController(kube, client, nil, nil)
 
 	pod1 := &api.Pod{
@@ -1282,14 +1286,7 @@ func getReferenceListNames(refs contrail.ReferenceList) []string {
 func TestServiceUpdateSelector(t *testing.T) {
 	kube := mocks.NewKubeClient()
 
-	client := new(contrail_mocks.ApiClient)
-	client.Init()
-
-	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
-	client.AddInterceptor("instance-ip", &IpInterceptor{})
-	client.AddInterceptor("floating-ip", &FloatingIpInterceptor{})
-
+	client := createTestClient()
 	controller := NewTestController(kube, client, nil, nil)
 
 	pod1 := &api.Pod{
@@ -1428,14 +1425,7 @@ func TestServiceUpdateSelector(t *testing.T) {
 func TestServiceUpdateLabel(t *testing.T) {
 	kube := mocks.NewKubeClient()
 
-	client := new(contrail_mocks.ApiClient)
-	client.Init()
-
-	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
-	client.AddInterceptor("instance-ip", &IpInterceptor{})
-	client.AddInterceptor("floating-ip", &FloatingIpInterceptor{})
-
+	client := createTestClient()
 	controller := NewTestController(kube, client, nil, nil)
 
 	pod1 := &api.Pod{
@@ -1582,14 +1572,7 @@ func TestServiceUpdateLabel(t *testing.T) {
 func TestServiceUpdatePublicIp(t *testing.T) {
 	kube := mocks.NewKubeClient()
 
-	client := new(contrail_mocks.ApiClient)
-	client.Init()
-
-	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
-	client.AddInterceptor("instance-ip", &IpInterceptor{})
-	client.AddInterceptor("floating-ip", &FloatingIpInterceptor{})
-
+	client := createTestClient()
 	controller := NewTestController(kube, client, nil, nil)
 
 	pod1 := &api.Pod{
@@ -1715,14 +1698,7 @@ func TestServiceUpdatePublicIp(t *testing.T) {
 func TestNetworkWithMultipleServices(t *testing.T) {
 	kube := mocks.NewKubeClient()
 
-	client := new(contrail_mocks.ApiClient)
-	client.Init()
-
-	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
-	client.AddInterceptor("instance-ip", &IpInterceptor{})
-	client.AddInterceptor("floating-ip", &FloatingIpInterceptor{})
-
+	client := createTestClient()
 	controller := NewTestController(kube, client, nil, nil)
 
 	store := new(mocks.Store)
@@ -1883,14 +1859,7 @@ func TestNetworkWithMultipleServices(t *testing.T) {
 func TestPodSelectedBy2Services(t *testing.T) {
 	kube := mocks.NewKubeClient()
 
-	client := new(contrail_mocks.ApiClient)
-	client.Init()
-
-	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
-	client.AddInterceptor("instance-ip", &IpInterceptor{})
-	client.AddInterceptor("floating-ip", &FloatingIpInterceptor{})
-
+	client := createTestClient()
 	controller := NewTestController(kube, client, nil, nil)
 
 	store := new(mocks.Store)
@@ -2006,14 +1975,7 @@ func TestPodSelectedBy2Services(t *testing.T) {
 func TestPodUsing2Services(t *testing.T) {
 	kube := mocks.NewKubeClient()
 
-	client := new(contrail_mocks.ApiClient)
-	client.Init()
-
-	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
-	client.AddInterceptor("instance-ip", &IpInterceptor{})
-	client.AddInterceptor("floating-ip", &FloatingIpInterceptor{})
-
+	client := createTestClient()
 	controller := NewTestController(kube, client, nil, nil)
 
 	store := new(mocks.Store)

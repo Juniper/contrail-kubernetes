@@ -28,30 +28,17 @@ import (
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/labels"
 
-	"github.com/Juniper/contrail-go-api"
-	contrail_mocks "github.com/Juniper/contrail-go-api/mocks"
 	"github.com/Juniper/contrail-go-api/types"
 	kubetypes "k8s.io/kubernetes/pkg/types"
 
 	"github.com/Juniper/contrail-kubernetes/pkg/network/opencontrail/mocks"
 )
 
-func createTestClient() contrail.ApiClient {
-	client := new(contrail_mocks.ApiClient)
-	client.Init()
-
-	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
-	client.AddInterceptor("instance-ip", &IpInterceptor{})
-	client.AddInterceptor("floating-ip", &FloatingIpInterceptor{})
-	return client
-}
-
 func TestConsistencyMissingVM(t *testing.T) {
 	client := createTestClient()
 	podStore := new(mocks.Store)
 	serviceStore := new(mocks.Store)
-	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore)
+	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore, nil)
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -139,7 +126,7 @@ func TestConsistencyStaleVM(t *testing.T) {
 	client := createTestClient()
 	podStore := new(mocks.Store)
 	serviceStore := new(mocks.Store)
-	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore)
+	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore, nil)
 
 	kube := mocks.NewKubeClient()
 	controller := NewTestController(kube, client, nil, nil)
@@ -184,7 +171,7 @@ func TestConsistencyMissingInterface(t *testing.T) {
 	client := createTestClient()
 	podStore := new(mocks.Store)
 	serviceStore := new(mocks.Store)
-	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore)
+	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore, nil)
 
 	kube := mocks.NewKubeClient()
 	controller := NewTestController(kube, client, nil, nil)
@@ -224,7 +211,7 @@ func TestConsistencyStaleInterface(t *testing.T) {
 	client := createTestClient()
 	podStore := new(mocks.Store)
 	serviceStore := new(mocks.Store)
-	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore)
+	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore, nil)
 
 	kube := mocks.NewKubeClient()
 	controller := NewTestController(kube, client, nil, nil)
@@ -257,7 +244,7 @@ func TestConsistencyServiceIp(t *testing.T) {
 	client := createTestClient()
 	podStore := new(mocks.Store)
 	serviceStore := new(mocks.Store)
-	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore)
+	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore, nil)
 
 	kube := mocks.NewKubeClient()
 	controller := NewTestController(kube, client, nil, nil)
@@ -355,4 +342,170 @@ func TestConsistencyServiceIp(t *testing.T) {
 	assert.NoError(t, client.Delete(vip))
 
 	assert.False(t, checker.Check())
+}
+
+func addPod(pod *api.Pod, podInterface *mocks.KubePodInterface, podStore *mocks.Store, keys *[]string) {
+	key := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
+	*keys = append(*keys, key)
+
+	podStore.On("GetByKey", key).Return(pod, true, nil)
+	podInterface.On("Update", pod).Return(pod, nil)
+}
+
+func TestConsistencyConnectionsDelete(t *testing.T) {
+	podStore := new(mocks.Store)
+	serviceStore := new(mocks.Store)
+
+	kube := mocks.NewKubeClient()
+	client := createTestClient()
+	controller := NewTestController(kube, client, nil, nil)
+	controller.SetPodStore(podStore)
+	controller.SetServiceStore(serviceStore)
+
+	checker := NewConsistencyChecker(client, controller.config, podStore, serviceStore, controller.serviceMgr)
+
+	controller.config.ClusterServices = []string{"kube-system/dns", "kube-system/monitoring"}
+
+	// 2 client pods in network "private"
+	pod1 := &api.Pod{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "pod01",
+			Namespace: "testns",
+			UID:       kubetypes.UID(uuid.New()),
+			Labels: map[string]string{
+				"name": "private",
+				"uses": "tagA",
+			},
+		},
+	}
+
+	pod2 := &api.Pod{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "pod02",
+			Namespace: "testns",
+			UID:       kubetypes.UID(uuid.New()),
+			Labels: map[string]string{
+				"name": "private",
+				"uses": "tagB",
+			},
+		},
+	}
+
+	// The service pods for service tagA and tagB respectivly.
+	pod3 := &api.Pod{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "pod03",
+			Namespace: "testns",
+			UID:       kubetypes.UID(uuid.New()),
+			Labels: map[string]string{
+				"name": "svc-backend",
+				"app":  "provider01",
+			},
+		},
+	}
+
+	pod4 := &api.Pod{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "pod04",
+			Namespace: "testns",
+			UID:       kubetypes.UID(uuid.New()),
+			Labels: map[string]string{
+				"name": "svc-backend",
+				"app":  "provider02",
+			},
+		},
+	}
+
+	// And the services
+	service1 := &api.Service{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "service1",
+			Namespace: "testns",
+			Labels: map[string]string{
+				"name": "tagA",
+			},
+		},
+		Spec: api.ServiceSpec{
+			Selector: map[string]string{
+				"app": "provider01",
+			},
+			ClusterIP: "10.254.42.42",
+			Type:      api.ServiceTypeClusterIP,
+		},
+	}
+
+	service2 := &api.Service{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "service1",
+			Namespace: "testns",
+			Labels: map[string]string{
+				"name": "tagB",
+			},
+		},
+		Spec: api.ServiceSpec{
+			Selector: map[string]string{
+				"app": "provider02",
+			},
+			ClusterIP: "10.254.42.43",
+			Type:      api.ServiceTypeClusterIP,
+		},
+	}
+
+	netnsProject := new(types.Project)
+	netnsProject.SetFQName("domain", []string{"default-domain", "testns"})
+	client.Create(netnsProject)
+
+	sysProject := new(types.Project)
+	sysProject.SetFQName("domain", []string{"default-domain", "kube-system"})
+	client.Create(sysProject)
+
+	keys := make([]string, 0)
+	addPod(pod1, kube.PodInterface, podStore, &keys)
+	addPod(pod2, kube.PodInterface, podStore, &keys)
+	addPod(pod3, kube.PodInterface, podStore, &keys)
+	addPod(pod4, kube.PodInterface, podStore, &keys)
+	podStore.On("ListKeys").Return(keys).Once()
+
+	serviceStore.On("List").Return([]interface{}{service1, service2})
+
+	s1Pods := labels.Set(map[string]string{"app": "provider01"}).AsSelector()
+	kube.PodInterface.On("List", s1Pods, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod3}}, nil)
+
+	s2Pods := labels.Set(map[string]string{"app": "provider02"}).AsSelector()
+	kube.PodInterface.On("List", s2Pods, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod4}}, nil)
+
+	kube.ServiceInterface.On("Update", service1).Return(service1, nil)
+	kube.ServiceInterface.On("Update", service2).Return(service2, nil)
+
+	shutdown := make(chan struct{})
+	go controller.Run(shutdown)
+
+	controller.AddPod(pod1)
+	controller.AddPod(pod2)
+	controller.AddPod(pod3)
+	controller.AddPod(pod4)
+	controller.AddService(service1)
+	controller.AddService(service2)
+
+	time.Sleep(100 * time.Millisecond)
+	assert.True(t, checker.Check())
+
+	controller.DeletePod(pod2)
+	time.Sleep(100 * time.Millisecond)
+	keys = append(keys[0:1], keys[2:]...)
+	podStore.On("ListKeys").Return(keys)
+
+	assert.False(t, checker.Check())
+	assert.False(t, checker.Check())
+	assert.True(t, checker.Check())
+
+	controller.config.ClusterServices = []string{"kube-system/dns"}
+
+	assert.False(t, checker.Check())
+	assert.False(t, checker.Check())
+	assert.True(t, checker.Check())
+
+	type shutdownMsg struct {
+	}
+	shutdown <- shutdownMsg{}
 }
