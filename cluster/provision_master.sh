@@ -201,8 +201,21 @@ function setup_opencontrail_analytics() {
     master $cmd
 }
 
+function pmtu_discovery()
+{
+  # This is as per RFC4821
+  echo "net.ipv4.tcp_mtu_probing = 1" >> /etc/sysctl.conf
+  echo "net.ipv4.tcp_base_mss = 1024" >> /etc/sysctl.conf
+  sysctl -p
+  # making sure to persist it as sysctl has issues
+  # in some cases
+  echo 1 > /proc/sys/net/ipv4/tcp_mtu_probing
+  echo 1024 > /proc/sys/net/ipv4/tcp_base_mss
+}
+
 # Setup contrail-controller components
 function setup_contrail_master() {
+    pmtu_discovery
     # Give additional time for kube_api to be up
     sleep 15
     # Pull all contrail images and copy the manifest files
