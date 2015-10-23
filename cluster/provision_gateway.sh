@@ -396,6 +396,31 @@ function vr_agent_conf_image_pull()
   vragentfile=/tmp/contrail-vrouter-agent.manifest
   vrimg=$(cat $vragentfile | grep image | awk -F, '{print $1}' | awk '{print $2}')
   echo $vrimg | xargs -n1 sudo docker pull
+  i=0
+  while true
+    do
+      dvrimg=$(docker images | grep -ow vrouter-agent)
+      if [ ! -z  "$dvrimg" ]; then
+         break
+      fi
+      sleep 5
+      ((i++))
+      if [ $i -eq 12 ]; then
+       if [ -d "/proc/${pullpid}" ]; then
+          pkill -TERM -P $pullpid
+          cnt=$(ps -ef|grep "docker pull" | grep vrouter-agent | wc -l)
+          if [ $cnt -gt 1 ]; then
+             log_info_msg "Restarting docker and retry pull vrouter image"
+             service docker restart
+          fi
+       fi
+       # give time for docker to initialize
+       sleep 60
+       log_info_msg "pulling of opencontrail/vrouter-agent image was not successful in the initial attempt."
+       (echo $vrimg | xargs -n1 sudo docker pull) & pullpid=$!
+       i=0
+      fi
+    done
 }
 
 function vr_agent_manifest_setup()
