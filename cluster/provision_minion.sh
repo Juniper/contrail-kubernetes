@@ -125,81 +125,13 @@ fi
 function prep_to_install()
 {
   if [ "$OS_TYPE" == $REDHAT ]; then
-    yum update
-    yum install -y git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r` \
-        libxml2-devel python-lxml sipcalc wget ethtool bridge-utils curl python-pip python-setuptools libxml2-utils
-        python-setuptools host aufs-tools dnsutils tcpdump
+    yum install -y  libxml2-devel python-lxml sipcalc wget ethtool bridge-utils curl libxml2-utils \
+        host dnsutils tcpdump
   elif [ "$OS_TYPE" == $UBUNTU ]; then
-    apt-get update
     # in case of an interrupt during execution of apt-get
-    dpkg --configure -a
-    kver=$(uname -r)
-    if [ "$kver" == "3.2.0-4-amd64" ] && [ ! isGceVM ]; then
-       log_error_msg "Kernel version 3.2.4 not supported. Upgrading to 3.16.0-0.bpo.4-amd64 and rebooting. Restart provisioning after reboot"
-       echo "deb http://http.debian.net/debian wheezy-backports main" >> /etc/apt/sources.list
-       apt-get update
-       apt-get install -y -t wheezy-backports linux-image-amd64
-       log_info_msg "System rebooting now"
-       reboot
-    fi
-    apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r` \
-            libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl python-pip python-setuptools host libxml2-utils \
-            aufs-tools dnsutils tcpdump
+    apt-get install -y libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl host libxml2-utils \
+            dnsutils tcpdump
   fi
-}
-
-function build_vrouter()
-{
-  rm -rf ~/vrouter-build
-  mkdir -p ~/vrouter-build/tools
-  cd ~/vrouter-build && (git clone -b $ocver https://github.com/Juniper/contrail-vrouter vrouter)
-  cd ~/vrouter-build/tools && (git clone https://github.com/Juniper/contrail-build build)
-  cd ~/vrouter-build/tools && (git clone -b $ocver https://github.com/Juniper/contrail-sandesh sandesh)
-  cp ~/vrouter-build/tools/build/SConstruct ~/vrouter-build
-  cd ~/vrouter-build && scons vrouter 2>&1
-}
-
-function modprobe_vrouter()
-{
-  vr=$(lsmod | grep vrouter | awk '{print $1}')
-  phy_itf=$(ip a |grep $MINION_OVERLAY_NET_IP | awk '{print $7}')
-  def=$(ip route  | grep $OPENCONTRAIL_VROUTER_INTF | grep -o default)
-  if [ "$vr" == $VROUTER ]; then
-    if [ "$def" != "default" ] && [ "$phy_itf" != $VHOST ]; then
-      `rmmod vrouter`
-    fi
-    if [ "$OS_TYPE" == $REDHAT ]; then
-        rm -rf /lib/modules/`uname -r`/extra/net/vrouter
-    elif [ "$OS_TYPE" == $UBUNTU ]; then
-        rm -rf /lib/modules/`uname -r`/updates/dkms/vrouter.ko
-    fi
-  fi
-  #Fresh install
-  if [ "$OS_TYPE" == $REDHAT ]; then
-     mkdir -p /lib/modules/`uname -r`/extra/net/vrouter
-     mv ~/vrouter-build/vrouter/vrouter.ko /lib/modules/`uname -r`/extra/net/vrouter
-  elif [ "$OS_TYPE" == $UBUNTU ]; then
-      mkdir -p /lib/modules/`uname -r`/updates/dkms
-      mv ~/vrouter-build/vrouter/vrouter.ko /lib/modules/`uname -r`/updates/dkms
-  fi
-  mv ~/vrouter-build/build/debug/vrouter/utils/vif /usr/bin
-  mv ~/vrouter-build/build/debug/vrouter/utils/rt /usr/bin
-  mv ~/vrouter-build/build/debug/vrouter/utils/dropstats /usr/bin
-  mv ~/vrouter-build/build/debug/vrouter/utils/flow /usr/bin
-  mv ~/vrouter-build/build/debug/vrouter/utils/mirror /usr/bin
-  mv ~/vrouter-build/build/debug/vrouter/utils/mpls /usr/bin
-  mv ~/vrouter-build/build/debug/vrouter/utils/nh /usr/bin
-  mv ~/vrouter-build/build/debug/vrouter/utils/vxlan /usr/bin
-  mv ~/vrouter-build/build/debug/vrouter/utils/vrfstats /usr/bin
-  mv ~/vrouter-build/build/debug/vrouter/utils/vrouter /usr/bin
-  cd /lib/modules/`uname -r` && depmod && cd
-  `modprobe vrouter`
-  vr=$(lsmod | grep vrouter | awk '{print $1}')
-  if [ "$vr" == $VROUTER ]; then
-     log_info_msg "Latest version of Opencontrail kernel module - $vr instaled"
-  else
-     log_info_msg "Installing Opencontrail kernel module - $vr failed"
-  fi 
 }
 
 function isGceVM()
@@ -296,79 +228,6 @@ function setup_vhost()
         grep -q "$rtv" $itf || echo "    $rtv" >> $itf
      fi
   fi   
-}
-
-function setup_opencontrail_kubelet()
-{
-  ockub=$(pip freeze | grep kubelet | awk -F= '{print $1}')
-  if [ ! -z "$ockub" ]; then
-     pip uninstall -y opencontrail-kubelet
-  fi
-  (exec pip install --upgrade opencontrail-kubelet)
-  
-  mkdir -p /usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail
-  if [ ! -f /usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail/config ]; then
-     touch /usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail/config
-  fi
-  config="/usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail/config"
-  ocp="/usr/local/bin/opencontrail-kubelet-plugin"
-  if [ ! -f "$ocp" ]; then
-     log_info_msg "Opencontrail-kubelet-plugin not found. Please check the package opencontrail-kubelet"
-     exit 1
-  fi
-  grep -q 'DEFAULTS' $config || echo "[DEFAULTS]" >> $config
-  sed -i '/api_server/d' $config
-  echo "api_server=$OPENCONTRAIL_CONTROLLER_IP" >> $config
-  (cd /usr/libexec/kubernetes/kubelet-plugins/net/exec/opencontrail; `ln -s $ocp opencontrail`) && cd
-}
-
-function update_restart_kubelet()
-{
-  #check for manifests in kubelet config
-  kubeappendoc=" --network_plugin=opencontrail"
-  kubeappendpv=" --allow-privileged=true"
-  kubeappendmf=" --config=/etc/kubernetes/manifests"
-  if [ ! -f /etc/kubernetes/manifests ]; then
-     mkdir -p /etc/kubernetes/manifests
-  fi
-  # Note: KUBELET_OPTS is used in Ubuntu
-  #       DAEMON_ARGS is ised in AWS
-  source /etc/default/kubelet
-  if [ ! -z "$KUBELET_OPTS" ]; then
-     kubecf=`echo $KUBELET_OPTS`
-  elif [ ! -z "$DAEMON_ARGS" ]; then
-     kubecf=`echo $DAEMON_ARGS`
-  else
-     logger_error_msg "Kubelet default configuration missing. Please check kubelet and /etc/default/kubelet"
-  fi
-
-  # kubelet runtime args are imp. Make sure it is up
-  kubepid=$(ps -ef|grep kubelet |grep manifests | awk '{print $2}')
-  ln -sf /usr/local/bin/kubectl /usr/bin/kubectl # temp hack
-  if [ -z $kubepid ]; then
-    service restart kubelet
-  fi
-  if [[ $kubepid != `pidof kubelet` ]]; then
-      mkdir -p /etc/kubernetes/manifests
-      kubecf="$kubecf $kubeappendmf"
-  fi
-  kubepid=$(ps -ef|grep kubelet |grep allow-privileged | awk '{print $2}')
-  if [[ $kubepid != `pidof kubelet` ]]; then 
-     kubecf="$kubecf $kubeappendpv"
-  fi
-  kubepid=$(ps -ef|grep kubelet |grep opencontrail | awk '{print $2}')
-  if [[ $kubepid != `pidof kubelet` ]]; then
-     kubecf="$kubecf $kubeappendoc"
-  fi
-
-  if [ ! -z "$KUBELET_OPTS" ]; then
-    sed -i '/KUBELET_OPTS/d' /etc/default/kubelet
-    echo 'KUBELET_OPTS="'$kubecf'"' > /etc/default/kubelet
-  elif [ ! -z "$DAEMON_ARGS" ]; then
-    sed -i '/DAEMON_ARGS/d' /etc/default/kubelet
-    echo 'DAEMON_ARGS="'$kubecf'"' > /etc/default/kubelet
-  fi
-  service kubelet restart
 }
 
 function stop_kube_svcs()
@@ -496,7 +355,13 @@ function vr_agent_conf_image_pull()
   wget -P /tmp https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/cluster/contrail-vrouter-agent.manifest
   vragentfile=/tmp/contrail-vrouter-agent.manifest
   vrimg=$(cat $vragentfile | grep image | awk -F, '{print $1}' | awk '{print $2}')
-  (echo $vrimg | xargs -n1 sudo docker pull) & pullpid=$!
+  docker_pull $vrimg
+}
+
+function docker_pull()
+{
+  img=$1
+  (echo $img | xargs -n1 sudo docker pull) & pullpid=$!
   i=0
   while true
     do
@@ -511,14 +376,14 @@ function vr_agent_conf_image_pull()
           pkill -TERM -P $pullpid
           cnt=$(ps -ef|grep "docker pull" | grep vrouter-agent | wc -l)
           if [ $cnt -gt 1 ]; then
-             log_info_msg "Restarting docker and retrying pull of vrouter image"
+             log_info_msg "Restarting docker and retrying pull of $img"
              service docker restart
           fi
        fi
        # give time for docker to initialize
        sleep 60
-       log_info_msg "pulling of opencontrail/vrouter-agent image was not successful in the initial attempt."
-       (echo $vrimg | xargs -n1 sudo docker pull) & pullpid=$!
+       log_info_msg "pulling of $img was not successful in the initial attempt."
+       (echo $img | xargs -n1 sudo docker pull) & pullpid=$!
        i=0
       fi
     done
@@ -550,71 +415,6 @@ function vr_agent_manifest_setup()
      sleep 3
     done
   mv /tmp/contrail-vrouter-agent.manifest /etc/kubernetes/manifests
-}
-
-function vrouter_nh_rt_prov()
-{
-  if isGceVM ; then
-     vmac=$(ip link show $VHOST | grep link | awk '{print $2}')
-     defgw=$(ip route | grep default | awk '{print $3}')
-     gwmac=$(arp -a | grep $defgw | awk '{print $4}')
-     intf=$(ip link show |grep $vmac -B 1 | grep -i "eth\|bond" | awk '{print $2}' | cut -d: -f1 | head -1)
-     naddr=$(getGceNetAddr)
-     prefix=$(echo $naddr | cut -d/ -f1)
-     len=$(echo $naddr | cut -d/ -f2)
-     while true
-      do
-       ccc=$(netstat -natp |grep 5269 | awk '{print $6}')
-       rtdata32=$(rt --dump 0 |grep $OPENCONTRAIL_CONTROLLER_IP/32 | awk '{print $5}' | head -1)
-       if [ "$rtdata32" == "-" ]; then
-          rtdata32=$(rt --dump 0 |grep $OPENCONTRAIL_CONTROLLER_IP/32 | awk '{print $4}' | head -1)
-       fi
-       oc=$OPENCONTRAIL_CONTROLLER_IP
-       sub=$(echo ${oc%.*} ${oc##*.}  | awk '{print $1}').0
-       rtdata24=$(rt --dump 0 |grep $sub | awk '{print $5}' | head -1)
-       if [ "$rtdata24" == "-" ]; then
-          rtdata24=$(rt --dump 0 |grep $sub | awk '{print $4}' | head -1)
-       fi
-       if [ -z "$ccc" ] || [ "$ccc" != "ESTABLISHED" ]; then
-         if [ "$rtdata32" != 1000 ] || [ "$rtdata24" != 1000 ]; then
-            nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $5}' | head -1)
-            if [ "$nhid" == "-" ]; then
-               nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $4}' | head -1)
-            fi
-            /usr/bin/nh --delete $nhid
-            /usr/bin/nh --create 1000 --type 2 --smac $vmac --dmac $gwmac --oif $intf
-            while true
-             do
-              nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $5}' | head -1)
-              if [ "$nhid" == "-" ]; then
-                 nhid=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP | awk '{print $4}' | head -1)
-              fi
-              rtdata32=$(/usr/bin/rt --dump 0 | grep $OPENCONTRAIL_CONTROLLER_IP/32 | awk '{print $5}' | head -1)
-              if [ "$rtdata32" == "-" ]; then
-                 rtdata32=$(rt --dump 0 |grep $OPENCONTRAIL_CONTROLLER_IP/32 | awk '{print $4}' | head -1)
-              fi
-              if [ "$rtdata32" != 1000 ]; then
-                 err=$(/usr/bin/rt -d -f AF_INET -r $len -p $OPENCONTRAIL_CONTROLLER_IP -l 32 -n $nhid -v 0 | grep -ow Error)
-                 if [ "$err" == Error ]; then
-                    sleep 3
-                    continue
-                 else
-                    break
-                 fi
-              fi
-             done
-            /usr/bin/rt -c -f AF_INET -n 1000 -p $prefix -l $len -v 0
-         fi
-       elif [ "$ccc" == "ESTABLISHED" ] && [ "$rtdata32" == 1000 ] || [ "$rtdata24" == 1000 ]; then
-            break
-       fi
-       sleep 3
-      done
-    wget -P /etc/contrail https://raw.githubusercontent.com/Juniper/contrail-kubernetes/$ockver/scripts/opencontrail-install/gce_ocvr_rt_chk.sh
-    chmod +x /etc/contrail/gce_ocvr_rt_chk.sh
-    cron="*/1 * * * * /etc/contrail/gce_ocvr_rt_chk.sh 2>&1 | logger"
-    (crontab -u root -l; echo "$cron" ) | crontab -u root -
-  fi
 }
 
 function ifup_vhost()
@@ -654,6 +454,8 @@ function verify_vhost_setup()
   fi
 }
 
+# vrouter registering to API server should be in the vrouter
+# and not in the contrail control server.
 function provision_vrouter()
 {
   stderr="/tmp/stderr"
@@ -682,11 +484,13 @@ function provision_vrouter()
 function cleanup()
 {
   if [ "$OS_TYPE" == $REDHAT ]; then
-    yum remove -y git flex bison gcc gcc-c++ boost boost-devel scons libxml2-devel kernel-devel-`uname -r` sipcalc automake make python-setuptools python-pip
+    yum remove -y libxml2-devel sipcalc python-setuptools python-pip
   elif [ "$OS_TYPE" == $UBUNTU ]; then
-    apt-get remove -y git flex bison g++ gcc make libboost-all-dev scons libxml2-dev linux-headers-`uname -r` sipcalc automake make python-setuptools python-pip
+    apt-get remove -y libxml2-dev sipcalc python-setuptools python-pip
   fi
-  rm -rf ~/vrouter-build
+  docker stop $VROUTER_DKMB
+  docker rm $VROUTER_DKMB
+  docker rmi $VROUTER_DKMB_IMG
 }
 
 function verify_vrouter_agent()
@@ -832,9 +636,7 @@ function main()
    detect_os
    prep_to_install
    generate_rc
-   build_vrouter
    setup_vhost
-   modprobe_vrouter
    stop_kube_svcs
    update_vhost_pre_up
    prereq_vrouter_agent
@@ -842,10 +644,6 @@ function main()
    ifup_vhost
    routeconfig
    verify_vhost_setup
-   if [ ! isGceVM ]; then
-     setup_opencontrail_kubelet
-     update_restart_kubelet
-   fi
    vr_agent_manifest_setup
    provision_vrouter
    verify_vrouter_agent

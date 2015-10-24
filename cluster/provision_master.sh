@@ -145,14 +145,6 @@ function provision_vrouter_encap() {
     master $cmd
 }
 
-# Setup kube dns endpoints
-function setup_kube_dns_endpoints() {
-    master /usr/local/bin/kubectl --namespace=kube-system delete service kube-ui
-    master /usr/local/bin/kubectl --namespace=kube-system create -f /etc/kubernetes/addons/kube-ui/kube-ui-svc.yaml || true
-    master /usr/local/bin/kubectl --namespace=kube-system delete rc kube-ui-v2
-    master /usr/local/bin/kubectl --namespace=kube-system create -f /etc/kubernetes/addons/kube-ui/kube-ui-rc.yaml || true
-}
-
 # Setup contrail manifest files under kubernetes
 function setup_contrail_manifest_files() {
     mkdir -p /etc/contrail
@@ -235,9 +227,6 @@ function setup_contrail_master() {
 
     # Provision vrouter encap order
     provision_vrouter_encap
-
-    # Setip kube-dns
-    setup_kube_dns_endpoints
 
     # provision
     setup_opencontrail_config

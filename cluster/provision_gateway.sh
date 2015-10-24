@@ -116,92 +116,24 @@ if [ -z $MINION_OVERLAY_NET_IP ]; then
 fi
 }
 
-function prep_to_install()
-{
-  if [ "$OS_TYPE" == $REDHAT ]; then
-    yum update
-    yum install -y git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r` \
-        libxml2-devel python-lxml sipcalc wget ethtool bridge-utils curl python-pip python-setuptools libxml2-utils
-        python-setuptools host aufs-tools
-  elif [ "$OS_TYPE" == $UBUNTU ]; then
-    apt-get update
-    # in case of an interrupt during execution of apt-get
-    dpkg --configure -a
-    kver=$(uname -r)
-    if [ "$kver" == "3.2.0-4-amd64" ] && [ ! isGceVM ]; then
-       log_error_msg "Kernel version 3.2.4 not supported. Upgrading to 3.16.0-0.bpo.4-amd64 and rebooting. Restart provisioning after reboot"
-       echo "deb http://http.debian.net/debian wheezy-backports main" >> /etc/apt/sources.list
-       apt-get update
-       apt-get install -y -t wheezy-backports linux-image-amd64
-       log_info_msg "System rebooting now"
-       reboot
-    fi
-    apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r` \
-            libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl python-pip python-setuptools host libxml2-utils \
-            aufs-tools
-  fi
-}
-
-function build_vrouter()
-{
-  rm -rf ~/vrouter-build
-  mkdir -p ~/vrouter-build/tools
-  cd ~/vrouter-build && (git clone -b $ocver https://github.com/Juniper/contrail-vrouter vrouter)
-  cd ~/vrouter-build/tools && (git clone https://github.com/Juniper/contrail-build build)
-  cd ~/vrouter-build/tools && (git clone -b $ocver https://github.com/Juniper/contrail-sandesh sandesh)
-  cp ~/vrouter-build/tools/build/SConstruct ~/vrouter-build
-  cd ~/vrouter-build && scons vrouter 2>&1
-}
-
-function modprobe_vrouter()
-{
-  vr=$(lsmod | grep vrouter | awk '{print $1}')
-  phy_itf=$(ip a |grep $MINION_OVERLAY_NET_IP | awk '{print $7}')
-  def=$(ip route  | grep $OPENCONTRAIL_VROUTER_INTF | grep -o default)
-  if [ "$vr" == $VROUTER ]; then
-    if [ "$def" != "default" ] && [ "$phy_itf" != $VHOST ]; then
-      `rmmod vrouter`
-    fi
-    if [ "$OS_TYPE" == $REDHAT ]; then
-        rm -rf /lib/modules/`uname -r`/extra/net/vrouter
-    elif [ "$OS_TYPE" == $UBUNTU ]; then
-        rm -rf /lib/modules/`uname -r`/updates/dkms/vrouter.ko
-    fi
-  fi
-  #Fresh install
-  if [ "$OS_TYPE" == $REDHAT ]; then
-     mkdir -p /lib/modules/`uname -r`/extra/net/vrouter
-     mv ~/vrouter-build/vrouter/vrouter.ko /lib/modules/`uname -r`/extra/net/vrouter
-  elif [ "$OS_TYPE" == $UBUNTU ]; then
-      mkdir -p /lib/modules/`uname -r`/updates/dkms
-      mv ~/vrouter-build/vrouter/vrouter.ko /lib/modules/`uname -r`/updates/dkms
-  fi
-  mv ~/vrouter-build/build/debug/vrouter/utils/vif /usr/bin
-  mv ~/vrouter-build/build/debug/vrouter/utils/rt /usr/bin
-  mv ~/vrouter-build/build/debug/vrouter/utils/dropstats /usr/bin
-  mv ~/vrouter-build/build/debug/vrouter/utils/flow /usr/bin
-  mv ~/vrouter-build/build/debug/vrouter/utils/mirror /usr/bin
-  mv ~/vrouter-build/build/debug/vrouter/utils/mpls /usr/bin
-  mv ~/vrouter-build/build/debug/vrouter/utils/nh /usr/bin
-  mv ~/vrouter-build/build/debug/vrouter/utils/vxlan /usr/bin
-  mv ~/vrouter-build/build/debug/vrouter/utils/vrfstats /usr/bin
-  mv ~/vrouter-build/build/debug/vrouter/utils/vrouter /usr/bin
-  cd /lib/modules/`uname -r` && depmod && cd
-  `modprobe vrouter`
-  vr=$(lsmod | grep vrouter | awk '{print $1}')
-  if [ "$vr" == $VROUTER ]; then
-     log_info_msg "Latest version of Opencontrail kernel module - $vr instaled"
-  else
-     log_info_msg "Installing Opencontrail kernel module - $vr failed"
-  fi 
-}
-
 function isGceVM()
 {
   if [ -f /var/run/google.onboot ]; then
    return 0
   else
    return 1
+  fi
+}
+
+function prep_to_install()
+{
+  if [ "$OS_TYPE" == $REDHAT ]; then
+    yum install -y  libxml2-devel python-lxml sipcalc wget ethtool bridge-utils curl libxml2-utils \
+        host dnsutils tcpdump
+  elif [ "$OS_TYPE" == $UBUNTU ]; then
+    # in case of an interrupt during execution of apt-get
+    apt-get install -y libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl host libxml2-utils \
+            dnsutils tcpdump
   fi
 }
 
@@ -396,6 +328,13 @@ function vr_agent_conf_image_pull()
   vragentfile=/tmp/contrail-vrouter-agent.manifest
   vrimg=$(cat $vragentfile | grep image | awk -F, '{print $1}' | awk '{print $2}')
   echo $vrimg | xargs -n1 sudo docker pull
+  docker_pull $vrimg
+}
+
+function docker_pull()
+{
+  img=$1
+  (echo $img | xargs -n1 sudo docker pull) & pullpid=$!
   i=0
   while true
     do
@@ -410,14 +349,14 @@ function vr_agent_conf_image_pull()
           pkill -TERM -P $pullpid
           cnt=$(ps -ef|grep "docker pull" | grep vrouter-agent | wc -l)
           if [ $cnt -gt 1 ]; then
-             log_info_msg "Restarting docker and retry pull vrouter image"
+             log_info_msg "Restarting docker and retrying pull of $img"
              service docker restart
           fi
        fi
        # give time for docker to initialize
        sleep 60
-       log_info_msg "pulling of opencontrail/vrouter-agent image was not successful in the initial attempt."
-       (echo $vrimg | xargs -n1 sudo docker pull) & pullpid=$!
+       log_info_msg "pulling of $img was not successful in the initial attempt."
+       (echo $img | xargs -n1 sudo docker pull) & pullpid=$!
        i=0
       fi
     done
@@ -665,9 +604,7 @@ function main()
    detect_os
    prep_to_install
    generate_rc
-   build_vrouter
    setup_vhost
-   modprobe_vrouter
    update_vhost_pre_up
    prereq_vrouter_agent
    vr_agent_conf_image_pull

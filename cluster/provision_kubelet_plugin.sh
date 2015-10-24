@@ -77,7 +77,7 @@ function prep_to_install()
 {
   if [ "$OS_TYPE" == $REDHAT ]; then
     yum update
-    yum install -y python-pip python-setuptools aufs-tools
+    yum install -y python-pip python-setuptools
   elif [ "$OS_TYPE" == $UBUNTU ]; then
     apt-get update
     apt-get install -y python-pip python-setuptools aufs-tools
