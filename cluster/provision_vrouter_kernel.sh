@@ -87,7 +87,7 @@ function launch_docker()
   img=$os:$rel
   VROUTER_DKMB_IMG=$img
   docker_pull $img $rel
-  sleep 3
+  sleep 2
   docker run --privileged -d -P --name $VROUTER_DKMB --net="host" -v /lib:/lib -v /usr/bin:/usr/bin -t -i $img
   sleep 3
   vrkmoddocid=$(docker ps | grep $VROUTER_DKMB | awk '{print $1}')
@@ -112,7 +112,7 @@ function docker_pull()
       if [ ! -z  "$dvrimg" ]; then
          break
       fi
-      sleep 5
+      sleep 2
       ((i++))
       if [ $i -eq 12 ]; then
        if [ -d "/proc/${pullpid}" ]; then
