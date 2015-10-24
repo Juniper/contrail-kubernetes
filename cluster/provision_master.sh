@@ -60,6 +60,12 @@ function isGceVM()
   fi
 }
 
+function install_pkgs()
+{
+  # aufs-tools is required for auplink that is used by docker
+  apt-get install -y aufs-tools libxml2-utils host
+}
+
 # Verify that contrail infra components are up and listening
 function verify_contrail_listen_services() {
     RETRY=20
@@ -88,7 +94,6 @@ function verify_contrail_listen_services() {
 # and restart if not set
 function check_contrail_services()
 {
-  apt-get install -y libxml2-utils host
   vr=''
   for (( i=0; i<20; i++ ))
     do
@@ -209,7 +214,8 @@ function pmtu_discovery()
 function setup_contrail_master() {
     pmtu_discovery
     # Give additional time for kube_api to be up
-    sleep 15
+    sleep 10
+    install_pkgs
     # Pull all contrail images and copy the manifest files
     setup_contrail_manifest_files
 

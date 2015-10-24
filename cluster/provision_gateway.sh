@@ -127,12 +127,13 @@ function isGceVM()
 
 function prep_to_install()
 {
+  # aufs-tools is required by docker for auplink during umouting
   if [ "$OS_TYPE" == $REDHAT ]; then
-    yum install -y  libxml2-devel python-lxml sipcalc wget ethtool bridge-utils curl libxml2-utils \
+    yum install -y  aufs-tools libxml2-devel python-lxml sipcalc wget ethtool bridge-utils curl libxml2-utils \
         host dnsutils tcpdump
   elif [ "$OS_TYPE" == $UBUNTU ]; then
     # in case of an interrupt during execution of apt-get
-    apt-get install -y libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl host libxml2-utils \
+    apt-get install -y aufs-tools libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl host libxml2-utils \
             dnsutils tcpdump
   fi
 }
@@ -342,7 +343,7 @@ function docker_pull()
       if [ ! -z  "$dvrimg" ]; then
          break
       fi
-      sleep 5
+      sleep 2
       ((i++))
       if [ $i -eq 12 ]; then
        if [ -d "/proc/${pullpid}" ]; then
@@ -454,7 +455,7 @@ function provision_vrouter()
      if [ ! -z $vr ]; then
        break
      fi
-     sleep 5
+     sleep 3
     done
   curl -s -X POST -H "Content-Type: application/json; charset=UTF-8" -d '{"virtual-router": {"parent_type": "global-system-config", "fq_name": ["default-global-system-config", "'$host'" ], "display_name": "'$host'", "virtual_router_ip_address": "'$MINION_OVERLAY_NET_IP'", "name": "'$host'"}}' http://$OPENCONTRAIL_CONTROLLER_IP:8082/virtual-routers 2> >( cat <() > $stderr)
   err=$(cat $stderr)
