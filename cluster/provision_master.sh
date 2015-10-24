@@ -172,10 +172,10 @@ function setup_contrail_manifest_files() {
     cmd="$cmd1$OPENCONTRAIL_KUBERNETES_TAG$cmd2$OPENCONTRAIL_KUBERNETES_TAG$cmd3"
     master $cmd
 
-    cmd='grep \"image\": /etc/contrail/manifests/* | cut -d "\"" -f 4 | sort -u | xargs -n1 sudo docker pull'
-    RETRY=20
-    WAIT=3
-    retry master $cmd
+    #cmd='grep \"image\": /etc/contrail/manifests/* | cut -d "\"" -f 4 | sort -u | xargs -n1 sudo docker pull'
+    #RETRY=20
+    #WAIT=3
+    #retry master $cmd
     cmd='mv /etc/contrail/manifests/* /etc/kubernetes/manifests/'
     master $cmd
 }
