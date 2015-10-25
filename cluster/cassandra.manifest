@@ -3,6 +3,7 @@
     "kind": "Pod",
     "metadata": {"name":"cassandra"},
     "spec":{
+        "hostNetwork": true,
 	"containers":[{
 	    "name": "opencontrail-config-db",
 	    "image": "cassandra:2.2.0",
