@@ -590,18 +590,15 @@ function pmtu_discovery()
 {
   # This is as per RFC4821
   echo "net.ipv4.tcp_mtu_probing = 1" >> /etc/sysctl.conf
-  echo "net.ipv4.tcp_base_mss = 1024" >> /etc/sysctl.conf
   sysctl -p
   # making sure to persist it as sysctl has issues
   # in some cases
   echo 1 > /proc/sys/net/ipv4/tcp_mtu_probing
-  echo 1024 > /proc/sys/net/ipv4/tcp_base_mss
 }
 
 function main()
 {
    persist_hostname
-   pmtu_discovery
    detect_os
    prep_to_install
    generate_rc
@@ -619,6 +616,7 @@ function main()
    add_static_route
    rpf_disable
    cleanup
+   pmtu_discovery
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent and gateway is done."
    touch "$runok"
 }

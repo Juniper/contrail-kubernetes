@@ -172,10 +172,10 @@ function setup_contrail_manifest_files() {
     cmd="$cmd1$OPENCONTRAIL_KUBERNETES_TAG$cmd2$OPENCONTRAIL_KUBERNETES_TAG$cmd3"
     master $cmd
 
-    #cmd='grep \"image\": /etc/contrail/manifests/* | cut -d "\"" -f 4 | sort -u | xargs -n1 sudo docker pull'
-    #RETRY=20
-    #WAIT=3
-    #retry master $cmd
+    cmd='grep \"image\": /etc/contrail/manifests/* | cut -d "\"" -f 4 | sort -u | xargs -n1 sudo docker pull'
+    RETRY=20
+    WAIT=3
+    retry master $cmd
     cmd='mv /etc/contrail/manifests/* /etc/kubernetes/manifests/'
     master $cmd
 }
@@ -198,23 +198,8 @@ function setup_opencontrail_analytics() {
     master $cmd
 }
 
-function pmtu_discovery()
-{
-  # This is as per RFC4821
-  echo "net.ipv4.tcp_mtu_probing = 1" >> /etc/sysctl.conf
-  echo "net.ipv4.tcp_base_mss = 1024" >> /etc/sysctl.conf
-  sysctl -p
-  # making sure to persist it as sysctl has issues
-  # in some cases
-  echo 1 > /proc/sys/net/ipv4/tcp_mtu_probing
-  echo 1024 > /proc/sys/net/ipv4/tcp_base_mss
-}
-
 # Setup contrail-controller components
 function setup_contrail_master() {
-    pmtu_discovery
-    # Give additional time for kube_api to be up
-    sleep 10
     install_pkgs
     # Pull all contrail images and copy the manifest files
     setup_contrail_manifest_files
