@@ -137,7 +137,8 @@ function provision_controller() {
 # Provision link local service
 function provision_linklocal() {
     ll_service_ip=$(sipcalc $SERVICE_CLUSTER_IP_RANGE | grep "Usable range" | awk '{print $4}')
-    cmd='docker ps | grep contrail-api | grep -v pause | awk "{print \"docker exec \" \$1 \" python /usr/share/contrail-utils/provision_linklocal.py --api_server_ip `hostname --ip-address` --api_server_port 8082 --linklocal_service_name kubernetes-pods-info --linklocal_service_ip $ll_service_ip --linklocal_service_port 443 --ipfabric_service_ip `hostname --ip-` --ipfabric_service_port 443 --oper add\"}" | sudo sh'
+    api=$(docker ps | grep contrail-api | grep -v pause | awk '{print $1}')
+    cmd="docker exec -it $api python /usr/share/contrail-utils/provision_linklocal.py --api_server_ip `hostname --ip-address` --api_server_port 8082 --linklocal_service_name kubernetes-pods-info --linklocal_service_ip $ll_service_ip --linklocal_service_port 443 --ipfabric_service_ip `hostname --ip-` --ipfabric_service_port 443 --oper add"
     master $cmd
 }
 
