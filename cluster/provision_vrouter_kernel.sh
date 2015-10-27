@@ -241,6 +241,7 @@ function main()
    modprobe_vrouter
    check_kmod
    cleanup
+   touch "$runok"
 }
 
 main
