@@ -9,6 +9,7 @@
 #######################################################################
 set -x
 
+runok="/etc/contrail/kubelet_plugin_install.ok"
 readonly PROGNAME=$(basename "$0")
 
 ockver=$OPENCONTRAIL_KUBERNETES_TAG
@@ -123,6 +124,7 @@ function main()
    setup_opencontrail_kubelet
    kube_manifest_setup
    log_info_msg "Provisioning of opencontrail-kubelet-plugin completed."
+   touch "$runok"
 }
 
 main
