@@ -1,0 +1,85 @@
+diff --git a/examples/guestbook-go/guestbook-controller.json b/examples/guestbook-go/guestbook-controller.json
+index 2fe5d99..0eaf9a2 100644
+--- a/examples/guestbook-go/guestbook-controller.json
++++ b/examples/guestbook-go/guestbook-controller.json
+@@ -15,7 +15,9 @@
+       "template":{
+          "metadata":{
+             "labels":{
+-               "app":"guestbook"
++               "app":"guestbook",
++              "name": "frontend",
++              "uses": "redis"
+             }
+          },
+          "spec":{
+diff --git a/examples/guestbook-go/redis-master-controller.json b/examples/guestbook-go/redis-master-controller.json
+index 51f835a..1c7ee15 100644
+--- a/examples/guestbook-go/redis-master-controller.json
++++ b/examples/guestbook-go/redis-master-controller.json
+@@ -18,6 +18,7 @@
+          "metadata":{
+             "labels":{
+                "app":"redis",
++              "name":"redis",
+                "role":"master"
+             }
+          },
+diff --git a/examples/guestbook-go/redis-master-service.json b/examples/guestbook-go/redis-master-service.json
+index 3a7426e..d49f949 100644
+--- a/examples/guestbook-go/redis-master-service.json
++++ b/examples/guestbook-go/redis-master-service.json
+@@ -5,6 +5,7 @@
+       "name":"redis-master",
+       "labels":{
+          "app":"redis",
++        "name": "redis",
+          "role":"master"
+       }
+    },
+diff --git a/examples/guestbook-go/redis-slave-controller.json b/examples/guestbook-go/redis-slave-controller.json
+index 75e3c7e..a47a8a4 100644
+--- a/examples/guestbook-go/redis-slave-controller.json
++++ b/examples/guestbook-go/redis-slave-controller.json
+@@ -1,7 +1,6 @@
+ {
+    "kind":"ReplicationController",
+    "apiVersion":"v1",
+-   "id":"redis-slave",
+    "metadata":{
+       "name":"redis-slave",
+       "labels":{
+@@ -19,6 +18,7 @@
+          "metadata":{
+             "labels":{
+                "app":"redis",
++              "name":"redis",
+                "role":"slave"
+             }
+          },
+diff --git a/examples/guestbook-go/redis-slave-service.json b/examples/guestbook-go/redis-slave-service.json
+index 7e8f49a..dbc993e 100644
+--- a/examples/guestbook-go/redis-slave-service.json
++++ b/examples/guestbook-go/redis-slave-service.json
+@@ -5,6 +5,7 @@
+       "name":"redis-slave",
+       "labels":{
+          "app":"redis",
++        "name":"redis",
+          "role":"slave"
+       }
+    },
+diff --git a/examples/k8petstore/k8petstore.sh b/examples/k8petstore/k8petstore.sh
+index 4d75e2e..1cf54e1 100755
+--- a/examples/k8petstore/k8petstore.sh
++++ b/examples/k8petstore/k8petstore.sh
+@@ -117,7 +117,7 @@ cat << EOF > fe-s.json
+     "ports": [{
+       "port": 3000
+     }],
+-    "deprecatedPublicIPs":["$PUBLIC_IP","10.1.4.89"],
++    "externalIPs":["$PUBLIC_IP"],
+     "selector": {
+       "name": "frontend"
+     }
+
