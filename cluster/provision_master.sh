@@ -63,7 +63,7 @@ function isGceVM()
 function install_pkgs()
 {
   # aufs-tools is required for auplink that is used by docker
-  apt-get install -y aufs-tools libxml2-utils host
+  apt-get install -y aufs-tools libxml2-utils host sipcalc
 }
 
 # Verify that contrail infra components are up and listening
@@ -136,7 +136,8 @@ function provision_controller() {
 
 # Provision link local service
 function provision_linklocal() {
-    cmd='docker ps | grep contrail-api | grep -v pause | awk "{print \"docker exec \" \$1 \" python /usr/share/contrail-utils/provision_linklocal.py --api_server_ip `hostname --ip-address` --api_server_port 8082 --linklocal_service_name kubernetes-pods-info --linklocal_service_ip 10.0.0.1 --linklocal_service_port 443 --ipfabric_service_ip `hostname --ip-` --ipfabric_service_port 443 --oper add\"}" | sudo sh'
+    ll_service_ip=$(sipcalc $SERVICE_CLUSTER_IP_RANGE | grep "Usable range" | awk '{print $4}')
+    cmd='docker ps | grep contrail-api | grep -v pause | awk "{print \"docker exec \" \$1 \" python /usr/share/contrail-utils/provision_linklocal.py --api_server_ip `hostname --ip-address` --api_server_port 8082 --linklocal_service_name kubernetes-pods-info --linklocal_service_ip $ll_service_ip --linklocal_service_port 443 --ipfabric_service_ip `hostname --ip-` --ipfabric_service_port 443 --oper add\"}" | sudo sh'
     master $cmd
 }
 
@@ -198,6 +199,11 @@ function setup_opencontrail_analytics() {
     master $cmd
 }
 
+function cleanup()
+{
+   apt-get remove -y sipcalc
+}
+
 # Setup contrail-controller components
 function setup_contrail_master() {
     install_pkgs
@@ -223,6 +229,7 @@ function setup_contrail_master() {
     setup_opencontrail_config
     setup_opencontrail_database
     setup_opencontrail_analytics
+    cleanup
     touch "$runok"
 }
 
