@@ -124,7 +124,11 @@ function main()
    setup_opencontrail_kubelet
    kube_manifest_setup
    log_info_msg "Provisioning of opencontrail-kubelet-plugin completed."
-   touch "$runok"
+   cdir=`dirname "$runok"`
+     if [ ! -f "$cdir" ]; then
+       mkdir -p "$cdir"
+     fi
+   touch $runok
 }
 
 main
