@@ -218,12 +218,16 @@ function modprobe_vrouter()
 function check_kmod()
 {
   vr=$(lsmod |grep -ow vrouter)
-  if [ -z $vr ]; then
-     mkdir -p /etc/contrail
+  if [ ! -z $vr ]; then
+     cdir=`dirname "$runok"`
+     if [ ! -f "$cdir" ]; then
+       mkdir -p "$cdir"
+     fi
      touch $runok
      log_info_msg "vrouter kernel module successfully build and installed"
   fi
 }
+
 function cleanup()
 {
   docker stop $VROUTER_DKMB
@@ -241,7 +245,6 @@ function main()
    modprobe_vrouter
    check_kmod
    cleanup
-   touch "$runok"
 }
 
 main
