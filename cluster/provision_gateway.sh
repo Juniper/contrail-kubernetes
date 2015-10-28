@@ -470,11 +470,10 @@ function provision_vrouter()
 function cleanup()
 {
   if [ "$OS_TYPE" == $REDHAT ]; then
-    yum remove -y git flex bison gcc gcc-c++ boost boost-devel scons libxml2-devel kernel-devel-`uname -r` sipcalc automake make python-setuptools python-pip
+    yum remove -y sipcalc python-setuptools python-pip
   elif [ "$OS_TYPE" == $UBUNTU ]; then
-    apt-get remove -y git flex bison g++ gcc make libboost-all-dev scons libxml2-dev linux-headers-`uname -r` sipcalc automake make python-setuptools python-pip
+    apt-get remove -y make sipcalc python-setuptools python-pip
   fi
-  rm -rf ~/vrouter-build
 }
 
 function verify_vrouter_agent()

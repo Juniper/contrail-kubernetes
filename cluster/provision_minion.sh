@@ -489,9 +489,6 @@ function cleanup()
   elif [ "$OS_TYPE" == $UBUNTU ]; then
     apt-get remove -y libxml2-dev sipcalc python-setuptools python-pip
   fi
-  docker stop $VROUTER_DKMB
-  docker rm $VROUTER_DKMB
-  docker rmi $VROUTER_DKMB_IMG
 }
 
 function verify_vrouter_agent()

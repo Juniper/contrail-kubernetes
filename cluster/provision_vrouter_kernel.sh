@@ -254,9 +254,15 @@ function check_kmod()
 
 function cleanup()
 {
-  docker stop $VROUTER_DKMB
-  docker rm $VROUTER_DKMB
-  docker rmi $VROUTER_DKMB_IMG
+  #docker stop $VROUTER_DKMB
+  #docker rm $VROUTER_DKMB
+  #docker rmi $VROUTER_DKMB_IMG
+  if [ "$OS_TYPE" == $REDHAT ]; then
+    yum remove -y  git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r`
+  elif [ "$OS_TYPE" == $UBUNTU ]; then
+    apt-get remove -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r`
+  fi
+  rm -rf ~/vrouter-build
 }
 
 function main()
@@ -268,7 +274,7 @@ function main()
    build_vrouter
    modprobe_vrouter
    check_kmod
-   #cleanup
+   cleanup
 }
 
 main
