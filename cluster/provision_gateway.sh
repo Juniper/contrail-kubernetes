@@ -616,7 +616,7 @@ function main()
    add_static_route
    rpf_disable
    cleanup
-   pmtu_discovery
+   #pmtu_discovery
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent and gateway is done."
    touch "$runok"
 }
