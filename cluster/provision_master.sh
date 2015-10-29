@@ -165,7 +165,7 @@ function setup_contrail_manifest_files() {
     echo >> /etc/kubernetes/network.conf
     echo "[opencontrail]" >> /etc/kubernetes/network.conf
     echo "public-ip-range = $OPENCONTRAIL_PUBLIC_SUBNET" >> /etc/kubernetes/network.conf
-    echo "private-ip-range = 10.10.0.0/16" >> /etc/kubernetes/network.conf
+    echo "private-ip-range = $OPENCONTRAIL_PRIVATE_SUBNET" >> /etc/kubernetes/network.conf
     echo "cluster-service  = kube-system/default" >> /etc/kubernetes/network.conf
 
     cmd1='wget -qO - https://raw.githubusercontent.com/juniper/contrail-kubernetes/'
