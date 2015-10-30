@@ -652,7 +652,7 @@ function main()
       fi
    fi
    cleanup
-   #pmtu_discovery
+   pmtu_discovery
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
    touch "$runok"
 }
