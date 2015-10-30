@@ -12,7 +12,8 @@ set -x
 readonly PROGNAME=$(basename "$0")
 
 runok="/etc/contrail/vrouter_kmod.ok"
-ocver=$OPENCONTRAIL_TAG
+#ocver=$OPENCONTRAIL_TAG
+ocver=9737c778e7d56f271d1f3480861b39e8a193c91b
 VROUTER="vrouter"
 VROUTER_DKMB_IMG=""
 VROUTER_DKMB="vrouter-dkmb"
@@ -156,37 +157,24 @@ function prereq_vrouter()
 function prep_to_install()
 {
   if [ "$OS_TYPE" == $REDHAT ]; then
-    #docdo "yum update"
-    yum update
-    #docdo "yum install -y git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r`"
-    yum install -y git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r`
+    docdo "yum update"
+    docdo "yum install -y git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r`"
   elif [ "$OS_TYPE" == $UBUNTU ]; then
-    #docdo "apt-get update"
-    apt-get update
+    docdo "apt-get update"
     # in case of an interrupt during execution of apt-get
-    #docdo "dpkg --configure -a"
-    dpkg --configure -a
-    #docdo "apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r`"
-    apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r`
+    docdo "dpkg --configure -a"
+    docdo "apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r`"
   fi
 }
 
 function build_vrouter()
 {
-  #docdo "rm -rf ~/vrouter-build"
-  #docdo "mkdir -p ~/vrouter-build/tools"
-  #docdo "cd ~/vrouter-build && (git clone -b $ocver https://github.com/Juniper/contrail-vrouter vrouter)"
-  #docdo "cd ~/vrouter-build/tools && (git clone https://github.com/Juniper/contrail-build build)"
-  #docdo "cd ~/vrouter-build/tools && (git clone -b $ocver https://github.com/Juniper/contrail-sandesh sandesh)"
-  #docdo "cp ~/vrouter-build/tools/build/SConstruct ~/vrouter-build"
-  #docdo "cd ~/vrouter-build && USER=opencontrail scons --optimization=production vrouter 2>&1"
-  rm -rf ~/vrouter-build
-  mkdir -p ~/vrouter-build/tools
-  cd ~/vrouter-build && (git clone -b $ocver https://github.com/Juniper/contrail-vrouter vrouter)
-  cd ~/vrouter-build/tools && (git clone https://github.com/Juniper/contrail-build build)
-  cd ~/vrouter-build/tools && (git clone -b $ocver https://github.com/Juniper/contrail-sandesh sandesh)
-  cp ~/vrouter-build/tools/build/SConstruct ~/vrouter-build
-  cd ~/vrouter-build && USER=opencontrail scons --optimization=production vrouter 2>&1
+  docdo "mkdir -p ~/vrouter-build/tools"
+  docdo "cd ~/vrouter-build && (git clone -b $ocver https://github.com/Juniper/contrail-vrouter vrouter)"
+  docdo "cd ~/vrouter-build/tools && (git clone https://github.com/Juniper/contrail-build build)"
+  docdo "cd ~/vrouter-build/tools && (git clone -b $ocver https://github.com/Juniper/contrail-sandesh sandesh)"
+  docdo "cp ~/vrouter-build/tools/build/SConstruct ~/vrouter-build"
+  docdo "cd ~/vrouter-build && USER=opencontrail scons --optimization=production vrouter 2>&1"
 }
 
 function modprobe_vrouter()
@@ -202,33 +190,21 @@ function modprobe_vrouter()
   #Fresh install
   if [ "$OS_TYPE" == $REDHAT ]; then
      mkdir -p /lib/modules/`uname -r`/extra/net/vrouter
-     #docdo "mv ~/vrouter-build/vrouter/vrouter.ko /lib/modules/`uname -r`/extra/net/vrouter"
-     mv ~/vrouter-build/vrouter/vrouter.ko /lib/modules/`uname -r`/extra/net/vrouter
+     docdo "mv ~/vrouter-build/vrouter/vrouter.ko /lib/modules/`uname -r`/extra/net/vrouter"
   elif [ "$OS_TYPE" == $UBUNTU ]; then
       mkdir -p /lib/modules/`uname -r`/updates/dkms
-      #docdo "mv ~/vrouter-build/vrouter/vrouter.ko /lib/modules/`uname -r`/updates/dkms"
-      mv ~/vrouter-build/vrouter/vrouter.ko /lib/modules/`uname -r`/updates/dkms
+      docdo "mv ~/vrouter-build/vrouter/vrouter.ko /lib/modules/`uname -r`/updates/dkms"
   fi
-  #docdo "mv ~/vrouter-build/build/production/vrouter/utils/vif /usr/bin"
-  #docdo "mv ~/vrouter-build/build/production/vrouter/utils/rt /usr/bin"
-  #docdo "mv ~/vrouter-build/build/production/vrouter/utils/dropstats /usr/bin"
-  #docdo "mv ~/vrouter-build/build/production/vrouter/utils/flow /usr/bin"
-  #docdo "mv ~/vrouter-build/build/production/vrouter/utils/mirror /usr/bin"
-  #docdo "mv ~/vrouter-build/build/production/vrouter/utils/mpls /usr/bin"
-  #docdo "mv ~/vrouter-build/build/production/vrouter/utils/nh /usr/bin"
-  #docdo "mv ~/vrouter-build/build/production/vrouter/utils/vxlan /usr/bin"
-  #docdo "mv ~/vrouter-build/build/production/vrouter/utils/vrfstats /usr/bin"
-  #docdo "mv ~/vrouter-build/build/production/vrouter/utils/vrouter /usr/bin"
-  mv ~/vrouter-build/build/production/vrouter/utils/vif /usr/bin
-  mv ~/vrouter-build/build/production/vrouter/utils/rt /usr/bin
-  mv ~/vrouter-build/build/production/vrouter/utils/dropstats /usr/bin
-  mv ~/vrouter-build/build/production/vrouter/utils/flow /usr/bin
-  mv ~/vrouter-build/build/production/vrouter/utils/mirror /usr/bin
-  mv ~/vrouter-build/build/production/vrouter/utils/mpls /usr/bin
-  mv ~/vrouter-build/build/production/vrouter/utils/nh /usr/bin
-  mv ~/vrouter-build/build/production/vrouter/utils/vxlan /usr/bin
-  mv ~/vrouter-build/build/production/vrouter/utils/vrfstats /usr/bin
-  mv ~/vrouter-build/build/production/vrouter/utils/vrouter /usr/bin
+  docdo "mv ~/vrouter-build/build/production/vrouter/utils/vif /usr/bin"
+  docdo "mv ~/vrouter-build/build/production/vrouter/utils/rt /usr/bin"
+  docdo "mv ~/vrouter-build/build/production/vrouter/utils/dropstats /usr/bin"
+  docdo "mv ~/vrouter-build/build/production/vrouter/utils/flow /usr/bin"
+  docdo "mv ~/vrouter-build/build/production/vrouter/utils/mirror /usr/bin"
+  docdo "mv ~/vrouter-build/build/production/vrouter/utils/mpls /usr/bin"
+  docdo "mv ~/vrouter-build/build/production/vrouter/utils/nh /usr/bin"
+  docdo "mv ~/vrouter-build/build/production/vrouter/utils/vxlan /usr/bin"
+  docdo "mv ~/vrouter-build/build/production/vrouter/utils/vrfstats /usr/bin"
+  docdo "mv ~/vrouter-build/build/production/vrouter/utils/vrouter /usr/bin"
   cd /lib/modules/`uname -r` && depmod && cd
   `modprobe vrouter`
   vr=$(lsmod | grep vrouter | awk '{print $1}')
@@ -254,22 +230,16 @@ function check_kmod()
 
 function cleanup()
 {
-  #docker stop $VROUTER_DKMB
-  #docker rm $VROUTER_DKMB
-  #docker rmi $VROUTER_DKMB_IMG
-  if [ "$OS_TYPE" == $REDHAT ]; then
-    yum remove -y  git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r`
-  elif [ "$OS_TYPE" == $UBUNTU ]; then
-    apt-get remove -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r`
-  fi
-  rm -rf ~/vrouter-build
+  docker stop $VROUTER_DKMB
+  docker rm $VROUTER_DKMB
+  docker rmi $VROUTER_DKMB_IMG
 }
 
 function main()
 {
    detect_os
    prereq_vrouter
-   #launch_docker
+   launch_docker
    prep_to_install
    build_vrouter
    modprobe_vrouter
