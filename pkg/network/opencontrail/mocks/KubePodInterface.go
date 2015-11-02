@@ -62,8 +62,8 @@ func (m *KubePodInterface) Update(pod *api.Pod) (*api.Pod, error) {
 
 	return r0, r1
 }
-func (m *KubePodInterface) Watch(label labels.Selector, field fields.Selector, resourceVersion string) (watch.Interface, error) {
-	ret := m.Called(label, field, resourceVersion)
+func (m *KubePodInterface) Watch(label labels.Selector, field fields.Selector, opts api.ListOptions) (watch.Interface, error) {
+	ret := m.Called(label, field, opts)
 
 	r0 := ret.Get(0).(watch.Interface)
 	r1 := ret.Error(1)

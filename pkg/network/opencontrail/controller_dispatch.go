@@ -46,7 +46,7 @@ func IgnorePod(pod *api.Pod) bool {
 		return true
 	}
 
-	if value, ok := pod.Annotations[kubetypes.ConfigMirrorAnnotationKey]; ok && value == kubetypes.MirrorType {
+	if _, ok := pod.Annotations[kubetypes.ConfigMirrorAnnotationKey]; ok {
 		return true
 	}
 	return false

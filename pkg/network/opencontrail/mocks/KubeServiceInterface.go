@@ -65,8 +65,8 @@ func (m *KubeServiceInterface) Delete(name string) error {
 
 	return r0
 }
-func (m *KubeServiceInterface) Watch(label labels.Selector, field fields.Selector, resourceVersion string) (watch.Interface, error) {
-	ret := m.Called(label, field, resourceVersion)
+func (m *KubeServiceInterface) Watch(label labels.Selector, field fields.Selector, opts api.ListOptions) (watch.Interface, error) {
+	ret := m.Called(label, field, opts)
 
 	r0 := ret.Get(0).(watch.Interface)
 	r1 := ret.Error(1)
