@@ -170,9 +170,9 @@ function prep_to_install()
 function build_vrouter()
 {
   docdo "mkdir -p ~/vrouter-build/tools"
-  #docdo "cd ~/vrouter-build && (git clone -b $ocver https://github.com/Juniper/contrail-vrouter vrouter)"
-  docdo "cd ~/vrouter-build && (git clone https://github.com/Juniper/contrail-vrouter vrouter)"
-  docdo "cd ~/vrouter-build/vrouter && git checkout -b $ocver $checkout && cd -"
+  docdo "cd ~/vrouter-build && (git clone -b $ocver https://github.com/Juniper/contrail-vrouter vrouter)"
+  #docdo "cd ~/vrouter-build && (git clone https://github.com/Juniper/contrail-vrouter vrouter)"
+  #docdo "cd ~/vrouter-build/vrouter && git checkout -b $ocver $checkout && cd -"
   docdo "cd ~/vrouter-build/tools && (git clone https://github.com/Juniper/contrail-build build)"
   docdo "cd ~/vrouter-build/tools && (git clone -b $ocver https://github.com/Juniper/contrail-sandesh sandesh)"
   docdo "cp ~/vrouter-build/tools/build/SConstruct ~/vrouter-build"
