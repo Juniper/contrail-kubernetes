@@ -13,7 +13,6 @@ readonly PROGNAME=$(basename "$0")
 
 runok="/etc/contrail/vrouter_kmod.ok"
 ocver=$OPENCONTRAIL_TAG
-checkout=9737c778e7d56f271d1f3480861b39e8a193c91b
 VROUTER="vrouter"
 VROUTER_DKMB_IMG=""
 VROUTER_DKMB="vrouter-dkmb"
@@ -171,8 +170,6 @@ function build_vrouter()
 {
   docdo "mkdir -p ~/vrouter-build/tools"
   docdo "cd ~/vrouter-build && (git clone -b $ocver https://github.com/Juniper/contrail-vrouter vrouter)"
-  #docdo "cd ~/vrouter-build && (git clone https://github.com/Juniper/contrail-vrouter vrouter)"
-  #docdo "cd ~/vrouter-build/vrouter && git checkout -b $ocver $checkout && cd -"
   docdo "cd ~/vrouter-build/tools && (git clone https://github.com/Juniper/contrail-build build)"
   docdo "cd ~/vrouter-build/tools && (git clone -b $ocver https://github.com/Juniper/contrail-sandesh sandesh)"
   docdo "cp ~/vrouter-build/tools/build/SConstruct ~/vrouter-build"
