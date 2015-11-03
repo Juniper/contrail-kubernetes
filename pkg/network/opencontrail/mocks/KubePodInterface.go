@@ -6,6 +6,7 @@ import "k8s.io/kubernetes/pkg/api"
 import "k8s.io/kubernetes/pkg/fields"
 import "k8s.io/kubernetes/pkg/labels"
 import "k8s.io/kubernetes/pkg/watch"
+import kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
 
 type KubePodInterface struct {
 	mock.Mock
@@ -87,4 +88,11 @@ func (m *KubePodInterface) UpdateStatus(pod *api.Pod) (*api.Pod, error) {
 	r1 := ret.Error(1)
 
 	return r0, r1
+}
+
+func (m *KubePodInterface) GetLogs(name string, opts *api.PodLogOptions) *kubeclient.Request {
+        ret := m.Called(name,opts)
+
+        r0 := ret.Get(0).(*kubeclient.Request)
+        return r0
 }
