@@ -323,7 +323,7 @@ function vr_agent_conf_image_pull()
   ur="Usable range"
   if [ -f $vrac ]; then
       sed -i 's/# tunnel_type=/tunnel_type=MPLSoUDP/g' $vrac
-      grep -q "server=$OPENCONTRAIL_CONTROLLER_IP" $vrac || sed -i "/CONTROL-NODE/a server=$OPENCONTRAIL_CONTROLLER_IP" $vrac
+      grep -q "server=$OPENCONTRAIL_CONTROLLER_IP" $vrac || sed -i "/CONTROL-NODE]/a server=$OPENCONTRAIL_CONTROLLER_IP" $vrac
       sed -i 's/# collectors=127.0.0.1:8086/collectors='$OPENCONTRAIL_CONTROLLER_IP':8086/g' $vrac
       sed -i 's/# type=kvm/type=docker/g' $vrac
       sed -i 's/# control_network_ip=/control_network_ip='$MINION_OVERLAY_NET_IP'/g' $vrac
@@ -348,7 +348,7 @@ function vr_agent_conf_image_pull()
       fi
       sed -i 's,# gateway=10.1.1.254,gateway='$defgw',g' $vrac
       if isGceVM ; then
-          grep -q 'subnet_hosts_resolvable=0' $vrac || sed -i "/# dhcp_relay_mode=/a subnet_hosts_resolvable=0" $vrac
+         grep -Fxq "subnet_hosts_resolvable=0" $vrac || sed -i '/# dhcp_relay_mode=/a subnet_hosts_resolvable=0' $vrac
       fi
       sed -i 's/# physical_interface=vnet0/physical_interface='$OPENCONTRAIL_VROUTER_INTF'/g' $vrac
       sed -i 's/compute_node_address = 10.204.216.28/# compute_node_address = /g' $vrac
@@ -619,15 +619,16 @@ function pmtu_discovery()
 {
   # This is as per RFC4821
   echo "net.ipv4.tcp_mtu_probing = 1" >> /etc/sysctl.conf
-  sysctl -p
   # making sure to persist it as sysctl has issues
   # in some cases
   echo 1 > /proc/sys/net/ipv4/tcp_mtu_probing
+  sysctl -p
 }
 
 function main()
 {
    persist_hostname
+   pmtu_discovery
    detect_os
    prep_to_install
    generate_rc
@@ -652,7 +653,6 @@ function main()
       fi
    fi
    cleanup
-   pmtu_discovery
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent is done."
    touch "$runok"
 }
