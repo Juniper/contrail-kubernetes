@@ -63,6 +63,7 @@ function isGceVM()
 function install_pkgs()
 {
   # aufs-tools is required for auplink that is used by docker
+  apt-get update
   apt-get install -y aufs-tools libxml2-utils host sipcalc
 }
 
