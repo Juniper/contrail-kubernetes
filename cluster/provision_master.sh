@@ -81,7 +81,7 @@ function prereq_install_contrail()
      docon=$(dpkg -l | grep docker)
   fi
 
-  if [ -z "$docon" ]; then
+  if [ -z "$docon" ] && [ ! -f /usr/bin/docker ]; then
      curl -sSL https://get.docker.com/ | sh
      if [ ! -f /usr/bin/docker ]; then
          if [ "$OS_TYPE" == $REDHAT ]; then
