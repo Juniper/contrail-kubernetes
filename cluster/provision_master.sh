@@ -94,6 +94,20 @@ function prereq_install_contrail()
   fi
 }
 
+# This is to support VM images that
+# dont ahve docker support in the base image
+function configure-cgroup() {
+  echo "=== checking grub config for cgroup ==="
+  cg=$(cat /etc/default/grub  | grep cgroup)
+  if [ -z "$cg" ]; then
+     source /etc/default/grub
+     grubstr='GRUB_CMDLINE_LINUX_DEFAULT="'"$GRUB_CMDLINE_LINUX_DEFAULT cgroup_enable=memory swapaccount=1"'"'
+     sed -i '/GRUB_CMDLINE_LINUX_DEFAULT/d' /etc/default/grub
+     echo $grubstr >> /etc/default/grub
+     reboot
+  fi
+}
+
 function install_pkgs()
 {
   # aufs-tools is required for auplink that is used by docker
@@ -243,6 +257,7 @@ function cleanup()
 # Setup contrail-controller components
 function setup_contrail_master() {
     prereq_install_contrail
+    configure-cgroup
     install_pkgs
     # Pull all contrail images and copy the manifest files
     setup_contrail_manifest_files

@@ -72,6 +72,20 @@ function detect_os()
    fi
 }
 
+# This is to support VM images that
+# dont ahve docker support in the base image
+function configure-cgroup() {
+  echo "=== checking grub config for cgroup ==="
+  cg=$(cat /etc/default/grub  | grep cgroup)
+  if [ -z "$cg" ]; then
+     source /etc/default/grub
+     grubstr='GRUB_CMDLINE_LINUX_DEFAULT="'"$GRUB_CMDLINE_LINUX_DEFAULT cgroup_enable=memory swapaccount=1"'"'
+     sed -i '/GRUB_CMDLINE_LINUX_DEFAULT/d' /etc/default/grub
+     echo $grubstr >> /etc/default/grub
+     reboot
+  fi
+}
+
 function generate_rc()
 {
 flag=false
@@ -598,6 +612,7 @@ function pmtu_discovery()
 function main()
 {
    persist_hostname
+   configure-cgroup
    pmtu_discovery
    detect_os
    prep_to_install

@@ -74,6 +74,21 @@ function detect_os()
    fi
 }
 
+# This is to support VM images that
+# dont ahve docker support in the base image
+function configure-cgroup() {
+  echo "=== checking grub config for cgroup ==="
+  cg=$(cat /etc/default/grub  | grep cgroup)
+  if [ -z "$cg" ]; then
+     source /etc/default/grub
+     grubstr='GRUB_CMDLINE_LINUX_DEFAULT="'"$GRUB_CMDLINE_LINUX_DEFAULT cgroup_enable=memory swapaccount=1"'"'
+     sed -i '/GRUB_CMDLINE_LINUX_DEFAULT/d' /etc/default/grub
+     echo $grubstr >> /etc/default/grub
+     reboot
+  fi
+}
+
+
 function prep_to_install()
 {
   if [ "$OS_TYPE" == $REDHAT ]; then
@@ -141,6 +156,7 @@ function main()
 {
    persist_hostname
    detect_os
+   configure-cgroup
    prep_to_install
    prereq_install_contrail
    setup_opencontrail_kubelet
