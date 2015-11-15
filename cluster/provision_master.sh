@@ -94,19 +94,6 @@ function prereq_install_contrail()
   fi
 }
 
-function remove-docker-artifacts() {
-  if isGceVM ; then
-     echo "== Deleting docker0 =="
-     apt-get -q -y -o install bridge-utils
-
-     # Remove docker artifacts on minion nodes, if present
-     iptables -t nat -F || true
-     ifconfig docker0 down || true
-     brctl delbr docker0 || true
-     echo "== Finished deleting docker0 =="
-  fi
-}
-
 function install_pkgs()
 {
   # aufs-tools is required for auplink that is used by docker
@@ -256,7 +243,6 @@ function cleanup()
 # Setup contrail-controller components
 function setup_contrail_master() {
     prereq_install_contrail
-    remove-docker-artifacts
     install_pkgs
     # Pull all contrail images and copy the manifest files
     setup_contrail_manifest_files

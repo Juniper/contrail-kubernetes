@@ -106,19 +106,6 @@ function prereq_install_contrail()
   fi
 }
 
-function remove-docker-artifacts() {
-  if isGceVM ; then
-     echo "== Deleting docker0 =="
-     apt-get -q -y -o install bridge-utils
-
-     # Remove docker artifacts on minion nodes, if present
-     iptables -t nat -F || true
-     ifconfig docker0 down || true
-     brctl delbr docker0 || true
-     echo "== Finished deleting docker0 =="
-  fi
-}
-
 function setup_opencontrail_kubelet()
 {
   ockub=$(pip freeze | grep kubelet | awk -F= '{print $1}')
@@ -156,7 +143,6 @@ function main()
    detect_os
    prep_to_install
    prereq_install_contrail
-   remove-docker-artifacts
    setup_opencontrail_kubelet
    kube_manifest_setup
    log_info_msg "Provisioning of opencontrail-kubelet-plugin completed."
