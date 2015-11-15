@@ -227,6 +227,20 @@ function check_kmod()
   fi
 }
 
+# This is to support VM images that
+# dont ahve docker support in the base image
+function configure-cgroup() {
+  echo "=== checking grub config for cgroup ==="
+  cg=$(cat /etc/default/grub  | grep cgroup)
+  if [ -z "$cg" ]; then
+     source /etc/default/grub
+     grubstr='GRUB_CMDLINE_LINUX_DEFAULT="'"$GRUB_CMDLINE_LINUX_DEFAULT cgroup_enable=memory swapaccount=1"'"'
+     sed -i '/GRUB_CMDLINE_LINUX_DEFAULT/d' /etc/default/grub
+     echo $grubstr >> /etc/default/grub
+     reboot
+  fi
+}
+
 function cleanup()
 {
   docker stop $VROUTER_DKMB
@@ -237,6 +251,7 @@ function cleanup()
 function main()
 {
    detect_os
+   configure-cgroup
    prereq_vrouter
    launch_docker
    prep_to_install
