@@ -85,6 +85,40 @@ function prep_to_install()
   fi
 }
 
+function prereq_install_contrail()
+{
+  if [ "$OS_TYPE" == $REDHAT ]; then
+     docon=$(rpm -qa | grep docker)
+  elif [ "$OS_TYPE" == $UBUNTU ]; then
+     docon=$(dpkg -l | grep docker)
+  fi
+
+  if [ -z "$docon" ]; then
+     curl -sSL https://get.docker.com/ | sh
+     if [ ! -f /usr/bin/docker ]; then
+         if [ "$OS_TYPE" == $REDHAT ]; then
+            yum update
+         elif [ "$OS_TYPE" == $UBUNTU ]; then
+            apt-get update --fix-missing
+         fi
+         curl -sSL https://get.docker.com/ | sh
+     fi
+  fi
+}
+
+function remove-docker-artifacts() {
+  if isGceVM ; then
+     echo "== Deleting docker0 =="
+     apt-get -q -y -o install bridge-utils
+
+     # Remove docker artifacts on minion nodes, if present
+     iptables -t nat -F || true
+     ifconfig docker0 down || true
+     brctl delbr docker0 || true
+     echo "== Finished deleting docker0 =="
+  fi
+}
+
 function setup_opencontrail_kubelet()
 {
   ockub=$(pip freeze | grep kubelet | awk -F= '{print $1}')
@@ -121,6 +155,8 @@ function main()
    persist_hostname
    detect_os
    prep_to_install
+   prereq_install_contrail
+   remove-docker-artifacts
    setup_opencontrail_kubelet
    kube_manifest_setup
    log_info_msg "Provisioning of opencontrail-kubelet-plugin completed."

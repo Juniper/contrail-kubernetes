@@ -14,6 +14,19 @@ exec 2>&1 # Redirect STDERR to STDOUT
 # contrail-kubernetes setup and provisioning script. For more info, please refer to
 # https://github.com/Juniper/contrail-kubernetes
 
+OS_TYPE="none"
+function detect_os()
+{
+   OS=`uname`
+   if [ "${OS}" = "Linux" ]; then
+      if [ -f /etc/redhat-release ]; then
+         OS_TYPE="redhat"
+      elif [ -f /etc/debian_version ]; then
+         OS_TYPE="ubuntu"
+      fi
+   fi
+}
+
 # Retry a command $RETRY times with $WAIT seconds delay in between
 function retry() {
     set +e
@@ -57,6 +70,40 @@ function isGceVM()
    return 0
   else
    return 1
+  fi
+}
+
+function prereq_install_contrail()
+{
+  if [ "$OS_TYPE" == $REDHAT ]; then
+     docon=$(rpm -qa | grep docker)
+  elif [ "$OS_TYPE" == $UBUNTU ]; then
+     docon=$(dpkg -l | grep docker)
+  fi
+
+  if [ -z "$docon" ]; then
+     curl -sSL https://get.docker.com/ | sh
+     if [ ! -f /usr/bin/docker ]; then
+         if [ "$OS_TYPE" == $REDHAT ]; then
+            yum update
+         elif [ "$OS_TYPE" == $UBUNTU ]; then
+            apt-get update --fix-missing
+         fi
+         curl -sSL https://get.docker.com/ | sh
+     fi
+  fi
+}
+
+function remove-docker-artifacts() {
+  if isGceVM ; then
+     echo "== Deleting docker0 =="
+     apt-get -q -y -o install bridge-utils
+
+     # Remove docker artifacts on minion nodes, if present
+     iptables -t nat -F || true
+     ifconfig docker0 down || true
+     brctl delbr docker0 || true
+     echo "== Finished deleting docker0 =="
   fi
 }
 
@@ -208,6 +255,8 @@ function cleanup()
 
 # Setup contrail-controller components
 function setup_contrail_master() {
+    prereq_install_contrail
+    remove-docker-artifacts
     install_pkgs
     # Pull all contrail images and copy the manifest files
     setup_contrail_manifest_files
