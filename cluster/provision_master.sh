@@ -104,7 +104,7 @@ function configure-cgroup() {
      grubstr='GRUB_CMDLINE_LINUX_DEFAULT="'"$GRUB_CMDLINE_LINUX_DEFAULT cgroup_enable=memory swapaccount=1"'"'
      sed -i '/GRUB_CMDLINE_LINUX_DEFAULT/d' /etc/default/grub
      echo $grubstr >> /etc/default/grub
-     reboot
+     sudo update-grub
   fi
 }
 
