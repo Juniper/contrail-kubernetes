@@ -97,6 +97,7 @@ function prereq_install_contrail()
 # This is to support VM images that
 # dont ahve docker support in the base image
 function configure-cgroup() {
+  set +e
   echo "=== checking grub config for cgroup ==="
   cg=$(cat /etc/default/grub  | grep cgroup)
   if [ -z "$cg" ]; then
@@ -106,6 +107,7 @@ function configure-cgroup() {
      echo $grubstr >> /etc/default/grub
      sudo update-grub
   fi
+  set -e
 }
 
 function install_pkgs()
