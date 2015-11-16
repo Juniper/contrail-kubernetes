@@ -232,11 +232,12 @@ function check_kmod()
 function configure-cgroup() {
   echo "=== checking grub config for cgroup ==="
   cg=$(cat /etc/default/grub  | grep cgroup)
-  if [ -z "$cg" ]; then
+  if [[ -z "$cg" ]]; then
      source /etc/default/grub
      grubstr='GRUB_CMDLINE_LINUX_DEFAULT="'"$GRUB_CMDLINE_LINUX_DEFAULT cgroup_enable=memory swapaccount=1"'"'
      sed -i '/GRUB_CMDLINE_LINUX_DEFAULT/d' /etc/default/grub
      echo $grubstr >> /etc/default/grub
+     sudo update-grub
      reboot
   fi
 }
