@@ -77,9 +77,9 @@ function launch_docker()
      os=$(lsb_release -d | awk '{print tolower($2)}')
      oscode=$(lsb_release -c | awk '{print tolower($2)}')
      rel=$(lsb_release -r | awk '{print $2}')
-     #if [ "$os" == "debian" ] && [ "$rel" == "7.9" ]; then
-     #    rel="wheezy-backports"
-     #fi
+     if [ "$os" == "debian" ] && [ "$rel" == "7.9" ]; then
+         rel="wheezy-backports"
+     fi
   elif [ "$OS_TYPE" == "REDHAT" ]; then
          os=$(cat /etc/redhatrelease | awk '{print tolower($1)}')
          rel=$(cat /etc/redhatrelease | awk '{print $3}')
@@ -114,7 +114,7 @@ function docker_pull()
       fi
       sleep 2
       ((i++))
-      if [ $i -eq 12 ]; then
+      if [ $i -eq 5 ]; then
        if [ -d "/proc/${pullpid}" ]; then
           pkill -TERM -P $pullpid
           cnt=$(ps -ef|grep "docker pull" | grep $img | wc -l)
