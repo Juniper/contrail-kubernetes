@@ -252,6 +252,11 @@ function setup_opencontrail_analytics() {
     master $cmd
 }
 
+drop_analytics_flows()
+{
+  iptables -A OUTPUT -p tcp --dport 8086 -m string --algo bm --string "flowuuid" -j DROP
+}
+
 function cleanup()
 {
    apt-get remove -y sipcalc
@@ -284,6 +289,7 @@ function setup_contrail_master() {
     setup_opencontrail_config
     setup_opencontrail_database
     setup_opencontrail_analytics
+    drop_analytics_flows
     cleanup
     touch "$runok"
 }
