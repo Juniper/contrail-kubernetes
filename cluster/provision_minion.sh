@@ -124,16 +124,16 @@ fi
 
 function prep_to_install()
 {
-  # aufs-tools is required by docker for auplink during unmout
   if [ "$OS_TYPE" == $REDHAT ]; then
     yum update
-    yum install -y  aufs-tools libxml2-devel python-lxml sipcalc wget ethtool bridge-utils curl libxml2-utils \
+    yum install -y  libxml2-devel python-lxml sipcalc wget ethtool bridge-utils curl libxml2-utils \
         host dnsutils tcpdump
   elif [ "$OS_TYPE" == $UBUNTU ]; then
     # in case of an interrupt during execution of apt-get
     apt-get update
-    apt-get install -y aufs-tools libxml2-dev python-lxml sipcalc wget ethtool bridge-utils curl host libxml2-utils \
-            dnsutils tcpdump
+    apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --force-yes libxml2-dev python-lxml sipcalc wget ethtool bridge-utils \
+    curl host libxml2-utils \
+    dnsutils tcpdump
   fi
 }
 

@@ -77,12 +77,13 @@ function detect_os()
 
 function prep_to_install()
 {
+  # aufs-tools is required by docker for auplink during unmout
   if [ "$OS_TYPE" == $REDHAT ]; then
     yum update
-    yum install -y python-pip python-setuptools
+    yum install -y python-pip python-setuptools aufs-tools
   elif [ "$OS_TYPE" == $UBUNTU ]; then
     apt-get update
-    apt-get install -y python-pip python-setuptools aufs-tools
+    apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --force-yes python-pip python-setuptools aufs-tools
   fi
 }
 
