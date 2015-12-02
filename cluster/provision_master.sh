@@ -75,13 +75,14 @@ function isGceVM()
 
 function prereq_install_contrail()
 {
+  doc=$(which docker)
   if [ "$OS_TYPE" == $REDHAT ]; then
      docon=$(rpm -qa | grep docker)
   elif [ "$OS_TYPE" == $UBUNTU ]; then
      docon=$(dpkg -l | grep docker)
   fi
 
-  if [ -z "$docon" ] && [ ! -f /usr/bin/docker ]; then
+  if [ -z "$docon" ] && [ -z "$doc" ]; then
      curl -sSL https://get.docker.com/ | sh
      if [ ! -f /usr/bin/docker ]; then
          if [ "$OS_TYPE" == $REDHAT ]; then
