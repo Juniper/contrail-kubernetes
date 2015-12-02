@@ -231,7 +231,7 @@ function check_kmod()
 # dont ahve docker support in the base image
 function configure-cgroup() {
   echo "=== checking grub config for cgroup ==="
-  cg=$(cat /etc/default/grub  | grep cgroup)
+  cg=$(cat /etc/default/grub  | grep swapaccount)
   if [[ -z "$cg" ]]; then
      source /etc/default/grub
      grubstr='GRUB_CMDLINE_LINUX_DEFAULT="'"$GRUB_CMDLINE_LINUX_DEFAULT cgroup_enable=memory swapaccount=1"'"'
