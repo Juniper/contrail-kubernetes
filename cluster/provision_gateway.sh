@@ -585,10 +585,10 @@ y
      gcloud compute routes create ip-$ocpubgwname --next-hop-instance `hostname` --next-hop-instance-zone $zone --destination-range $OPENCONTRAIL_PUBLIC_SUBNET
      # create and configure vgw with static IP
      # vgw will be the gateway for the public subnet
-     grep -q 'auto vgw' $itf || echo -e "\nauto vgw" >> $itf
-     grep -q 'iface vgw inet static' $itf || echo "iface vgw inet static" >> $itf
-     grep -q "address $ocpubgw" $itf || echo -e "    address $ocpubgw\n    netmask $ocpubmask" >> $itf
-     /etc/init.d/networking restart
+     #grep -q 'auto vgw' $itf || echo -e "\nauto vgw" >> $itf
+     #grep -q 'iface vgw inet static' $itf || echo "iface vgw inet static" >> $itf
+     #grep -q "address $ocpubgw" $itf || echo -e "    address $ocpubgw\n    netmask $ocpubmask" >> $itf
+     #/etc/init.d/networking restart
   fi
   # Since we have external network plumbed by both gke and vrouter there will
   # be 2 routes for the same prefix. It will not have any issue though.
