@@ -26,14 +26,16 @@ import (
 )
 
 type KubeClient struct {
-	PodInterface     *KubePodInterface
-	ServiceInterface *KubeServiceInterface
+	PodInterface       *KubePodInterface
+	ServiceInterface   *KubeServiceInterface
+	NamespaceInterface *KubeNamespaceInterface
 }
 
 func NewKubeClient() *KubeClient {
 	client := new(KubeClient)
 	client.PodInterface = new(KubePodInterface)
 	client.ServiceInterface = new(KubeServiceInterface)
+	client.NamespaceInterface = new(KubeNamespaceInterface)
 	return client
 }
 
@@ -70,7 +72,7 @@ func (c *KubeClient) Secrets(namespace string) kubeclient.SecretsInterface {
 }
 
 func (c *KubeClient) Namespaces() kubeclient.NamespaceInterface {
-	return nil
+	return c.NamespaceInterface
 }
 
 func (c *KubeClient) PersistentVolumes() kubeclient.PersistentVolumeInterface {
