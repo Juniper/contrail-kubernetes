@@ -26,7 +26,6 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"k8s.io/kubernetes/pkg/api"
-	"k8s.io/kubernetes/pkg/labels"
 
 	"github.com/Juniper/contrail-go-api/types"
 	kubetypes "k8s.io/kubernetes/pkg/types"
@@ -114,8 +113,7 @@ func installPods(controller *Controller, podInterface, podStore *mock.Mock, name
 		keys[i] = key
 		podStore.On("GetByKey", key).Return(pod, true, nil)
 		podInterface.On("Update", pod).Return(pod, nil)
-		selector := labels.Set(pod.Labels).AsSelector()
-		podInterface.On("List", selector, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod}}, nil)
+		podInterface.On("List", makeListOptSelector(pod.Labels)).Return(&api.PodList{Items: []api.Pod{*pod}}, nil)
 		controller.AddPod(pod)
 	}
 
@@ -468,11 +466,11 @@ func TestConsistencyConnectionsDelete(t *testing.T) {
 
 	serviceStore.On("List").Return([]interface{}{service1, service2})
 
-	s1Pods := labels.Set(map[string]string{"app": "provider01"}).AsSelector()
-	kube.PodInterface.On("List", s1Pods, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod3}}, nil)
+	s1Pods := makeListOptSelector(map[string]string{"app": "provider01"})
+	kube.PodInterface.On("List", s1Pods).Return(&api.PodList{Items: []api.Pod{*pod3}}, nil)
 
-	s2Pods := labels.Set(map[string]string{"app": "provider02"}).AsSelector()
-	kube.PodInterface.On("List", s2Pods, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod4}}, nil)
+	s2Pods := makeListOptSelector(map[string]string{"app": "provider02"})
+	kube.PodInterface.On("List", s2Pods).Return(&api.PodList{Items: []api.Pod{*pod4}}, nil)
 
 	kube.ServiceInterface.On("Update", service1).Return(service1, nil)
 	kube.ServiceInterface.On("Update", service2).Return(service2, nil)

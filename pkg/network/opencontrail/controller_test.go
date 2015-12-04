@@ -32,7 +32,6 @@ import (
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/client/cache"
 	kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
-	"k8s.io/kubernetes/pkg/labels"
 	kubetypes "k8s.io/kubernetes/pkg/types"
 
 	"github.com/Juniper/contrail-go-api"
@@ -355,7 +354,7 @@ func TestServiceAddWithPod(t *testing.T) {
 	allocator.On("LocateIpAddress", string(pod.ObjectMeta.UID)).Return("10.0.0.1", nil)
 
 	kube.PodInterface.On("Update", pod).Return(pod, nil)
-	kube.PodInterface.On("List", mock.Anything, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod}}, nil)
+	kube.PodInterface.On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod}}, nil)
 
 	shutdown := make(chan struct{})
 	go controller.Run(shutdown)
@@ -515,7 +514,7 @@ func TestServiceDeleteWithPod(t *testing.T) {
 
 	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
 	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
-	kube.PodInterface.On("List", mock.Anything, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1, *pod2}}, nil)
+	kube.PodInterface.On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1, *pod2}}, nil)
 
 	shutdown := make(chan struct{})
 	go controller.Run(shutdown)
@@ -618,7 +617,7 @@ func TestPodUsesService(t *testing.T) {
 
 	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
 	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
-	kube.PodInterface.On("List", mock.Anything, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+	kube.PodInterface.On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
 
 	shutdown := make(chan struct{})
 	go controller.Run(shutdown)
@@ -761,7 +760,7 @@ func TestPodUsesServiceCreatedAfter(t *testing.T) {
 
 	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
 	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
-	kube.PodInterface.On("List", mock.Anything, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+	kube.PodInterface.On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
 
 	shutdown := make(chan struct{})
 	go controller.Run(shutdown)
@@ -966,7 +965,7 @@ func TestServiceWithMultipleUsers(t *testing.T) {
 	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
 	kube.PodInterface.On("Update", pod3).Return(pod3, nil)
 	kube.PodInterface.On("Update", pod4).Return(pod4, nil)
-	kube.PodInterface.On("List", mock.Anything, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+	kube.PodInterface.On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
 
 	shutdown := make(chan struct{})
 	go controller.Run(shutdown)
@@ -1091,7 +1090,7 @@ func TestServiceWithMultipleBackends(t *testing.T) {
 
 	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
 	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
-	kube.PodInterface.On("List", mock.Anything, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+	kube.PodInterface.On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
 	store.On("List").Return([]interface{}{service})
 
 	shutdown := make(chan struct{})
@@ -1219,7 +1218,7 @@ func TestServiceWithLoadBalancer(t *testing.T) {
 
 	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
 	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
-	kube.PodInterface.On("List", mock.Anything, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+	kube.PodInterface.On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
 	kube.ServiceInterface.On("Update", service).Return(service, nil)
 	store.On("List").Return([]interface{}{service})
 
@@ -1347,10 +1346,11 @@ func TestServiceUpdateSelector(t *testing.T) {
 	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
 	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
 	kube.PodInterface.On("Update", pod3).Return(pod3, nil)
-	selectRed := labels.Set(map[string]string{"name": "red"}).AsSelector()
-	selectBlue := labels.Set(map[string]string{"name": "blue"}).AsSelector()
-	kube.PodInterface.On("List", selectRed, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
-	kube.PodInterface.On("List", selectBlue, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod2}}, nil)
+
+	selectRed := makeListOptSelector(map[string]string{"name": "red"})
+	selectBlue := makeListOptSelector(map[string]string{"name": "blue"})
+	kube.PodInterface.On("List", selectRed).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+	kube.PodInterface.On("List", selectBlue).Return(&api.PodList{Items: []api.Pod{*pod2}}, nil)
 	kube.ServiceInterface.On("Update", service).Return(service, nil)
 
 	shutdown := make(chan struct{})
@@ -1487,8 +1487,8 @@ func TestServiceUpdateLabel(t *testing.T) {
 	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
 	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
 	kube.PodInterface.On("Update", pod3).Return(pod3, nil)
-	selectServer := labels.Set(map[string]string{"name": "server"}).AsSelector()
-	kube.PodInterface.On("List", selectServer, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+	selectServer := makeListOptSelector(map[string]string{"name": "server"})
+	kube.PodInterface.On("List", selectServer).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
 	kube.ServiceInterface.On("Update", service).Return(service, nil)
 
 	shutdown := make(chan struct{})
@@ -1633,8 +1633,8 @@ func TestServiceUpdatePublicIp(t *testing.T) {
 	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
 	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
 	kube.PodInterface.On("Update", pod3).Return(pod3, nil)
-	selectPods := labels.Set(map[string]string{"name": "service"}).AsSelector()
-	kube.PodInterface.On("List", selectPods, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1, *pod2}}, nil)
+	selectPods := makeListOptSelector(map[string]string{"name": "service"})
+	kube.PodInterface.On("List", selectPods).Return(&api.PodList{Items: []api.Pod{*pod1, *pod2}}, nil)
 	kube.ServiceInterface.On("Update", service).Return(service, nil)
 
 	shutdown := make(chan struct{})
@@ -1782,10 +1782,10 @@ func TestNetworkWithMultipleServices(t *testing.T) {
 	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
 	kube.PodInterface.On("Update", pod3).Return(pod3, nil)
 
-	s1Pods := labels.Set(map[string]string{"app": "service1"}).AsSelector()
-	kube.PodInterface.On("List", s1Pods, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
-	s2Pods := labels.Set(map[string]string{"app": "service2"}).AsSelector()
-	kube.PodInterface.On("List", s2Pods, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod2}}, nil)
+	s1Pods := makeListOptSelector(map[string]string{"app": "service1"})
+	kube.PodInterface.On("List", s1Pods).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+	s2Pods := makeListOptSelector(map[string]string{"app": "service2"})
+	kube.PodInterface.On("List", s2Pods).Return(&api.PodList{Items: []api.Pod{*pod2}}, nil)
 
 	kube.ServiceInterface.On("Update", service1).Return(service1, nil)
 	kube.ServiceInterface.On("Update", service2).Return(service2, nil)
@@ -1917,8 +1917,8 @@ func TestPodSelectedBy2Services(t *testing.T) {
 
 	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
 
-	selectPods := labels.Set(map[string]string{"name": "svc"}).AsSelector()
-	kube.PodInterface.On("List", selectPods, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+	selectPods := makeListOptSelector(map[string]string{"name": "svc"})
+	kube.PodInterface.On("List", selectPods).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
 
 	kube.ServiceInterface.On("Update", service1).Return(service1, nil)
 	kube.ServiceInterface.On("Update", service2).Return(service2, nil)
@@ -2034,11 +2034,11 @@ func TestPodUsing2Services(t *testing.T) {
 
 	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
 
-	s1Pods := labels.Set(map[string]string{"name": "app1"}).AsSelector()
-	kube.PodInterface.On("List", s1Pods, mock.Anything).Return(&api.PodList{Items: []api.Pod{}}, nil)
+	s1Pods := makeListOptSelector(map[string]string{"name": "app1"})
+	kube.PodInterface.On("List", s1Pods).Return(&api.PodList{Items: []api.Pod{}}, nil)
 
-	s2Pods := labels.Set(map[string]string{"name": "app2"}).AsSelector()
-	kube.PodInterface.On("List", s2Pods, mock.Anything).Return(&api.PodList{Items: []api.Pod{}}, nil)
+	s2Pods := makeListOptSelector(map[string]string{"name": "app2"})
+	kube.PodInterface.On("List", s2Pods).Return(&api.PodList{Items: []api.Pod{}}, nil)
 
 	kube.ServiceInterface.On("Update", service1).Return(service1, nil)
 	kube.ServiceInterface.On("Update", service2).Return(service2, nil)

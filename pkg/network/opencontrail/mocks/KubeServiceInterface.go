@@ -4,9 +4,8 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"k8s.io/kubernetes/pkg/api"
+	"k8s.io/kubernetes/pkg/api/unversioned"
 	kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
-	"k8s.io/kubernetes/pkg/fields"
-	"k8s.io/kubernetes/pkg/labels"
 	"k8s.io/kubernetes/pkg/watch"
 )
 
@@ -14,8 +13,8 @@ type KubeServiceInterface struct {
 	mock.Mock
 }
 
-func (m *KubeServiceInterface) List(selector labels.Selector, fieldSelector fields.Selector) (*api.ServiceList, error) {
-	ret := m.Called(selector, fieldSelector)
+func (m *KubeServiceInterface) List(opts unversioned.ListOptions) (*api.ServiceList, error) {
+	ret := m.Called(opts)
 
 	var r0 *api.ServiceList
 	if ret.Get(0) != nil {
@@ -65,8 +64,8 @@ func (m *KubeServiceInterface) Delete(name string) error {
 
 	return r0
 }
-func (m *KubeServiceInterface) Watch(label labels.Selector, field fields.Selector, opts api.ListOptions) (watch.Interface, error) {
-	ret := m.Called(label, field, opts)
+func (m *KubeServiceInterface) Watch(opts unversioned.ListOptions) (watch.Interface, error) {
+	ret := m.Called(opts)
 
 	r0 := ret.Get(0).(watch.Interface)
 	r1 := ret.Error(1)
@@ -74,8 +73,8 @@ func (m *KubeServiceInterface) Watch(label labels.Selector, field fields.Selecto
 	return r0, r1
 }
 
-func (m *KubeServiceInterface) ProxyGet(name, path string, params map[string]string) kubeclient.ResponseWrapper {
-	ret := m.Called(name, path, params)
+func (m *KubeServiceInterface) ProxyGet(scheme, name, port, path string, params map[string]string) kubeclient.ResponseWrapper {
+	ret := m.Called(scheme, name, port, path, params)
 
 	r0 := ret.Get(0).(kubeclient.ResponseWrapper)
 	return r0

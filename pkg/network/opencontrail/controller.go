@@ -25,9 +25,9 @@ import (
 	"github.com/golang/glog"
 
 	"k8s.io/kubernetes/pkg/api"
+	"k8s.io/kubernetes/pkg/api/unversioned"
 	"k8s.io/kubernetes/pkg/client/cache"
 	kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
-	"k8s.io/kubernetes/pkg/fields"
 	"k8s.io/kubernetes/pkg/labels"
 	"k8s.io/kubernetes/pkg/runtime"
 
@@ -264,6 +264,11 @@ func BuildPodServiceList(pod *api.Pod, config *Config, serviceList *ServiceIdLis
 	}
 }
 
+func makeListOptSelector(labelMap map[string]string) unversioned.ListOptions {
+	return unversioned.ListOptions{
+		LabelSelector: unversioned.LabelSelector{labels.Set(labelMap).AsSelector()}}
+}
+
 func (c *Controller) updatePod(pod *api.Pod) {
 	glog.Infof("Pod %s", pod.Name)
 
@@ -387,8 +392,7 @@ func (c *Controller) addService(service *api.Service) {
 		return
 	}
 
-	pods, err := c.kube.Pods(service.Namespace).List(
-		labels.Set(service.Spec.Selector).AsSelector(), fields.Everything())
+	pods, err := c.kube.Pods(service.Namespace).List(makeListOptSelector(service.Spec.Selector))
 	if err != nil {
 		glog.Errorf("List pods by service %s: %v", service.Name, err)
 		return
@@ -472,8 +476,7 @@ func (c *Controller) updateService(service *api.Service) {
 		return
 	}
 
-	pods, err := c.kube.Pods(service.Namespace).List(
-		labels.Set(service.Spec.Selector).AsSelector(), fields.Everything())
+	pods, err := c.kube.Pods(service.Namespace).List(makeListOptSelector(service.Spec.Selector))
 	if err != nil {
 		glog.Errorf("List pods by service %s: %v", service.Name, err)
 		return
