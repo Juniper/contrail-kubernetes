@@ -2070,3 +2070,45 @@ func TestPodUsing2Services(t *testing.T) {
 	}
 	shutdown <- shutdownMsg{}
 }
+
+// Issue #75
+func TestServiceBeforeNamespace(t *testing.T) {
+	kube := mocks.NewKubeClient()
+
+	client := createTestClient()
+	controller := NewTestController(kube, client, nil, nil)
+
+	service := &api.Service{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "service",
+			Namespace: "newns",
+			Labels: map[string]string{
+				"name": "foo",
+			},
+		},
+		Spec: api.ServiceSpec{
+			Selector: map[string]string{
+				"name": "app1",
+			},
+			ClusterIP: "10.254.42.42",
+			Type:      api.ServiceTypeClusterIP,
+		},
+	}
+
+	ns := &api.Namespace{
+		ObjectMeta: api.ObjectMeta{
+			Name: "newns",
+		},
+	}
+	kube.PodInterface.On("List", mock.Anything, mock.Anything).Return(&api.PodList{Items: []api.Pod{}}, nil)
+	kube.NamespaceInterface.On("Get", ns.Name).Return(ns, nil)
+
+	shutdown := make(chan struct{})
+	go controller.Run(shutdown)
+
+	controller.AddService(service)
+
+	time.Sleep(100 * time.Millisecond)
+	_, err := types.VirtualNetworkByName(client, "default-domain:newns:service-foo")
+	assert.NoError(t, err)
+}
