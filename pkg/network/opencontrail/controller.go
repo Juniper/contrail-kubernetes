@@ -386,6 +386,7 @@ func (c *Controller) updateServicePublicIP(service *api.Service) (*types.Floatin
 // to the backends.
 func (c *Controller) addService(service *api.Service) {
 	glog.Infof("Add Service %s", service.Name)
+	c.ensureNamespace(service.Namespace)
 	serviceName := ServiceName(c.config, service.Labels)
 	err := c.serviceMgr.Create(service.Namespace, serviceName)
 	if err != nil {
