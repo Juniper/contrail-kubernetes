@@ -3,8 +3,7 @@ package mocks
 import "github.com/stretchr/testify/mock"
 
 import "k8s.io/kubernetes/pkg/api"
-import "k8s.io/kubernetes/pkg/fields"
-import "k8s.io/kubernetes/pkg/labels"
+import "k8s.io/kubernetes/pkg/api/unversioned"
 import "k8s.io/kubernetes/pkg/watch"
 import kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
 
@@ -12,8 +11,8 @@ type KubePodInterface struct {
 	mock.Mock
 }
 
-func (m *KubePodInterface) List(label labels.Selector, field fields.Selector) (*api.PodList, error) {
-	ret := m.Called(label, field)
+func (m *KubePodInterface) List(opts unversioned.ListOptions) (*api.PodList, error) {
+	ret := m.Called(opts)
 
 	var r0 *api.PodList
 	if ret.Get(0) != nil {
@@ -63,8 +62,8 @@ func (m *KubePodInterface) Update(pod *api.Pod) (*api.Pod, error) {
 
 	return r0, r1
 }
-func (m *KubePodInterface) Watch(label labels.Selector, field fields.Selector, opts api.ListOptions) (watch.Interface, error) {
-	ret := m.Called(label, field, opts)
+func (m *KubePodInterface) Watch(opts unversioned.ListOptions) (watch.Interface, error) {
+	ret := m.Called(opts)
 
 	r0 := ret.Get(0).(watch.Interface)
 	r1 := ret.Error(1)
@@ -91,8 +90,8 @@ func (m *KubePodInterface) UpdateStatus(pod *api.Pod) (*api.Pod, error) {
 }
 
 func (m *KubePodInterface) GetLogs(name string, opts *api.PodLogOptions) *kubeclient.Request {
-        ret := m.Called(name,opts)
+	ret := m.Called(name, opts)
 
-        r0 := ret.Get(0).(*kubeclient.Request)
-        return r0
+	r0 := ret.Get(0).(*kubeclient.Request)
+	return r0
 }
