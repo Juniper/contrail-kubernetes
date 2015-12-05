@@ -1,4 +1,4 @@
-FROM opencontrail/go-k8s-builder:1.1.0
+FROM opencontrail/go-k8s-builder:1.1.1
 MAINTAINER Pedro Marques <roque@juniper.net>
 RUN mkdir -p src/github.com/Juniper/contrail-kubernetes
 ADD cmd /go/src/github.com/Juniper/contrail-kubernetes/cmd

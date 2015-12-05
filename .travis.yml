@@ -9,7 +9,7 @@ install:
   - wget https://github.com/Juniper/contrail-go-api/releases/download/1.0.0/contrail-go-api-generated-types-r2.20.tar.gz
   - tar -zxvf contrail-go-api-generated-types-r2.20.tar.gz -C ${GOPATH}/src
   - mkdir -p ${GOPATH}/src/k8s.io
-  - (cd ${GOPATH}/src/k8s.io && git clone https://github.com/kubernetes/kubernetes.git -b v1.1.0)
+  - (cd ${GOPATH}/src/k8s.io && git clone https://github.com/kubernetes/kubernetes.git -b v1.1.1)
   - go get code.google.com/p/go-uuid/uuid
   - go get golang.org/x/tools/cmd/cover
   - go get github.com/axw/gocov/gocov
