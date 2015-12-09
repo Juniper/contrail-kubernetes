@@ -6,10 +6,11 @@ set -o pipefail
 LOG_FILE=/var/log/contrail/provision_master.log
 mkdir -p /var/log/contrail
 runok="/etc/contrail/opencontrail_control_prov_run.ok"
-exec 1<&- # Close STDOUT file descriptor
-exec 2<&- # Close STDERR FD
-exec 1<>$LOG_FILE # Open STDOUT as $LOG_FILE file for read and write.
-exec 2>&1 # Redirect STDERR to STDOUT
+#exec 1<&- # Close STDOUT file descriptor
+#exec 2<&- # Close STDERR FD
+#exec 1<>$LOG_FILE # Open STDOUT as $LOG_FILE file for read and write.
+#exec 2>&1 # Redirect STDERR to STDOUT
+exec 2>&1 &> >(tee -a "$LOG_FILE")
 
 # contrail-kubernetes setup and provisioning script. For more info, please refer to
 # https://github.com/Juniper/contrail-kubernetes
@@ -75,6 +76,7 @@ function isGceVM()
 
 function prereq_install_contrail()
 {
+  set +e
   doc=$(which docker)
   if [ "$OS_TYPE" == $REDHAT ]; then
      docon=$(rpm -qa | grep docker)
@@ -93,6 +95,7 @@ function prereq_install_contrail()
          curl -sSL https://get.docker.com/ | sh
      fi
   fi
+  set -e
 }
 
 # This is to support VM images that
