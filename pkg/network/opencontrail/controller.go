@@ -25,7 +25,6 @@ import (
 	"github.com/golang/glog"
 
 	"k8s.io/kubernetes/pkg/api"
-	"k8s.io/kubernetes/pkg/api/unversioned"
 	"k8s.io/kubernetes/pkg/client/cache"
 	kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
 	"k8s.io/kubernetes/pkg/labels"
@@ -264,9 +263,9 @@ func BuildPodServiceList(pod *api.Pod, config *Config, serviceList *ServiceIdLis
 	}
 }
 
-func makeListOptSelector(labelMap map[string]string) unversioned.ListOptions {
-	return unversioned.ListOptions{
-		LabelSelector: unversioned.LabelSelector{labels.Set(labelMap).AsSelector()}}
+func makeListOptSelector(labelMap map[string]string) api.ListOptions {
+	return api.ListOptions{
+		LabelSelector: labels.SelectorFromSet(labels.Set(labelMap))}
 }
 
 func (c *Controller) updatePod(pod *api.Pod) {
