@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"testing"
 
-	"code.google.com/p/go-uuid/uuid"
 	"github.com/golang/glog"
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/Juniper/contrail-go-api"

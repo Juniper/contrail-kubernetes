@@ -91,6 +91,9 @@ func (c *KubeClient) ServerAPIVersions() (*unversioned.APIVersions, error) {
 func (c *KubeClient) ComponentStatuses() kubeclient.ComponentStatusInterface {
 	return nil
 }
+func (c *KubeClient) ConfigMaps(namespace string) kubeclient.ConfigMapsInterface {
+	return nil
+}
 func (c *KubeClient) PodTemplates(namespace string) kubeclient.PodTemplateInterface {
 	return nil
 }
