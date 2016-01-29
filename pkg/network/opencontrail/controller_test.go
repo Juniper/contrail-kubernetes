@@ -139,13 +139,14 @@ func TestPodCreate(t *testing.T) {
 	networkMgr := new(mocks.NetworkManager)
 
 	controller := NewTestController(kube, client, allocator, networkMgr)
+	config := controller.config
 	pod := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
 			Name:      "test",
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "testnet",
+				config.NetworkTag: "testnet",
 			},
 		},
 	}
@@ -186,6 +187,7 @@ func TestPodDelete(t *testing.T) {
 	allocator := new(mocks.AddressAllocator)
 	networkMgr := new(mocks.NetworkManager)
 	controller := NewTestController(nil, client, allocator, networkMgr)
+	config := controller.config
 
 	pod := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -193,7 +195,7 @@ func TestPodDelete(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "testnet",
+				config.NetworkTag: "testnet",
 			},
 		},
 	}
@@ -324,6 +326,7 @@ func TestServiceAddWithPod(t *testing.T) {
 	allocator := new(mocks.AddressAllocator)
 
 	controller := NewTestController(kube, client, allocator, nil)
+	config := controller.config
 
 	pod := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -331,7 +334,7 @@ func TestServiceAddWithPod(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "testpod",
+				config.NetworkTag: "testpod",
 			},
 		},
 	}
@@ -340,12 +343,12 @@ func TestServiceAddWithPod(t *testing.T) {
 			Name:      "s1",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "x1",
+				config.NetworkTag: "x1",
 			},
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"name": "testpod",
+				config.NetworkTag: "testpod",
 			},
 			ClusterIP: "10.254.42.42",
 		},
@@ -398,13 +401,15 @@ func TestPodAddWithService(t *testing.T) {
 	allocator := new(mocks.AddressAllocator)
 
 	controller := NewTestController(kube, client, allocator, nil)
+	config := controller.config
+
 	pod := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
 			Name:      "test",
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "testpod",
+				config.NetworkTag: "testpod",
 			},
 		},
 	}
@@ -413,12 +418,12 @@ func TestPodAddWithService(t *testing.T) {
 			Name:      "s1",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "x1",
+				config.NetworkTag: "x1",
 			},
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"name": "testpod",
+				config.NetworkTag: "testpod",
 			},
 			ClusterIP: "10.254.42.42",
 		},
@@ -467,6 +472,7 @@ func TestServiceDeleteWithPod(t *testing.T) {
 	allocator := new(mocks.AddressAllocator)
 
 	controller := NewTestController(kube, client, allocator, nil)
+	config := controller.config
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -474,7 +480,7 @@ func TestServiceDeleteWithPod(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "testpod",
+				config.NetworkTag: "testpod",
 			},
 		},
 	}
@@ -484,7 +490,7 @@ func TestServiceDeleteWithPod(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "testpod",
+				config.NetworkTag: "testpod",
 			},
 		},
 	}
@@ -494,12 +500,12 @@ func TestServiceDeleteWithPod(t *testing.T) {
 			Name:      "s1",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "x1",
+				config.NetworkTag: "x1",
 			},
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"name": "testpod",
+				config.NetworkTag: "testpod",
 			},
 			ClusterIP: "10.254.42.42",
 		},
@@ -566,6 +572,7 @@ func TestPodUsesService(t *testing.T) {
 	allocator := new(mocks.AddressAllocator)
 
 	controller := NewTestController(kube, client, allocator, nil)
+	config := controller.config
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -573,7 +580,7 @@ func TestPodUsesService(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "testpod",
+				config.NetworkTag: "testpod",
 			},
 		},
 	}
@@ -583,8 +590,8 @@ func TestPodUsesService(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "client",
-				"uses": "x1",
+				config.NetworkTag:       "client",
+				config.NetworkAccessTag: "x1",
 			},
 		},
 	}
@@ -594,12 +601,12 @@ func TestPodUsesService(t *testing.T) {
 			Name:      "s1",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "x1",
+				config.NetworkTag: "x1",
 			},
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"name": "testpod",
+				config.NetworkTag: "testpod",
 			},
 			ClusterIP: "10.254.42.42",
 		},
@@ -710,6 +717,7 @@ func TestPodUsesServiceCreatedAfter(t *testing.T) {
 	allocator := new(mocks.AddressAllocator)
 
 	controller := NewTestController(kube, client, allocator, nil)
+	config := controller.config
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -717,7 +725,7 @@ func TestPodUsesServiceCreatedAfter(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "testpod",
+				config.NetworkTag: "testpod",
 			},
 		},
 	}
@@ -727,8 +735,8 @@ func TestPodUsesServiceCreatedAfter(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "client",
-				"uses": "x1",
+				config.NetworkTag:       "client",
+				config.NetworkAccessTag: "x1",
 			},
 		},
 	}
@@ -738,12 +746,12 @@ func TestPodUsesServiceCreatedAfter(t *testing.T) {
 			Name:      "s1",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "x1",
+				config.NetworkTag: "x1",
 			},
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"name": "testpod",
+				config.NetworkTag: "testpod",
 			},
 			ClusterIP: "10.254.42.42",
 		},
@@ -828,6 +836,7 @@ func TestPodUsesNonExistingService(t *testing.T) {
 	allocator := new(mocks.AddressAllocator)
 
 	controller := NewTestController(kube, client, allocator, nil)
+	config := controller.config
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -835,8 +844,8 @@ func TestPodUsesNonExistingService(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "testpod",
-				"uses": "nonexisting",
+				config.NetworkTag:       "testpod",
+				config.NetworkAccessTag: "nonexisting",
 			},
 		},
 	}
@@ -888,6 +897,7 @@ func TestServiceWithMultipleUsers(t *testing.T) {
 	allocator := new(mocks.AddressAllocator)
 
 	controller := NewTestController(kube, client, allocator, nil)
+	config := controller.config
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -895,7 +905,7 @@ func TestServiceWithMultipleUsers(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "server",
+				config.NetworkTag: "server",
 			},
 		},
 	}
@@ -905,8 +915,8 @@ func TestServiceWithMultipleUsers(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "client1",
-				"uses": "x1",
+				config.NetworkTag:       "client1",
+				config.NetworkAccessTag: "x1",
 			},
 		},
 	}
@@ -916,8 +926,8 @@ func TestServiceWithMultipleUsers(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "client1",
-				"uses": "x1",
+				config.NetworkTag:       "client1",
+				config.NetworkAccessTag: "x1",
 			},
 		},
 	}
@@ -927,8 +937,8 @@ func TestServiceWithMultipleUsers(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "client2",
-				"uses": "x1",
+				config.NetworkTag:       "client2",
+				config.NetworkAccessTag: "x1",
 			},
 		},
 	}
@@ -937,12 +947,12 @@ func TestServiceWithMultipleUsers(t *testing.T) {
 			Name:      "s1",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "x1",
+				config.NetworkTag: "x1",
 			},
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"name": "server",
+				config.NetworkTag: "server",
 			},
 			ClusterIP: "10.254.42.42",
 		},
@@ -1043,6 +1053,7 @@ func TestServiceWithMultipleBackends(t *testing.T) {
 	client.AddInterceptor("instance-ip", &IpInterceptor{})
 
 	controller := NewTestController(kube, client, nil, nil)
+	config := controller.config
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -1050,7 +1061,7 @@ func TestServiceWithMultipleBackends(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "backend",
+				config.NetworkTag: "backend",
 			},
 		},
 	}
@@ -1060,7 +1071,7 @@ func TestServiceWithMultipleBackends(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "backend",
+				config.NetworkTag: "backend",
 			},
 		},
 	}
@@ -1070,12 +1081,12 @@ func TestServiceWithMultipleBackends(t *testing.T) {
 			Name:      "service",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "svc",
+				config.NetworkTag: "svc",
 			},
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"name": "backend",
+				config.NetworkTag: "backend",
 			},
 			ClusterIP: "10.254.42.42",
 		},
@@ -1170,6 +1181,7 @@ func TestServiceWithLoadBalancer(t *testing.T) {
 
 	client := createTestClient()
 	controller := NewTestController(kube, client, nil, nil)
+	config := controller.config
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -1177,7 +1189,7 @@ func TestServiceWithLoadBalancer(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "backend",
+				config.NetworkTag: "backend",
 			},
 		},
 	}
@@ -1187,7 +1199,7 @@ func TestServiceWithLoadBalancer(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "backend",
+				config.NetworkTag: "backend",
 			},
 		},
 	}
@@ -1197,12 +1209,12 @@ func TestServiceWithLoadBalancer(t *testing.T) {
 			Name:      "service",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "svc",
+				config.NetworkTag: "svc",
 			},
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"name": "backend",
+				config.NetworkTag: "backend",
 			},
 			ClusterIP: "10.254.42.42",
 			Type:      api.ServiceTypeLoadBalancer,
@@ -1232,7 +1244,7 @@ func TestServiceWithLoadBalancer(t *testing.T) {
 	controller.AddPod(pod2)
 	time.Sleep(100 * time.Millisecond)
 
-	fqn := strings.Split(controller.config.PublicNetwork, ":")
+	fqn := strings.Split(config.PublicNetwork, ":")
 	fqn = append(fqn, fqn[len(fqn)-1])
 	fqn = append(fqn, fmt.Sprintf("%s_%s", service.Namespace, service.Name))
 	fip, err := types.FloatingIpByName(client, strings.Join(fqn, ":"))
@@ -1287,6 +1299,7 @@ func TestServiceUpdateSelector(t *testing.T) {
 
 	client := createTestClient()
 	controller := NewTestController(kube, client, nil, nil)
+	config := controller.config
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -1294,7 +1307,7 @@ func TestServiceUpdateSelector(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "red",
+				config.NetworkTag: "red",
 			},
 		},
 	}
@@ -1305,7 +1318,7 @@ func TestServiceUpdateSelector(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "blue",
+				config.NetworkTag: "blue",
 			},
 		},
 	}
@@ -1316,8 +1329,8 @@ func TestServiceUpdateSelector(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "client",
-				"uses": "svc",
+				config.NetworkTag:       "client",
+				config.NetworkAccessTag: "svc",
 			},
 		},
 	}
@@ -1327,12 +1340,12 @@ func TestServiceUpdateSelector(t *testing.T) {
 			Name:      "service",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "svc",
+				config.NetworkTag: "svc",
 			},
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"name": "red",
+				config.NetworkTag: "red",
 			},
 			ClusterIP: "10.254.42.42",
 			Type:      api.ServiceTypeLoadBalancer,
@@ -1347,8 +1360,8 @@ func TestServiceUpdateSelector(t *testing.T) {
 	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
 	kube.PodInterface.On("Update", pod3).Return(pod3, nil)
 
-	selectRed := makeListOptSelector(map[string]string{"name": "red"})
-	selectBlue := makeListOptSelector(map[string]string{"name": "blue"})
+	selectRed := makeListOptSelector(map[string]string{config.NetworkTag: "red"})
+	selectBlue := makeListOptSelector(map[string]string{config.NetworkTag: "blue"})
 	kube.PodInterface.On("List", selectRed).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
 	kube.PodInterface.On("List", selectBlue).Return(&api.PodList{Items: []api.Pod{*pod2}}, nil)
 	kube.ServiceInterface.On("Update", service).Return(service, nil)
@@ -1371,7 +1384,7 @@ func TestServiceUpdateSelector(t *testing.T) {
 		assert.Contains(t, vmList, string(pod1.UID))
 	}
 
-	fqn := strings.Split(controller.config.PublicNetwork, ":")
+	fqn := strings.Split(config.PublicNetwork, ":")
 	fqn = append(fqn, fqn[len(fqn)-1])
 	fqn = append(fqn, fmt.Sprintf("%s_%s", service.Namespace, service.Name))
 	publicIp, err := types.FloatingIpByName(client, strings.Join(fqn, ":"))
@@ -1386,7 +1399,7 @@ func TestServiceUpdateSelector(t *testing.T) {
 	nService := new(api.Service)
 	*nService = *service
 	nService.Spec.Selector = map[string]string{
-		"name": "blue",
+		config.NetworkTag: "blue",
 	}
 
 	controller.UpdateService(service, nService)
@@ -1427,6 +1440,7 @@ func TestServiceUpdateLabel(t *testing.T) {
 
 	client := createTestClient()
 	controller := NewTestController(kube, client, nil, nil)
+	config := controller.config
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -1434,7 +1448,7 @@ func TestServiceUpdateLabel(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "server",
+				config.NetworkTag: "server",
 			},
 		},
 	}
@@ -1445,8 +1459,8 @@ func TestServiceUpdateLabel(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "client1",
-				"uses": "red",
+				config.NetworkTag:       "client1",
+				config.NetworkAccessTag: "red",
 			},
 		},
 	}
@@ -1457,8 +1471,8 @@ func TestServiceUpdateLabel(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "client2",
-				"uses": "blue",
+				config.NetworkTag:       "client2",
+				config.NetworkAccessTag: "blue",
 			},
 		},
 	}
@@ -1468,12 +1482,12 @@ func TestServiceUpdateLabel(t *testing.T) {
 			Name:      "service",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "red",
+				config.NetworkTag: "red",
 			},
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"name": "server",
+				config.NetworkTag: "server",
 			},
 			ClusterIP: "10.254.42.42",
 			Type:      api.ServiceTypeLoadBalancer,
@@ -1487,7 +1501,7 @@ func TestServiceUpdateLabel(t *testing.T) {
 	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
 	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
 	kube.PodInterface.On("Update", pod3).Return(pod3, nil)
-	selectServer := makeListOptSelector(map[string]string{"name": "server"})
+	selectServer := makeListOptSelector(map[string]string{config.NetworkTag: "server"})
 	kube.PodInterface.On("List", selectServer).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
 	kube.ServiceInterface.On("Update", service).Return(service, nil)
 
@@ -1524,7 +1538,7 @@ func TestServiceUpdateLabel(t *testing.T) {
 	nService := new(api.Service)
 	*nService = *service
 	nService.Labels = map[string]string{
-		"name": "blue",
+		config.NetworkTag: "blue",
 	}
 	// The service will receive a different PublicIP because this is translated into a service delete operation,
 	// followed by an add.
@@ -1574,6 +1588,7 @@ func TestServiceUpdatePublicIp(t *testing.T) {
 
 	client := createTestClient()
 	controller := NewTestController(kube, client, nil, nil)
+	config := controller.config
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -1581,7 +1596,7 @@ func TestServiceUpdatePublicIp(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "service",
+				config.NetworkTag: "service",
 			},
 		},
 	}
@@ -1592,7 +1607,7 @@ func TestServiceUpdatePublicIp(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "service",
+				config.NetworkTag: "service",
 			},
 		},
 	}
@@ -1603,8 +1618,8 @@ func TestServiceUpdatePublicIp(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "client",
-				"uses": "svc",
+				config.NetworkTag:       "client",
+				config.NetworkAccessTag: "svc",
 			},
 		},
 	}
@@ -1614,12 +1629,12 @@ func TestServiceUpdatePublicIp(t *testing.T) {
 			Name:      "service",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "svc",
+				config.NetworkTag: "svc",
 			},
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"name": "service",
+				config.NetworkTag: "service",
 			},
 			ClusterIP: "10.254.42.42",
 			Type:      api.ServiceTypeLoadBalancer,
@@ -1633,7 +1648,7 @@ func TestServiceUpdatePublicIp(t *testing.T) {
 	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
 	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
 	kube.PodInterface.On("Update", pod3).Return(pod3, nil)
-	selectPods := makeListOptSelector(map[string]string{"name": "service"})
+	selectPods := makeListOptSelector(map[string]string{config.NetworkTag: "service"})
 	kube.PodInterface.On("List", selectPods).Return(&api.PodList{Items: []api.Pod{*pod1, *pod2}}, nil)
 	kube.ServiceInterface.On("Update", service).Return(service, nil)
 
@@ -1646,7 +1661,7 @@ func TestServiceUpdatePublicIp(t *testing.T) {
 	controller.AddService(service)
 	time.Sleep(100 * time.Millisecond)
 
-	fqn := strings.Split(controller.config.PublicNetwork, ":")
+	fqn := strings.Split(config.PublicNetwork, ":")
 	fqn = append(fqn, fqn[len(fqn)-1])
 	fqn = append(fqn, fmt.Sprintf("%s_%s", service.Namespace, service.Name))
 	fip, err := types.FloatingIpByName(client, strings.Join(fqn, ":"))
@@ -1703,6 +1718,7 @@ func TestNetworkWithMultipleServices(t *testing.T) {
 
 	store := new(mocks.Store)
 	controller.SetServiceStore(store)
+	config := controller.config
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -1710,8 +1726,8 @@ func TestNetworkWithMultipleServices(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"app":  "service1",
-				"name": "internal-net",
+				"app":             "service1",
+				config.NetworkTag: "internal-net",
 			},
 		},
 	}
@@ -1722,8 +1738,8 @@ func TestNetworkWithMultipleServices(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"app":  "service2",
-				"name": "internal-net",
+				"app":             "service2",
+				config.NetworkTag: "internal-net",
 			},
 		},
 	}
@@ -1734,8 +1750,8 @@ func TestNetworkWithMultipleServices(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "client",
-				"uses": "common",
+				config.NetworkTag:       "client",
+				config.NetworkAccessTag: "common",
 			},
 		},
 	}
@@ -1745,7 +1761,7 @@ func TestNetworkWithMultipleServices(t *testing.T) {
 			Name:      "service1",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "common",
+				config.NetworkTag: "common",
 			},
 		},
 		Spec: api.ServiceSpec{
@@ -1762,7 +1778,7 @@ func TestNetworkWithMultipleServices(t *testing.T) {
 			Name:      "service2",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "common",
+				config.NetworkTag: "common",
 			},
 		},
 		Spec: api.ServiceSpec{
@@ -1861,6 +1877,7 @@ func TestPodSelectedBy2Services(t *testing.T) {
 
 	client := createTestClient()
 	controller := NewTestController(kube, client, nil, nil)
+	config := controller.config
 
 	store := new(mocks.Store)
 	controller.SetServiceStore(store)
@@ -1872,7 +1889,7 @@ func TestPodSelectedBy2Services(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "svc",
+				config.NetworkTag: "svc",
 			},
 		},
 	}
@@ -1882,12 +1899,12 @@ func TestPodSelectedBy2Services(t *testing.T) {
 			Name:      "service1",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "common",
+				config.NetworkTag: "common",
 			},
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"name": "svc",
+				config.NetworkTag: "svc",
 			},
 			ClusterIP: "10.254.42.42",
 			Type:      api.ServiceTypeClusterIP,
@@ -1899,12 +1916,12 @@ func TestPodSelectedBy2Services(t *testing.T) {
 			Name:      "service2",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "common",
+				config.NetworkTag: "common",
 			},
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"name": "svc",
+				config.NetworkTag: "svc",
 			},
 			ClusterIP: "10.254.42.43",
 			Type:      api.ServiceTypeClusterIP,
@@ -1917,7 +1934,7 @@ func TestPodSelectedBy2Services(t *testing.T) {
 
 	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
 
-	selectPods := makeListOptSelector(map[string]string{"name": "svc"})
+	selectPods := makeListOptSelector(map[string]string{config.NetworkTag: "svc"})
 	kube.PodInterface.On("List", selectPods).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
 
 	kube.ServiceInterface.On("Update", service1).Return(service1, nil)
@@ -1980,6 +1997,7 @@ func TestPodUsing2Services(t *testing.T) {
 
 	store := new(mocks.Store)
 	controller.SetServiceStore(store)
+	config := controller.config
 	store.On("List").Return([]interface{}{})
 
 	pod1 := &api.Pod{
@@ -1988,8 +2006,8 @@ func TestPodUsing2Services(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "private",
-				"uses": "[\"foo\", \"bar\"]",
+				config.NetworkTag:       "private",
+				config.NetworkAccessTag: "[\"foo\", \"bar\"]",
 			},
 		},
 	}
@@ -1999,12 +2017,12 @@ func TestPodUsing2Services(t *testing.T) {
 			Name:      "service1",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "foo",
+				config.NetworkTag: "foo",
 			},
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"name": "app1",
+				config.NetworkTag: "app1",
 			},
 			ClusterIP: "10.254.42.42",
 			Type:      api.ServiceTypeClusterIP,
@@ -2016,12 +2034,12 @@ func TestPodUsing2Services(t *testing.T) {
 			Name:      "service2",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "bar",
+				config.NetworkTag: "bar",
 			},
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"name": "app2",
+				config.NetworkTag: "app2",
 			},
 			ClusterIP: "10.254.42.43",
 			Type:      api.ServiceTypeClusterIP,
@@ -2034,10 +2052,10 @@ func TestPodUsing2Services(t *testing.T) {
 
 	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
 
-	s1Pods := makeListOptSelector(map[string]string{"name": "app1"})
+	s1Pods := makeListOptSelector(map[string]string{config.NetworkTag: "app1"})
 	kube.PodInterface.On("List", s1Pods).Return(&api.PodList{Items: []api.Pod{}}, nil)
 
-	s2Pods := makeListOptSelector(map[string]string{"name": "app2"})
+	s2Pods := makeListOptSelector(map[string]string{config.NetworkTag: "app2"})
 	kube.PodInterface.On("List", s2Pods).Return(&api.PodList{Items: []api.Pod{}}, nil)
 
 	kube.ServiceInterface.On("Update", service1).Return(service1, nil)
@@ -2077,18 +2095,19 @@ func TestServiceBeforeNamespace(t *testing.T) {
 
 	client := createTestClient()
 	controller := NewTestController(kube, client, nil, nil)
+	config := controller.config
 
 	service := &api.Service{
 		ObjectMeta: api.ObjectMeta{
 			Name:      "service",
 			Namespace: "newns",
 			Labels: map[string]string{
-				"name": "foo",
+				config.NetworkTag: "foo",
 			},
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"name": "app1",
+				config.NetworkTag: "app1",
 			},
 			ClusterIP: "10.254.42.42",
 			Type:      api.ServiceTypeClusterIP,
