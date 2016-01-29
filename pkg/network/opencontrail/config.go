@@ -66,8 +66,8 @@ func NewConfig() *Config {
 		PublicNetwork:    "default-domain:default-project:Public",
 		PrivateSubnet:    "10.0.0.0/16",
 		ServiceSubnet:    DefaultServiceSubnet,
-		NetworkTag:       "name",
-		NetworkAccessTag: "uses",
+		NetworkTag:       "opencontrail.org/name",
+		NetworkAccessTag: "opencontrail.org/services",
 	}
 	return config
 }

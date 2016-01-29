@@ -246,6 +246,7 @@ func TestConsistencyServiceIp(t *testing.T) {
 
 	kube := mocks.NewKubeClient()
 	controller := NewTestController(kube, client, nil, nil)
+	config := controller.config
 
 	netnsProject := new(types.Project)
 	netnsProject.SetFQName("domain", []string{"default-domain", "testns"})
@@ -258,7 +259,7 @@ func TestConsistencyServiceIp(t *testing.T) {
 			Name:      "s1",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "services",
+				config.NetworkTag: "services",
 			},
 		},
 		Spec: api.ServiceSpec{
@@ -274,7 +275,7 @@ func TestConsistencyServiceIp(t *testing.T) {
 			Name:      "s2",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "services",
+				config.NetworkTag: "services",
 			},
 		},
 		Spec: api.ServiceSpec{
@@ -290,7 +291,7 @@ func TestConsistencyServiceIp(t *testing.T) {
 			Name:      "s3",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "services",
+				config.NetworkTag: "services",
 			},
 		},
 		Spec: api.ServiceSpec{
@@ -357,6 +358,7 @@ func TestConsistencyConnectionsDelete(t *testing.T) {
 	kube := mocks.NewKubeClient()
 	client := createTestClient()
 	controller := NewTestController(kube, client, nil, nil)
+	config := controller.config
 	controller.SetPodStore(podStore)
 	controller.SetServiceStore(serviceStore)
 
@@ -371,8 +373,8 @@ func TestConsistencyConnectionsDelete(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "private",
-				"uses": "tagA",
+				config.NetworkTag:       "private",
+				config.NetworkAccessTag: "tagA",
 			},
 		},
 	}
@@ -383,8 +385,8 @@ func TestConsistencyConnectionsDelete(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "private",
-				"uses": "tagB",
+				config.NetworkTag:       "private",
+				config.NetworkAccessTag: "tagB",
 			},
 		},
 	}
@@ -396,8 +398,8 @@ func TestConsistencyConnectionsDelete(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "svc-backend",
-				"app":  "provider01",
+				config.NetworkTag: "svc-backend",
+				"app":             "provider01",
 			},
 		},
 	}
@@ -408,8 +410,8 @@ func TestConsistencyConnectionsDelete(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
-				"name": "svc-backend",
-				"app":  "provider02",
+				config.NetworkTag: "svc-backend",
+				"app":             "provider02",
 			},
 		},
 	}
@@ -420,7 +422,7 @@ func TestConsistencyConnectionsDelete(t *testing.T) {
 			Name:      "service1",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "tagA",
+				config.NetworkTag: "tagA",
 			},
 		},
 		Spec: api.ServiceSpec{
@@ -437,7 +439,7 @@ func TestConsistencyConnectionsDelete(t *testing.T) {
 			Name:      "service1",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "tagB",
+				config.NetworkTag: "tagB",
 			},
 		},
 		Spec: api.ServiceSpec{
@@ -497,7 +499,7 @@ func TestConsistencyConnectionsDelete(t *testing.T) {
 	assert.False(t, checker.Check())
 	assert.True(t, checker.Check())
 
-	controller.config.ClusterServices = []string{"kube-system/dns"}
+	config.ClusterServices = []string{"kube-system/dns"}
 
 	assert.False(t, checker.Check())
 	assert.False(t, checker.Check())

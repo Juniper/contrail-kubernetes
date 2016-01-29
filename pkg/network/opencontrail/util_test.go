@@ -30,8 +30,8 @@ func TestServiceIdList(t *testing.T) {
 			Name:      "test-xz1",
 			Namespace: "testns",
 			Labels: map[string]string{
-				"name": "testpod",
-				"uses": "service1",
+				config.NetworkTag:       "testpod",
+				config.NetworkAccessTag: "service1",
 			},
 		},
 	}
