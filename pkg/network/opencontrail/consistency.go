@@ -144,7 +144,7 @@ func (c *consistencyChecker) vmiCompare(pod *api.Pod, interfaceId string) bool {
 		for _, service := range services {
 			serviceName := ServiceName(c.config, service.Labels)
 			serviceNet := fmt.Sprintf(ServiceNetworkFmt, serviceName)
-			fqn := []string{DefaultDomain, service.Namespace, serviceNet, serviceNet, service.Name}
+			fqn := []string{c.config.DefaultDomain, service.Namespace, serviceNet, serviceNet, service.Name}
 			if service.Spec.ClusterIP != "" {
 				serviceCacheNames = append(serviceCacheNames, strings.Join(fqn, ":"))
 			}
@@ -193,7 +193,7 @@ func filterPods(store cache.StoreToPodLister, podList []string) []string {
 
 func (c *consistencyChecker) collectNetworkConnections(pod *api.Pod, connections networkConnectionMap) {
 	name := PodNetworkName(pod, c.config)
-	fqn := []string{DefaultDomain, pod.Namespace, name}
+	fqn := []string{c.config.DefaultDomain, pod.Namespace, name}
 	network := strings.Join(fqn, ":")
 	serviceList, ok := connections[network]
 	if !ok {
@@ -304,7 +304,7 @@ func (c *consistencyChecker) addServiceNetworks(kubeNetworks *sort.StringSlice) 
 		return
 	}
 	for _, svc := range serviceList.Items {
-		fqn := []string{DefaultDomain, svc.Namespace, fmt.Sprintf(ServiceNetworkFmt, ServiceName(c.config, svc.Labels))}
+		fqn := []string{c.config.DefaultDomain, svc.Namespace, fmt.Sprintf(ServiceNetworkFmt, ServiceName(c.config, svc.Labels))}
 		networkName := strings.Join(fqn, ":")
 		if _, ok := serviceNetworkMap[networkName]; !ok {
 			serviceNetworkMap[networkName] = true
