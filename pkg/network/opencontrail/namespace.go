@@ -27,16 +27,18 @@ import (
 
 type NamespaceManager struct {
 	client contrail.ApiClient
+	config *Config
 }
 
-func NewNamespaceManager(client contrail.ApiClient) *NamespaceManager {
+func NewNamespaceManager(client contrail.ApiClient, config *Config) *NamespaceManager {
 	manager := new(NamespaceManager)
 	manager.client = client
+	manager.config = config
 	return manager
 }
 
 func (m *NamespaceManager) LookupNamespace(name string) *types.Project {
-	fqn := []string{DefaultDomain, name}
+	fqn := []string{m.config.DefaultDomain, name}
 
 	obj, err := m.client.FindByName("project", strings.Join(fqn, ":"))
 	if err != nil {
@@ -46,7 +48,7 @@ func (m *NamespaceManager) LookupNamespace(name string) *types.Project {
 }
 
 func (m *NamespaceManager) LocateNamespace(name, uid string) *types.Project {
-	fqn := []string{DefaultDomain, name}
+	fqn := []string{m.config.DefaultDomain, name}
 
 	obj, err := m.client.FindByName("project", strings.Join(fqn, ":"))
 	if err == nil {
@@ -63,7 +65,7 @@ func (m *NamespaceManager) LocateNamespace(name, uid string) *types.Project {
 }
 
 func (m *NamespaceManager) DeleteNamespace(name string) error {
-	fqn := []string{DefaultDomain, name}
+	fqn := []string{m.config.DefaultDomain, name}
 
 	obj, err := m.client.FindByName("project", strings.Join(fqn, ":"))
 	if err != nil {

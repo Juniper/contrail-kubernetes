@@ -71,14 +71,14 @@ func NewTestController(kube kubeclient.Interface, client contrail.ApiClient, all
 	} else {
 		controller.allocator = allocator
 	}
-	controller.instanceMgr = NewInstanceManager(client, controller.allocator)
+	controller.instanceMgr = NewInstanceManager(client, controller.config, controller.allocator)
 	if networkMgr == nil {
 		controller.networkMgr = NewNetworkManager(client, controller.config)
 	} else {
 		controller.networkMgr = networkMgr
 	}
 	controller.serviceMgr = NewServiceManager(client, controller.config, controller.networkMgr)
-	controller.namespaceMgr = NewNamespaceManager(client)
+	controller.namespaceMgr = NewNamespaceManager(client, controller.config)
 	return controller
 }
 
@@ -292,7 +292,7 @@ func TestNamespaceDelete(t *testing.T) {
 	}
 
 	project := new(types.Project)
-	project.SetFQName("domain", []string{DefaultDomain, "netns"})
+	project.SetFQName("domain", []string{controller.config.DefaultDomain, "netns"})
 	project.SetUuid(string(namespace.ObjectMeta.UID))
 	client.Create(project)
 
@@ -2130,4 +2130,78 @@ func TestServiceBeforeNamespace(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	_, err := types.VirtualNetworkByName(client, "default-domain:newns:service-foo")
 	assert.NoError(t, err)
+}
+
+func TestDomainVariable(t *testing.T) {
+	kube := mocks.NewKubeClient()
+
+	client := createTestClient()
+
+	controller := NewTestController(kube, client, nil, nil)
+
+	controller.config.DefaultDomain = "test-domain"
+
+	pod1 := &api.Pod{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "test-xz1",
+			Namespace: "testns",
+			UID:       kubetypes.UID(uuid.New()),
+			Labels: map[string]string{
+				"name": "testpod",
+			},
+		},
+	}
+	pod2 := &api.Pod{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "test-xz2",
+			Namespace: "testns",
+			UID:       kubetypes.UID(uuid.New()),
+			Labels: map[string]string{
+				"name": "client",
+				"uses": "x1",
+			},
+		},
+	}
+
+	service := &api.Service{
+		ObjectMeta: api.ObjectMeta{
+			Name:      "s1",
+			Namespace: "testns",
+			Labels: map[string]string{
+				"name": "x1",
+			},
+		},
+		Spec: api.ServiceSpec{
+			Selector: map[string]string{
+				"name": "testpod",
+			},
+			ClusterIP: "10.254.42.42",
+		},
+	}
+
+	glog.Infof("Domain name is %s", controller.config.DefaultDomain)
+	netnsProject := new(types.Project)
+	netnsProject.SetFQName("", []string{controller.config.DefaultDomain, "testns"})
+	client.Create(netnsProject)
+
+	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
+	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
+	kube.PodInterface.On("List", mock.Anything, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+
+	shutdown := make(chan struct{})
+	go controller.Run(shutdown)
+
+	controller.AddPod(pod1)
+	controller.AddService(service)
+	time.Sleep(100 * time.Millisecond)
+
+	controller.DeleteService(service)
+	controller.DeletePod(pod1)
+	controller.DeletePod(pod2)
+	time.Sleep(100 * time.Millisecond)
+
+	type shutdownMsg struct {
+	}
+	shutdown <- shutdownMsg{}
+
 }

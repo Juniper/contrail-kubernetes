@@ -72,10 +72,10 @@ func (c *Controller) Init(global *network.Config, reader io.Reader) error {
 	client := contrail.NewClient(c.config.ApiAddress, c.config.ApiPort)
 	c.client = client
 	c.allocator = NewAddressAllocator(client, c.config)
-	c.instanceMgr = NewInstanceManager(client, c.allocator)
+	c.instanceMgr = NewInstanceManager(client, c.config, c.allocator)
 	c.networkMgr = NewNetworkManager(client, c.config)
 	c.serviceMgr = NewServiceManager(client, c.config, c.networkMgr)
-	c.namespaceMgr = NewNamespaceManager(client)
+	c.namespaceMgr = NewNamespaceManager(client, c.config)
 	c.consistencyPeriod = time.Duration(1) * time.Minute
 
 	return nil

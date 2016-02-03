@@ -209,7 +209,7 @@ func (m *ServiceManagerImpl) IsEmpty(tenant, serviceName string) (bool, []string
 func (m *ServiceManagerImpl) locatePolicy(tenant, serviceName string) (*types.NetworkPolicy, error) {
 	var policy *types.NetworkPolicy = nil
 
-	fqn := []string{DefaultDomain, tenant, serviceName}
+	fqn := []string{m.config.DefaultDomain, tenant, serviceName}
 	obj, err := m.client.FindByName("network-policy", strings.Join(fqn, ":"))
 	if err != nil {
 		policy = new(types.NetworkPolicy)
@@ -268,7 +268,7 @@ func (m *ServiceManagerImpl) Create(tenant, serviceName string) error {
 }
 
 func (m *ServiceManagerImpl) Delete(tenant, serviceName string) error {
-	fqn := []string{DefaultDomain, tenant, serviceName}
+	fqn := []string{m.config.DefaultDomain, tenant, serviceName}
 
 	// Delete network
 	networkName := fmt.Sprintf(ServiceNetworkFmt, serviceName)
@@ -289,7 +289,7 @@ func (m *ServiceManagerImpl) Delete(tenant, serviceName string) error {
 }
 
 func (m *ServiceManagerImpl) releasePolicyIfEmpty(tenant, serviceName string) (*types.NetworkPolicy, error) {
-	fqn := []string{DefaultDomain, tenant, serviceName}
+	fqn := []string{m.config.DefaultDomain, tenant, serviceName}
 	policy, err := types.NetworkPolicyByName(m.client, strings.Join(fqn, ":"))
 	if err != nil {
 		return nil, nil
@@ -311,8 +311,8 @@ func (m *ServiceManagerImpl) releasePolicyIfEmpty(tenant, serviceName string) (*
 func (m *ServiceManagerImpl) Disconnect(tenant, serviceName, netName string) error {
 	policy, err := m.releasePolicyIfEmpty(tenant, serviceName)
 	if policy != nil {
-		netFQN := []string{DefaultDomain, tenant, netName}
-		serviceFQN := []string{DefaultDomain, tenant, fmt.Sprintf(ServiceNetworkFmt, serviceName)}
+		netFQN := []string{m.config.DefaultDomain, tenant, netName}
+		serviceFQN := []string{m.config.DefaultDomain, tenant, fmt.Sprintf(ServiceNetworkFmt, serviceName)}
 		err = m.deletePolicyRule(policy, strings.Join(netFQN, ":"), strings.Join(serviceFQN, ":"))
 		return err
 	}
