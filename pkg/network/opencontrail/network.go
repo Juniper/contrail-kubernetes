@@ -165,7 +165,7 @@ func (m *NetworkManagerImpl) initializePublicNetwork() {
 }
 
 func (m *NetworkManagerImpl) LookupNetwork(projectName, networkName string) (*types.VirtualNetwork, error) {
-	fqn := []string{DefaultDomain, projectName, networkName}
+	fqn := []string{m.config.DefaultDomain, projectName, networkName}
 	obj, err := m.client.FindByName("virtual-network", strings.Join(fqn, ":"))
 	if err != nil {
 		glog.V(3).Infof("GET virtual-network %s: %v", networkName, err)
@@ -175,7 +175,7 @@ func (m *NetworkManagerImpl) LookupNetwork(projectName, networkName string) (*ty
 }
 
 func (m *NetworkManagerImpl) LocateNetwork(project, name, subnet string) (*types.VirtualNetwork, error) {
-	fqn := []string{DefaultDomain, project, name}
+	fqn := []string{m.config.DefaultDomain, project, name}
 	fqname := strings.Join(fqn, ":")
 
 	obj, err := m.client.FindByName("virtual-network", fqname)
@@ -183,7 +183,7 @@ func (m *NetworkManagerImpl) LocateNetwork(project, name, subnet string) (*types
 		return obj.(*types.VirtualNetwork), nil
 	}
 
-	projectId, err := m.client.UuidByName("project", fmt.Sprintf("%s:%s", DefaultDomain, project))
+	projectId, err := m.client.UuidByName("project", fmt.Sprintf("%s:%s", m.config.DefaultDomain, project))
 	if err != nil {
 		glog.Infof("GET %s: %v", project, err)
 		return nil, err
@@ -204,7 +204,7 @@ func (m *NetworkManagerImpl) LocateNetwork(project, name, subnet string) (*types
 }
 
 func (m *NetworkManagerImpl) ReleaseNetworkIfEmpty(namespace, name string) (bool, error) {
-	fqn := []string{DefaultDomain, namespace, name}
+	fqn := []string{m.config.DefaultDomain, namespace, name}
 	obj, err := m.client.FindByName("virtual-network", strings.Join(fqn, ":"))
 	if err != nil {
 		glog.Errorf("Get virtual-network %s: %v", name, err)

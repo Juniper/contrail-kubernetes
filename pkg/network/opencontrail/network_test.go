@@ -54,7 +54,7 @@ func TestNetworkLocate(t *testing.T) {
 
 	project := new(types.Project)
 	project.SetUuid(uuid.New())
-	project.SetFQName("", []string{DefaultDomain, "p1"})
+	project.SetFQName("", []string{config.DefaultDomain, "p1"})
 	client.Create(project)
 
 	network, err := netman.LocateNetwork("p1", "n1", "10.0.1.0/24")

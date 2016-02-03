@@ -30,11 +30,13 @@ import (
 )
 
 const (
-	DefaultDomain        = "default-domain"
 	DefaultServiceSubnet = "10.254.0.0/16"
 )
 
 type Config struct {
+	// OpenContrail Default Domain
+	DefaultDomain string `gcfg:"default-domain"`
+
 	// OpenContrail api server address:port
 	ApiAddress string `gcfg:"api-server"`
 	ApiPort    int    `gcfg:"api-port"`
@@ -60,6 +62,7 @@ type Config struct {
 
 func NewConfig() *Config {
 	config := &Config{
+		DefaultDomain:    "default-domain",
 		ApiAddress:       "localhost",
 		ApiPort:          8082,
 		DefaultProject:   "default-domain:default-project",
