@@ -8,8 +8,8 @@ type NetworkManager struct {
 	mock.Mock
 }
 
-func (m *NetworkManager) LocateFloatingIpPool(network *types.VirtualNetwork, subnet string) (*types.FloatingIpPool, error) {
-	ret := m.Called(network, subnet)
+func (m *NetworkManager) LocateFloatingIpPool(network *types.VirtualNetwork) (*types.FloatingIpPool, error) {
+	ret := m.Called(network)
 
 	var r0 *types.FloatingIpPool
 	if ret.Get(0) != nil {
