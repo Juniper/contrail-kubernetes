@@ -34,26 +34,30 @@ type ConsistencyChecker interface {
 	Check() bool
 }
 
-type networkConnectionMap map[string]ServiceIdList
+type policySet map[string]bool
+type networkConnectionMap map[string]policySet
+type networkServiceMap map[string]ServiceIdList
 
 type consistencyChecker struct {
-	client       contrail.ApiClient
-	config       *Config
-	podStore     cache.StoreToPodLister
-	serviceStore cache.StoreToServiceLister
-	serviceMgr   ServiceManager
-	gcPolicyMap  networkConnectionMap
+	client             contrail.ApiClient
+	config             *Config
+	podStore           cache.StoreToPodLister
+	serviceStore       cache.StoreToServiceLister
+	networkMgr         NetworkManager
+	serviceMgr         ServiceManager
+	staleConnectionMap networkConnectionMap
 }
 
 func NewConsistencyChecker(client contrail.ApiClient, config *Config, podStore cache.Store,
-	serviceStore cache.Store, serviceMgr ServiceManager) ConsistencyChecker {
+	serviceStore cache.Store, networkMgr NetworkManager, serviceMgr ServiceManager) ConsistencyChecker {
 	checker := new(consistencyChecker)
 	checker.client = client
 	checker.config = config
-	checker.podStore = cache.StoreToPodLister{podStore}
-	checker.serviceStore = cache.StoreToServiceLister{serviceStore}
+	checker.podStore = cache.StoreToPodLister{Store: podStore}
+	checker.serviceStore = cache.StoreToServiceLister{Store: serviceStore}
+	checker.networkMgr = networkMgr
 	checker.serviceMgr = serviceMgr
-	checker.gcPolicyMap = make(networkConnectionMap, 0)
+	checker.staleConnectionMap = make(networkConnectionMap, 0)
 	return checker
 }
 
@@ -191,23 +195,19 @@ func filterPods(store cache.StoreToPodLister, podList []string) []string {
 	return filteredList
 }
 
-func (c *consistencyChecker) collectNetworkConnections(pod *api.Pod, connections networkConnectionMap) {
-	name := PodNetworkName(pod, c.config)
+func (c *consistencyChecker) collectNetworkServices(pod *api.Pod, connections networkServiceMap) {
+	name := podNetworkName(pod, c.config)
 	fqn := []string{c.config.DefaultDomain, pod.Namespace, name}
 	network := strings.Join(fqn, ":")
 	serviceList, ok := connections[network]
 	if !ok {
 		serviceList = MakeServiceIdList()
-		for _, svc := range c.config.ClusterServices {
-			namespace, service := serviceIdFromName(svc)
-			serviceList.Add(namespace, service)
-		}
 	}
-	BuildPodServiceList(pod, c.config, &serviceList)
+	buildPodServiceList(pod, c.config, &serviceList)
 	connections[network] = serviceList
 }
 
-func (c *consistencyChecker) InstanceChecker(connections networkConnectionMap) bool {
+func (c *consistencyChecker) InstanceChecker(connections networkServiceMap) bool {
 	podMap := make(map[string]*api.Pod)
 	var cacheKeys sort.StringSlice
 	cacheKeys = filterPods(c.podStore, c.podStore.ListKeys())
@@ -287,7 +287,7 @@ func (c *consistencyChecker) InstanceChecker(connections networkConnectionMap) b
 	)
 
 	for _, pod := range podMap {
-		c.collectNetworkConnections(pod, connections)
+		c.collectNetworkServices(pod, connections)
 	}
 
 	return vmCmp && interfaceCmp
@@ -329,9 +329,82 @@ func isSystemDefaultNetwork(network string) bool {
 	return false
 }
 
-func (c *consistencyChecker) NetworkChecker(connections networkConnectionMap) bool {
-	lastPolicyMap := c.gcPolicyMap
-	c.gcPolicyMap = make(networkConnectionMap, 0)
+// connectionShouldDelete returns true when a connection should be deleted.
+// When a connection is first considered to be stale it is added to a GC list; if it is considered to be stale
+// in two consistency runs, it is deleted.
+func (c *consistencyChecker) connectionShouldDelete(network *types.VirtualNetwork, lastIterationMap networkConnectionMap, policyName []string) bool {
+	networkName := strings.Join(network.GetFQName(), ":")
+	policyCSN := strings.Join(policyName, ":")
+	if entry, ok := lastIterationMap[networkName]; ok {
+		if _, exists := entry[policyCSN]; exists {
+			glog.Infof("%s network connection %s delete", networkName, policyCSN)
+			return true
+		}
+	}
+
+	gcPolicies, exists := c.staleConnectionMap[networkName]
+	if !exists {
+		gcPolicies = make(policySet, 0)
+		c.staleConnectionMap[networkName] = gcPolicies
+	}
+	glog.Infof("%s network connection %s not used by pod specifications", networkName, policyCSN)
+	gcPolicies[policyCSN] = true
+	return false
+}
+
+func (c *consistencyChecker) networkEvalPolicyRefs(network *types.VirtualNetwork, services ServiceIdList, lastIterationMap networkConnectionMap) (bool, error) {
+	policyRefs, err := network.GetNetworkPolicyRefs()
+	if err != nil {
+		return false, err
+	}
+	consistent := true
+	serviceDeleteList := make([]string, 0)
+	gblNetworkDeleteList := make(map[string]string, 0)
+	networkCSN := strings.Join(network.GetFQName(), ":")
+	for _, ref := range policyRefs {
+		if len(ref.To) < 3 {
+			glog.Errorf("unexpected policy id %+v", ref.To)
+			continue
+		}
+
+		if serviceName, err := serviceNameFromPolicyName(ref.To[len(ref.To)-1]); err == nil {
+			namespace := ref.To[1]
+			if !services.Contains(namespace, serviceName) {
+				consistent = false
+				if lastIterationMap == nil || c.connectionShouldDelete(network, lastIterationMap, ref.To) {
+					serviceDeleteList = append(serviceDeleteList, ref.Uuid)
+				}
+			}
+		} else if targetName, err := globalNetworkFromPolicyName(c.config, ref.To); err == nil {
+			if targetName == networkCSN {
+				continue
+			}
+			if !networkAccessGlobalNetworks(c.config, network.GetFQName()) ||
+				!isGlobalNetworkName(c.config, targetName) {
+				consistent = false
+				if lastIterationMap == nil || c.connectionShouldDelete(network, lastIterationMap, ref.To) {
+					glog.Infof("Delete connection %s %s", networkCSN, targetName)
+					gblNetworkDeleteList[ref.Uuid] = targetName
+				} else {
+					glog.Infof("Network connection %s %s not used by global network configuration", networkCSN, targetName)
+				}
+			}
+		}
+	}
+
+	if len(gblNetworkDeleteList) > 0 {
+		c.networkMgr.DeleteConnections(network, gblNetworkDeleteList)
+	}
+
+	if len(serviceDeleteList) > 0 {
+		c.serviceMgr.DeleteConnections(network, serviceDeleteList)
+	}
+	return consistent, nil
+}
+
+func (c *consistencyChecker) NetworkChecker(connections networkServiceMap) bool {
+	lastPolicyMap := c.staleConnectionMap
+	c.staleConnectionMap = make(networkConnectionMap, 0)
 
 	var kubeNetworks sort.StringSlice
 	connectionCheck := true
@@ -347,31 +420,14 @@ func (c *consistencyChecker) NetworkChecker(connections networkConnectionMap) bo
 			continue
 		}
 
-		// State policy references are removed if they are found to be stale in
-		// two successive cycles.
-		c.serviceMgr.PurgeStalePolicyRefs(network, v,
-			func(namespace, service string) bool {
-				networkName := strings.Join(network.GetFQName(), ":")
-				if entry, ok := lastPolicyMap[networkName]; ok {
-					if entry.Contains(namespace, service) {
-						glog.Infof("%s service connection %s/%s delete", networkName, namespace, service)
-						connectionCheck = false
-						return true
-					}
-				}
-				var serviceList ServiceIdList
-				if entry, ok := c.gcPolicyMap[networkName]; ok {
-					serviceList = entry
-				} else {
-					serviceList = MakeServiceIdList()
-				}
-				glog.Infof("%s service connection %s/%s not used by pod specifications",
-					networkName, namespace, service)
-				serviceList.Add(namespace, service)
-				c.gcPolicyMap[networkName] = serviceList
-				connectionCheck = false
-				return false
-			})
+		status, err := c.networkEvalPolicyRefs(network, v, lastPolicyMap)
+		if err != nil {
+			glog.Error(err)
+			continue
+		}
+		if !status {
+			connectionCheck = false
+		}
 	}
 
 	// consider service networks.
@@ -411,7 +467,7 @@ func (c *consistencyChecker) NetworkChecker(connections networkConnectionMap) bo
 				glog.Error(err)
 				return
 			}
-			c.serviceMgr.PurgeStalePolicyRefs(network, MakeServiceIdList(), func(string, string) bool { return true })
+			c.networkEvalPolicyRefs(network, MakeServiceIdList(), nil)
 		},
 		func(key string) bool {
 			return true
@@ -419,14 +475,66 @@ func (c *consistencyChecker) NetworkChecker(connections networkConnectionMap) bo
 	return connectionCheck && cmp
 }
 
+func (c *consistencyChecker) globalNetworkCheckPolicyAttachment(network *types.VirtualNetwork) bool {
+	policyName := makeGlobalNetworkPolicyName(c.config, network.GetFQName())
+	policy, err := types.NetworkPolicyByName(c.client, strings.Join(policyName, ":"))
+	if err != nil {
+		glog.V(3).Infof("No network policy for %s", network.GetName())
+		return true
+	}
+	policyRefs, err := network.GetNetworkPolicyRefs()
+	if err != nil {
+		glog.Error(err)
+		return true
+	}
+
+	for _, ref := range policyRefs {
+		if ref.Uuid == policy.GetUuid() {
+			glog.V(5).Infof("Network %s attached to %s", network.GetName(), policy.GetUuid())
+			return true
+		}
+	}
+
+	err = policyAttach(c.client, network, policy)
+	if err != nil {
+		glog.Error(err)
+	} else {
+		glog.Infof("attached global network %s to policy", strings.Join(network.GetFQName(), ":"))
+	}
+	return false
+}
+
+// global networks can be created externally. Attached the network to the respective policy in case
+// the policy was created first.
+func (c *consistencyChecker) globalNetworkChecker() bool {
+	success := true
+	for _, gbl := range c.config.GlobalNetworks {
+		network, err := types.VirtualNetworkByName(c.client, gbl)
+		if err != nil {
+			glog.V(5).Infof("Network %s: %v", gbl, err)
+			continue
+		}
+		if !c.globalNetworkCheckPolicyAttachment(network) {
+			success = false
+		}
+	}
+	return success
+}
+
 func (c *consistencyChecker) Check() bool {
 	glog.V(3).Infof("Running consistency checker")
-	connections := make(networkConnectionMap, 0)
+	connections := make(networkServiceMap, 0)
 	success := true
 	if !c.InstanceChecker(connections) {
+		glog.V(3).Infof("instance consistency check failed")
 		success = false
 	}
 	if !c.NetworkChecker(connections) {
+		glog.V(3).Infof("network consistency check failed")
+		success = false
+	}
+	if !c.globalNetworkChecker() {
+		glog.V(3).Infof("global network consistency check failed")
 		success = false
 	}
 	return success

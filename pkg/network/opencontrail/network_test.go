@@ -18,6 +18,7 @@ package opencontrail
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/pborman/uuid"
@@ -121,4 +122,32 @@ func TestPublicNetworkSubnetChangeWhenInUse(t *testing.T) {
 		assert.Len(t, attr.IpamSubnets, 2)
 	}
 	netman.DeleteFloatingIp(network, "test")
+}
+
+func TestGlobalNetworkMatch(t *testing.T) {
+	testCases := []struct {
+		include string
+		exclude string
+		result  bool
+	}{
+		{".*", "", true},
+		{".*", "testns/.*", false},
+		{"(testns|foo)/.*", "", true},
+		{"foo/.*", "", false},
+	}
+
+	for _, test := range testCases {
+		config := new(Config)
+		config.GlobalConnectInclude = test.include
+		config.GlobalConnectExclude = test.exclude
+		result := networkAccessGlobalNetworks(config, []string{"default-domain", "testns", "x"})
+		if test.result != result {
+			t.Errorf("Include: '%s' Exclude: '%s'", test.include, test.exclude)
+		}
+	}
+
+	config := new(Config)
+	config.GlobalNetworks = []string{"default-domain:a:b", "default-domain:foo:bar"}
+	assert.True(t, networkAccessGlobalNetworks(config, []string{"default-domain", "a", "x"}))
+	assert.False(t, networkAccessGlobalNetworks(config, strings.Split(config.GlobalNetworks[1], ":")))
 }

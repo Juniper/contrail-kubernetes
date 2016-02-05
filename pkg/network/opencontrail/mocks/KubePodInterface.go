@@ -4,7 +4,7 @@ import "github.com/stretchr/testify/mock"
 
 import "k8s.io/kubernetes/pkg/api"
 import "k8s.io/kubernetes/pkg/watch"
-import kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
+import "k8s.io/kubernetes/pkg/client/restclient"
 
 type KubePodInterface struct {
 	mock.Mock
@@ -88,9 +88,9 @@ func (m *KubePodInterface) UpdateStatus(pod *api.Pod) (*api.Pod, error) {
 	return r0, r1
 }
 
-func (m *KubePodInterface) GetLogs(name string, opts *api.PodLogOptions) *kubeclient.Request {
+func (m *KubePodInterface) GetLogs(name string, opts *api.PodLogOptions) *restclient.Request {
 	ret := m.Called(name, opts)
 
-	r0 := ret.Get(0).(*kubeclient.Request)
+	r0 := ret.Get(0).(*restclient.Request)
 	return r0
 }

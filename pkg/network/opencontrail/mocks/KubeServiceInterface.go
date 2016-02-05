@@ -4,7 +4,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"k8s.io/kubernetes/pkg/api"
-	kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
+	"k8s.io/kubernetes/pkg/client/restclient"
 	"k8s.io/kubernetes/pkg/watch"
 )
 
@@ -72,9 +72,9 @@ func (m *KubeServiceInterface) Watch(opts api.ListOptions) (watch.Interface, err
 	return r0, r1
 }
 
-func (m *KubeServiceInterface) ProxyGet(scheme, name, port, path string, params map[string]string) kubeclient.ResponseWrapper {
+func (m *KubeServiceInterface) ProxyGet(scheme, name, port, path string, params map[string]string) restclient.ResponseWrapper {
 	ret := m.Called(scheme, name, port, path, params)
 
-	r0 := ret.Get(0).(kubeclient.ResponseWrapper)
+	r0 := ret.Get(0).(restclient.ResponseWrapper)
 	return r0
 }

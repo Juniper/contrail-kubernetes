@@ -34,7 +34,7 @@ type ServiceManager interface {
 	LocateServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error)
 	LookupServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error)
 	IsEmpty(tenant, serviceName string) (bool, []string)
-	PurgeStalePolicyRefs(*types.VirtualNetwork, ServiceIdList, func(string, string) bool) error
+	DeleteConnections(*types.VirtualNetwork, []string) error
 }
 
 type ServiceManagerImpl struct {
@@ -53,111 +53,6 @@ func NewServiceManager(client contrail.ApiClient, config *Config, networkMgr Net
 	serviceMgr.config = config
 	serviceMgr.networkMgr = networkMgr
 	return serviceMgr
-}
-
-func (m *ServiceManagerImpl) locatePolicyRule(policy *types.NetworkPolicy, lhs, rhs *types.VirtualNetwork) error {
-	lhsName := strings.Join(lhs.GetFQName(), ":")
-	rhsName := strings.Join(rhs.GetFQName(), ":")
-
-	entries := policy.GetNetworkPolicyEntries()
-	for _, rule := range entries.PolicyRule {
-		if rule.SrcAddresses[0].VirtualNetwork == lhsName &&
-			rule.DstAddresses[0].VirtualNetwork == rhsName {
-			return nil
-		}
-	}
-	rule := new(types.PolicyRuleType)
-	rule.Protocol = "any"
-	rule.Direction = "<>"
-	rule.SrcAddresses = []types.AddressType{types.AddressType{
-		VirtualNetwork: lhsName,
-	}}
-	rule.DstAddresses = []types.AddressType{types.AddressType{
-		VirtualNetwork: rhsName,
-	}}
-	rule.SrcPorts = []types.PortType{types.PortType{-1, -1}}
-	rule.DstPorts = []types.PortType{types.PortType{-1, -1}}
-	rule.ActionList = &types.ActionListType{
-		SimpleAction: "pass",
-	}
-
-	entries.AddPolicyRule(rule)
-	policy.SetNetworkPolicyEntries(&entries)
-	err := m.client.Update(policy)
-	if err != nil {
-		glog.Errorf("policy-rule: %v", err)
-		return err
-	}
-	return nil
-}
-
-func removeRulesIndex(rules []types.PolicyRuleType, index int) []types.PolicyRuleType {
-	rules[index], rules = rules[len(rules)-1], rules[:len(rules)-1]
-	return rules
-}
-
-func (m *ServiceManagerImpl) deletePolicyRule(policy *types.NetworkPolicy, lhsName, rhsName string) error {
-	entries := policy.GetNetworkPolicyEntries()
-	var index int = -1
-	for i, rule := range entries.PolicyRule {
-		if rule.SrcAddresses[0].VirtualNetwork == lhsName &&
-			rule.DstAddresses[0].VirtualNetwork == rhsName {
-			index = i
-			break
-		}
-	}
-	if index < 0 {
-		return nil
-	}
-	entries.PolicyRule = removeRulesIndex(entries.PolicyRule, index)
-	policy.SetNetworkPolicyEntries(&entries)
-	err := m.client.Update(policy)
-	if err != nil {
-		glog.Errorf("policy-rule: %v", err)
-	}
-	return err
-}
-
-func (m *ServiceManagerImpl) attachPolicy(network *types.VirtualNetwork, policy *types.NetworkPolicy) error {
-	refs, err := network.GetNetworkPolicyRefs()
-	if err != nil {
-		glog.Errorf("get network policy-refs %s: %v", network.GetName(), err)
-		return err
-	}
-	for _, ref := range refs {
-		if ref.Uuid == policy.GetUuid() {
-			return nil
-		}
-	}
-	network.AddNetworkPolicy(policy,
-		types.VirtualNetworkPolicyType{
-			Sequence: &types.SequenceType{10, 0},
-		})
-	err = m.client.Update(network)
-	if err != nil {
-		glog.Errorf("Update network %s policies: %v", network.GetName(), err)
-		return err
-	}
-	return nil
-}
-
-func (m *ServiceManagerImpl) detachPolicy(network *types.VirtualNetwork, policyName string) error {
-	refs, err := network.GetNetworkPolicyRefs()
-	if err != nil {
-		glog.Errorf("get network policy-refs %s: %v", network.GetName(), err)
-		return err
-	}
-	for _, ref := range refs {
-		if strings.Join(ref.To, ":") == policyName {
-			network.DeleteNetworkPolicy(ref.Uuid)
-			err := m.client.Update(network)
-			if err != nil {
-				glog.Errorf("Update network %s policies: %v", network.GetName(), err)
-			}
-			return err
-		}
-	}
-	return nil
 }
 
 func (m *ServiceManagerImpl) LocateServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error) {
@@ -206,17 +101,28 @@ func (m *ServiceManagerImpl) IsEmpty(tenant, serviceName string) (bool, []string
 	return false, existing
 }
 
+func makeServicePolicyName(config *Config, tenant, serviceName string) []string {
+	return []string{config.DefaultDomain, tenant, servicePolicyPrefix + serviceName}
+}
+
+func serviceNameFromPolicyName(policyName string) (string, error) {
+	if strings.HasPrefix(policyName, servicePolicyPrefix) {
+		return policyName[len(servicePolicyPrefix):], nil
+	}
+	return "", fmt.Errorf("%s is not a service policy", policyName)
+}
+
 func (m *ServiceManagerImpl) locatePolicy(tenant, serviceName string) (*types.NetworkPolicy, error) {
 	var policy *types.NetworkPolicy = nil
 
-	fqn := []string{m.config.DefaultDomain, tenant, serviceName}
-	obj, err := m.client.FindByName("network-policy", strings.Join(fqn, ":"))
+	policyName := makeServicePolicyName(m.config, tenant, serviceName)
+	obj, err := m.client.FindByName("network-policy", strings.Join(policyName, ":"))
 	if err != nil {
 		policy = new(types.NetworkPolicy)
-		policy.SetFQName("project", fqn)
+		policy.SetFQName("project", policyName)
 		err = m.client.Create(policy)
 		if err != nil {
-			glog.Errorf("Create policy %s: %v", strings.Join(fqn, ":"), err)
+			glog.Errorf("Create policy %s: %v", strings.Join(policyName, ":"), err)
 			return nil, err
 		}
 	} else {
@@ -232,10 +138,10 @@ func (m *ServiceManagerImpl) Connect(tenant, serviceName string, network *types.
 	if err != nil {
 		return err
 	}
-	m.attachPolicy(network, policy)
+	policyAttach(m.client, network, policy)
 	serviceNet, err := m.LookupServiceNetwork(tenant, serviceName)
 	if err == nil {
-		m.locatePolicyRule(policy, network, serviceNet)
+		policyLocateRule(m.client, policy, network, serviceNet)
 	}
 	return nil
 }
@@ -260,23 +166,31 @@ func (m *ServiceManagerImpl) Create(tenant, serviceName string) error {
 			if err != nil {
 				continue
 			}
-			m.locatePolicyRule(policy, lhs, network)
+			policyLocateRule(m.client, policy, lhs, network)
 		}
 	}
-	m.attachPolicy(network, policy)
+	policyAttach(m.client, network, policy)
 	return nil
 }
 
 func (m *ServiceManagerImpl) Delete(tenant, serviceName string) error {
-	fqn := []string{m.config.DefaultDomain, tenant, serviceName}
+	policyName := makeServicePolicyName(m.config, tenant, serviceName)
 
 	// Delete network
 	networkName := fmt.Sprintf(ServiceNetworkFmt, serviceName)
 	network, err := m.networkMgr.LookupNetwork(tenant, networkName)
 	if network != nil {
-		m.detachPolicy(network, strings.Join(fqn, ":"))
+		policyDetach(m.client, network, strings.Join(policyName, ":"))
 		m.networkMgr.DeleteFloatingIpPool(network, true)
-		m.networkMgr.DeleteNetwork(network)
+
+		// Do not delete cluster-service networks.
+		// Often the cluster-service network is statically configured on a
+		// software gateway. When that is the case, the delete is not processed
+		// by the control-node since the downstream compute-node is still subscribed
+		// to the corresponding routing-instance.
+		if !IsClusterService(m.config, tenant, serviceName) {
+			m.networkMgr.DeleteNetwork(network)
+		}
 	}
 
 	policy, err := m.releasePolicyIfEmpty(tenant, serviceName)
@@ -289,8 +203,8 @@ func (m *ServiceManagerImpl) Delete(tenant, serviceName string) error {
 }
 
 func (m *ServiceManagerImpl) releasePolicyIfEmpty(tenant, serviceName string) (*types.NetworkPolicy, error) {
-	fqn := []string{m.config.DefaultDomain, tenant, serviceName}
-	policy, err := types.NetworkPolicyByName(m.client, strings.Join(fqn, ":"))
+	policyName := makeServicePolicyName(m.config, tenant, serviceName)
+	policy, err := types.NetworkPolicyByName(m.client, strings.Join(policyName, ":"))
 	if err != nil {
 		return nil, nil
 	}
@@ -313,37 +227,20 @@ func (m *ServiceManagerImpl) Disconnect(tenant, serviceName, netName string) err
 	if policy != nil {
 		netFQN := []string{m.config.DefaultDomain, tenant, netName}
 		serviceFQN := []string{m.config.DefaultDomain, tenant, fmt.Sprintf(ServiceNetworkFmt, serviceName)}
-		err = m.deletePolicyRule(policy, strings.Join(netFQN, ":"), strings.Join(serviceFQN, ":"))
+		err = policyDeleteRule(m.client, policy, strings.Join(netFQN, ":"), strings.Join(serviceFQN, ":"))
 		return err
 	}
 	return nil
 }
 
-func (m *ServiceManagerImpl) PurgeStalePolicyRefs(network *types.VirtualNetwork, services ServiceIdList,
-	doDelete func(string, string) bool) error {
-	purgeList := make([]string, 0)
-	refs, err := network.GetNetworkPolicyRefs()
-	if err != nil {
-		return err
-	}
-	for _, ref := range refs {
-		if len(ref.To) < 3 {
-			glog.Errorf("unexpected policy id %+v", ref.To)
-			continue
-		}
-		namespace := ref.To[1]
-		serviceName := ref.To[len(ref.To)-1]
-		if !services.Contains(namespace, serviceName) && doDelete(namespace, serviceName) {
-			purgeList = append(purgeList, ref.Uuid)
-		}
-	}
+func (m *ServiceManagerImpl) DeleteConnections(network *types.VirtualNetwork, purgeList []string) error {
 	if len(purgeList) == 0 {
 		return nil
 	}
 	for _, policyId := range purgeList {
 		network.DeleteNetworkPolicy(policyId)
 	}
-	err = m.client.Update(network)
+	err := m.client.Update(network)
 	if err != nil {
 		return err
 	}
@@ -356,6 +253,7 @@ func (m *ServiceManagerImpl) PurgeStalePolicyRefs(network *types.VirtualNetwork,
 		refs, err := policy.GetVirtualNetworkBackRefs()
 		if err != nil {
 			glog.Error(err)
+			continue
 		}
 		if len(refs) == 0 {
 			err = m.client.Delete(policy)

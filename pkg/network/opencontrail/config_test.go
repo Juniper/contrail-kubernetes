@@ -18,6 +18,7 @@ package opencontrail
 
 import (
 	"bytes"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -60,7 +61,7 @@ public-ip-range = 192.168.0.0/24
 	}
 }
 
-func TestClusterServices(t *testing.T) {
+func TestConfigClusterServices(t *testing.T) {
 	content := `
 [opencontrail]
 cluster-service = kube-system/dns
@@ -82,5 +83,54 @@ cluster-service = kube-system/monitoring
 		if fqn[len(fqn)-1] != v {
 			t.Errorf("expected %s, got %s", v, fqn[len(fqn)-1])
 		}
+	}
+}
+
+func TestConfigGlobalNetworks(t *testing.T) {
+	content := `
+[opencontrail]
+global-network = default-domain:default-project:Public
+global-network = default-domain:default:logging
+global-connect-include = "project-.*"
+global-connect-exclude = "kube-system/.*"
+`
+	buffer := bytes.NewBufferString(content)
+	config := NewConfig()
+	err := config.ReadConfiguration(nil, buffer)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(config.GlobalNetworks) != 2 {
+		t.Errorf("expected 2 entries in global-network list, got %d", len(config.GlobalNetworks))
+	}
+
+	re, err := regexp.Compile(config.GlobalConnectInclude)
+	if err != nil {
+		t.Errorf("global-connect-include: %+v", err)
+	}
+	value := "project-a/default"
+	if !re.Match([]byte(value)) {
+		t.Errorf("expected regexp match on %s, failed", value)
+	}
+
+	re, err = regexp.Compile(config.GlobalConnectExclude)
+	if err != nil {
+		t.Errorf("global-connect-exclude: %+v", err)
+	}
+	value = "kube-system/monitoring"
+	if !re.Match([]byte(value)) {
+		t.Errorf("expected regexp match on %s, failed", value)
+	}
+}
+
+func TestGlobalNetworkNameCheck(t *testing.T) {
+	illegalNames := []string{
+		"domain:project",
+		"domain::name",
+		"::",
+	}
+	for _, v := range illegalNames {
+		assert.Error(t, validateColonSeparatedNetworkName(v))
 	}
 }

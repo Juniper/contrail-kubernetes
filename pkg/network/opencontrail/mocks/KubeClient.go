@@ -113,6 +113,14 @@ func (c *KubeClient) Extensions() kubeclient.ExtensionsInterface {
 	return nil
 }
 
+func (c *KubeClient) Autoscaling() kubeclient.AutoscalingInterface {
+	return nil
+}
+
+func (c *KubeClient) Batch() kubeclient.BatchInterface {
+	return nil
+}
+
 func (c *KubeClient) Discovery() kubeclient.DiscoveryInterface {
 	return nil
 }
