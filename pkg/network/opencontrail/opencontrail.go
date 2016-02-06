@@ -58,6 +58,22 @@ func NewController(kube *kubeclient.Client, args []string) network.NetworkContro
 	return controller
 }
 
+func setupAuthKeystone(client *contrail.Client, config *network.Config) {
+	keystone := contrail.NewKeystoneClient(
+		config.KeystoneAuthUrl,
+		config.KeystoneTenantName,
+		config.KeystoneUsername,
+		config.KeystonePassword,
+		config.KeystoneToken,
+	)
+	err := keystone.Authenticate()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	client.SetAuthenticator(keystone)
+}
+
 func (c *Controller) Init(global *network.Config, reader io.Reader) error {
 	err := c.config.ReadConfiguration(global, reader)
 	if err != nil {
@@ -71,6 +87,7 @@ func (c *Controller) Init(global *network.Config, reader io.Reader) error {
 
 	client := contrail.NewClient(c.config.ApiAddress, c.config.ApiPort)
 	c.client = client
+	setupAuthKeystone(c.client, c.config)
 	c.allocator = NewAddressAllocator(client, c.config)
 	c.instanceMgr = NewInstanceManager(client, c.config, c.allocator)
 	c.networkMgr = NewNetworkManager(client, c.config)

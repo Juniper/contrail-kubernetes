@@ -58,6 +58,14 @@ type Config struct {
 	NetworkAccessTag string `gcfg:"service-label"`
 
 	ClusterServices []string `gcfg:"cluster-service"`
+
+	// Keystone
+	KeystoneAuthUrl string `gcfg:"keystone-auth-url"`
+	KeystoneTenantName string `gcfg:"keystone-tenant-name"`
+	KeystoneTenantId string `gcfg:"keystone-tenant-id"`
+	KeystoneUsername string `gcfg:"keystone-username"`
+	KeystonePassword string `gcfg:"keystone-password"`
+	KeystoneToken string `gcfg:"keystone-token"`
 }
 
 func NewConfig() *Config {
@@ -71,6 +79,7 @@ func NewConfig() *Config {
 		ServiceSubnet:    DefaultServiceSubnet,
 		NetworkTag:       "opencontrail.org/name",
 		NetworkAccessTag: "opencontrail.org/services",
+		KeystoneAuthUrl:  nil,
 	}
 	return config
 }
