@@ -28,7 +28,7 @@ import (
 )
 
 type NetworkManager interface {
-	LocateFloatingIpPool(network *types.VirtualNetwork, subnet string) (*types.FloatingIpPool, error)
+	LocateFloatingIpPool(network *types.VirtualNetwork) (*types.FloatingIpPool, error)
 	LookupFloatingIpPool(network *types.VirtualNetwork) (*types.FloatingIpPool, error)
 	DeleteFloatingIpPool(network *types.VirtualNetwork, cascade bool) error
 	LookupNetwork(projectName, networkName string) (*types.VirtualNetwork, error)
@@ -51,7 +51,9 @@ func NewNetworkManager(client contrail.ApiClient, config *Config) NetworkManager
 	manager := new(NetworkManagerImpl)
 	manager.client = client
 	manager.config = config
-	manager.initializePublicNetwork()
+	if config.PublicSubnet != "" {
+		manager.initializePublicNetwork()
+	}
 	return manager
 }
 
@@ -66,22 +68,15 @@ func makePoolName(network *types.VirtualNetwork) string {
 	return strings.Join(fqn, ":")
 }
 
-func (m *NetworkManagerImpl) LocateFloatingIpPool(
-	network *types.VirtualNetwork, subnet string) (*types.FloatingIpPool, error) {
-	obj, err := m.client.FindByName(
-		"floating-ip-pool", makePoolName(network))
+func (m *NetworkManagerImpl) LocateFloatingIpPool(network *types.VirtualNetwork) (*types.FloatingIpPool, error) {
+	obj, err := m.client.FindByName("floating-ip-pool", makePoolName(network))
 	if err == nil {
 		return obj.(*types.FloatingIpPool), nil
 	}
 
-	address, prefixlen := PrefixToAddressLen(subnet)
-
 	pool := new(types.FloatingIpPool)
 	pool.SetName(network.GetName())
 	pool.SetParent(network)
-	pool.SetFloatingIpPoolPrefixes(
-		&types.FloatingIpPoolType{
-			Subnet: []types.SubnetType{types.SubnetType{address, prefixlen}}})
 	err = m.client.Create(pool)
 	if err != nil {
 		glog.Errorf("Create floating-ip-pool %s: %v", network.GetName(), err)
@@ -123,6 +118,65 @@ func (m *NetworkManagerImpl) DeleteFloatingIpPool(network *types.VirtualNetwork,
 	return nil
 }
 
+// Subnets can only be deleted if there are no instance-ips or floating-ips associated
+// with the subnet.
+func (m *NetworkManagerImpl) updateSubnetConfig(network *types.VirtualNetwork, prefix string) {
+	prefixList, err := m.NetworkIPPrefixList(network)
+	if err != nil {
+		glog.Fatal(err)
+	}
+	add := true
+	for _, pfx := range prefixList {
+		if pfx == prefix {
+			add = false
+			continue
+		}
+
+		ipRefs, err := network.GetInstanceIpBackRefs()
+		if err != nil {
+			glog.Error(err)
+			continue
+		}
+
+		// TODO: filter the IP addresses associated with the subnet that we are
+		// attempting to delete.
+		if len(ipRefs) > 0 {
+			glog.Warningf(
+				"network %s %s is stale but there are %d instance-ips present",
+				network.GetName(), pfx, len(ipRefs))
+			continue
+		}
+
+		pool, err := m.LookupFloatingIpPool(network)
+		if err == nil {
+			floatRefs, err := pool.GetFloatingIps()
+			if err != nil {
+				glog.Error(err)
+				continue
+			}
+			// TODO: filter the floating-ips associated with the subnet that we
+			// are attempting to delete.
+			if len(floatRefs) > 0 {
+				glog.Warningf(
+					"network %s %s is stale but there are %d floating-ip addresses present",
+					network.GetName(), pfx, len(floatRefs))
+				continue
+			}
+		}
+
+		err = config.RemoveSubnet(m.client, network, pfx)
+		if err != nil {
+			glog.Error(err)
+		}
+	}
+	if add {
+		_, err := config.AddSubnet(m.client, network, m.config.PublicSubnet)
+		if err != nil {
+			glog.Error(err)
+		}
+	}
+}
+
 func (m *NetworkManagerImpl) initializePublicNetwork() {
 	var network *types.VirtualNetwork
 	obj, err := m.client.FindByName("virtual-network", m.config.PublicNetwork)
@@ -133,35 +187,29 @@ func (m *NetworkManagerImpl) initializePublicNetwork() {
 		if err != nil {
 			glog.Fatalf("%s: %v", parent, err)
 		}
-		var networkId string
+		var networkID string
 		networkName := fqn[len(fqn)-1]
-		if len(m.config.PublicSubnet) > 0 {
-			networkId, err = config.CreateNetworkWithSubnet(
-				m.client, projectId, networkName, m.config.PublicSubnet)
-		} else {
-			networkId, err = config.CreateNetwork(m.client, projectId, networkName)
-		}
+		networkID, err = config.CreateNetworkWithSubnet(
+			m.client, projectId, networkName, m.config.PublicSubnet)
 		if err != nil {
 			glog.Fatalf("%s: %v", parent, err)
 		}
 
 		glog.Infof("Created network %s", m.config.PublicNetwork)
 
-		obj, err := m.client.FindByUuid("virtual-network", networkId)
+		obj, err := m.client.FindByUuid("virtual-network", networkID)
 		if err != nil {
-			glog.Fatalf("GET %s %v", networkId, err)
+			glog.Fatalf("GET %s %v", networkID, err)
 		}
 		network = obj.(*types.VirtualNetwork)
 	} else {
 		network = obj.(*types.VirtualNetwork)
+		m.updateSubnetConfig(network, m.config.PublicSubnet)
 	}
 
 	m.publicNetwork = network
 
-	// TODO(prm): Ensure that the subnet is as specified.
-	if len(m.config.PublicSubnet) > 0 {
-		m.LocateFloatingIpPool(network, m.config.PublicSubnet)
-	}
+	m.LocateFloatingIpPool(network)
 }
 
 func (m *NetworkManagerImpl) LookupNetwork(projectName, networkName string) (*types.VirtualNetwork, error) {
@@ -326,4 +374,25 @@ func (m *NetworkManagerImpl) DeleteNetwork(network *types.VirtualNetwork) error 
 		}
 	}
 	return nil
+}
+
+//
+// Retrieve the list of IP prefixes associated with this network.
+//
+func (m *NetworkManagerImpl) NetworkIPPrefixList(network *types.VirtualNetwork) ([]string, error) {
+	prefixList := make([]string, 0)
+	refList, err := network.GetNetworkIpamRefs()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, ref := range refList {
+		attr := ref.Attr.(types.VnSubnetsType)
+		for _, ipamSubnet := range attr.IpamSubnets {
+			prefixList = append(prefixList,
+				fmt.Sprintf("%s/%d", ipamSubnet.Subnet.IpPrefix, ipamSubnet.Subnet.IpPrefixLen))
+		}
+	}
+
+	return prefixList, nil
 }

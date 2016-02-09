@@ -166,7 +166,7 @@ func (m *ServiceManagerImpl) LocateServiceNetwork(tenant, serviceName string) (*
 	if err != nil {
 		return nil, err
 	}
-	m.networkMgr.LocateFloatingIpPool(network, m.config.ServiceSubnet)
+	m.networkMgr.LocateFloatingIpPool(network)
 	return network, nil
 }
 
