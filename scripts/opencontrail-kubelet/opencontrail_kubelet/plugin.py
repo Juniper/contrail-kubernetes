@@ -66,7 +66,7 @@ def init():
             sys.exit(1)
 
 
-def setup(pod_namespace, pod_name, docker_id):
+def setup(pod_namespace, pod_name, docker_id, retry=True):
     """
     project: pod_namespace
     network: pod_name
@@ -78,7 +78,7 @@ def setup(pod_namespace, pod_name, docker_id):
     if pid == 0:
         raise Exception('Unable to read State.Pid')
 
-    short_id = docker_id[0:11]
+    short_id = docker_id[0:12]
 
     if not os.path.exists('/var/run/netns'):
         os.mkdir('/var/run/netns')
@@ -98,23 +98,25 @@ def setup(pod_namespace, pod_name, docker_id):
     for i in range(0, 30):
         podInfo = getPodInfo(pod_namespace, podName)
         if podInfo is None:
-            sys.exit(1)
+            return False
         if 'hostNetwork' in podInfo['spec'] and \
            podInfo['spec']['hostNetwork']:
-            sys.exit(0)
+            return True
         if 'annotations' in podInfo["metadata"] and \
            'opencontrail.org/pod-state' in podInfo["metadata"]["annotations"]:
             podState = json.loads(
                 podInfo["metadata"]["annotations"]
                 ["opencontrail.org/pod-state"])
             break
+        if not retry:
+            return False
         time.sleep(1)
 
     # The lxc_manager uses the mac_address to setup the container interface.
     # Additionally the ip-address, prefixlen and gateway are also used.
     if podState is None:
         logging.error('No annotations in pod %s', podInfo["metadata"]["name"])
-        sys.exit(1)
+        return False
 
     nic_uuid = podState["uuid"]
     mac_address = podState["macAddress"]
@@ -138,6 +140,7 @@ def setup(pod_namespace, pod_name, docker_id):
               (short_id, gateway))
     Shell.run('ip netns exec %s ip link set %s up' %
               (short_id, instance_ifname))
+    return True
 
 
 def vrouter_interface_by_name(vmName):
@@ -153,7 +156,7 @@ def vrouter_interface_by_name(vmName):
 
 def teardown(pod_namespace, pod_name, docker_id):
     manager = LxcManager()
-    short_id = docker_id[0:11]
+    short_id = docker_id[0:12]
 
     api = ContrailVRouterApi()
 
@@ -185,7 +188,7 @@ def status(pod_namespace, pod_name, docker_id):
     uid, podName = getDockerPod(docker_id)
     vmi, data = vrouter_interface_by_name(podName)
     if vmi is None:
-        setup(pod_namespace, pod_name, docker_id)
+        setup(pod_namespace, pod_name, docker_id, retry=False)
         return
 
     podInfo = getPodInfo(pod_namespace, podName)
@@ -201,7 +204,7 @@ def status(pod_namespace, pod_name, docker_id):
 
 def main():
     logging.basicConfig(filename='/var/log/contrail/kubelet-driver.log',
-                        level=logging.DEBUG)
+                        level=logging.INFO)
     logging.debug(' '.join(sys.argv))
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(title="action", dest='action')
@@ -230,8 +233,6 @@ def main():
             status(args.pod_namespace, args.pod_name, args.docker_id)
     except Exception as ex:
         logging.error(ex)
-        if args.action == 'setup':
-            sys.exit(0)
         sys.exit(1)
 
 if __name__ == '__main__':
