@@ -24,7 +24,6 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"k8s.io/kubernetes/pkg/api"
@@ -74,8 +73,8 @@ func TestConsistencyMissingVM(t *testing.T) {
 	netnsProject.SetFQName("domain", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
-	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod1).Return(pod1, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod2).Return(pod2, nil)
 
 	podStore.On("ListKeys").Return([]string{"testns/test-sv1", "testns/test-sv2"})
 	podStore.On("GetByKey", "testns/test-sv1").Return(pod1, true, nil)
@@ -109,8 +108,7 @@ func TestConsistencyMissingVM(t *testing.T) {
 	assert.False(t, checker.Check())
 }
 
-func installPods(controller *Controller, podInterface, podStore *mock.Mock, namespace string, count int) {
-	keys := make([]string, count)
+func installPods(env *TestFramework, namespace string, count int) {
 	for i := 0; i < count; i++ {
 		pod := &api.Pod{
 			ObjectMeta: api.ObjectMeta{
@@ -118,47 +116,29 @@ func installPods(controller *Controller, podInterface, podStore *mock.Mock, name
 				Namespace: namespace,
 				UID:       kubetypes.UID(uuid.New()),
 				Labels: map[string]string{
-					"app": fmt.Sprintf("pod%02d", i),
+					"Name": fmt.Sprintf("pod%02d", i),
 				},
 			},
 		}
-		key := fmt.Sprintf("%s/%s", namespace, pod.Name)
-		keys[i] = key
-		podStore.On("GetByKey", key).Return(pod, true, nil)
-		podInterface.On("Update", pod).Return(pod, nil)
-		podInterface.On("List", makeListOptSelector(pod.Labels)).Return(&api.PodList{Items: []api.Pod{*pod}}, nil)
-		controller.AddPod(pod)
+		env.AddPod(pod)
 	}
-
-	podStore.On("ListKeys").Return(keys)
 }
 
 func TestConsistencyStaleVM(t *testing.T) {
-	client := createTestClient()
-	podStore := new(mocks.Store)
-	serviceStore := new(mocks.Store)
-	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore, nil, nil)
-
-	kube := mocks.NewKubeClient()
-	controller := NewTestController(kube, client, nil, nil)
+	env := new(TestFramework)
+	env.SetUp("192.0.2.0/24")
+	client := env.client
 
 	netnsProject := new(types.Project)
 	netnsProject.SetFQName("domain", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	serviceStore.On("List").Return([]interface{}{})
+	env.Start()
+	installPods(env, "testns", 3)
+	env.SyncBarrier()
+	env.Shutdown()
 
-	installPods(controller, &kube.PodInterface.Mock, &podStore.Mock, "testns", 3)
-	shutdown := make(chan struct{})
-	go controller.Run(shutdown)
-
-	time.Sleep(100 * time.Millisecond)
-	type shutdownMsg struct {
-	}
-	shutdown <- shutdownMsg{}
-	time.Sleep(100 * time.Millisecond)
-
-	assert.True(t, checker.Check())
+	assert.True(t, env.checker.Check())
 
 	p2 := new(types.Project)
 	p2.SetFQName("domain", []string{"default-domain", "p2"})
@@ -167,42 +147,32 @@ func TestConsistencyStaleVM(t *testing.T) {
 	vm := new(types.VirtualMachine)
 	vm.SetFQName("project", []string{"default-domain", "p2", "x"})
 	assert.NoError(t, client.Create(vm))
-	assert.False(t, checker.Check())
+	assert.False(t, env.checker.Check())
 
 	assert.NoError(t, client.Delete(vm))
-	assert.True(t, checker.Check())
+	assert.True(t, env.checker.Check())
 
 	vm = new(types.VirtualMachine)
 	vm.SetFQName("project", []string{"default-domain", "testns", "pod03"})
 	assert.NoError(t, client.Create(vm))
-	assert.False(t, checker.Check())
+	assert.False(t, env.checker.Check())
 }
 
 func TestConsistencyMissingInterface(t *testing.T) {
-	client := createTestClient()
-	podStore := new(mocks.Store)
-	serviceStore := new(mocks.Store)
-	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore, nil, nil)
-
-	kube := mocks.NewKubeClient()
-	controller := NewTestController(kube, client, nil, nil)
+	env := new(TestFramework)
+	env.SetUp("192.0.2.0/24")
+	client := env.client
 
 	netnsProject := new(types.Project)
 	netnsProject.SetFQName("domain", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	installPods(controller, &kube.PodInterface.Mock, &podStore.Mock, "testns", 3)
-	shutdown := make(chan struct{})
-	go controller.Run(shutdown)
+	env.Start()
+	installPods(env, "testns", 3)
+	env.SyncBarrier()
+	env.Shutdown()
 
-	time.Sleep(100 * time.Millisecond)
-	type shutdownMsg struct {
-	}
-	shutdown <- shutdownMsg{}
-	time.Sleep(100 * time.Millisecond)
-
-	serviceStore.On("List").Return([]interface{}{})
-	assert.True(t, checker.Check())
+	assert.True(t, env.checker.Check())
 
 	vmi, err := types.VirtualMachineInterfaceByName(client, "default-domain:testns:pod01")
 	assert.NoError(t, err)
@@ -215,57 +185,41 @@ func TestConsistencyMissingInterface(t *testing.T) {
 	}
 	assert.NoError(t, client.Delete(vmi))
 
-	assert.False(t, checker.Check())
+	assert.False(t, env.checker.Check())
 }
 
 func TestConsistencyStaleInterface(t *testing.T) {
-	client := createTestClient()
-	podStore := new(mocks.Store)
-	serviceStore := new(mocks.Store)
-	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore, nil, nil)
-
-	kube := mocks.NewKubeClient()
-	controller := NewTestController(kube, client, nil, nil)
+	env := new(TestFramework)
+	env.SetUp("192.0.2.0/24")
+	client := env.client
 
 	netnsProject := new(types.Project)
 	netnsProject.SetFQName("domain", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	installPods(controller, &kube.PodInterface.Mock, &podStore.Mock, "testns", 3)
-	shutdown := make(chan struct{})
-	go controller.Run(shutdown)
+	env.Start()
+	installPods(env, "testns", 3)
+	env.SyncBarrier()
+	env.Shutdown()
 
-	time.Sleep(100 * time.Millisecond)
-	type shutdownMsg struct {
-	}
-	shutdown <- shutdownMsg{}
-	time.Sleep(100 * time.Millisecond)
-
-	serviceStore.On("List").Return([]interface{}{})
-	assert.True(t, checker.Check())
+	assert.True(t, env.checker.Check())
 
 	vmi := new(types.VirtualMachineInterface)
 	vmi.SetFQName("project", []string{"default-domain", "testns", "pod03"})
 	assert.NoError(t, client.Create(vmi))
 
-	assert.False(t, checker.Check())
+	assert.False(t, env.checker.Check())
 }
 
 func TestConsistencyServiceIp(t *testing.T) {
-	client := createTestClient()
-	podStore := new(mocks.Store)
-	serviceStore := new(mocks.Store)
-	checker := NewConsistencyChecker(client, NewConfig(), podStore, serviceStore, nil, nil)
-
-	kube := mocks.NewKubeClient()
-	controller := NewTestController(kube, client, nil, nil)
-	config := controller.config
+	env := new(TestFramework)
+	env.SetUp("192.0.2.0/24")
+	config := env.config
+	client := env.client
 
 	netnsProject := new(types.Project)
 	netnsProject.SetFQName("domain", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
-
-	installPods(controller, &kube.PodInterface.Mock, &podStore.Mock, "testns", 3)
 
 	service1 := &api.Service{
 		ObjectMeta: api.ObjectMeta{
@@ -277,7 +231,7 @@ func TestConsistencyServiceIp(t *testing.T) {
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"app": "pod01",
+				"Name": "pod01",
 			},
 			ClusterIP: "10.254.42.42",
 			Type:      api.ServiceTypeLoadBalancer,
@@ -293,7 +247,7 @@ func TestConsistencyServiceIp(t *testing.T) {
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"app": "pod02",
+				"Name": "pod02",
 			},
 			ClusterIP:   "10.254.42.43",
 			ExternalIPs: []string{"10.1.4.89"},
@@ -309,29 +263,22 @@ func TestConsistencyServiceIp(t *testing.T) {
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				"app": "pod01",
+				"Name": "pod01",
 			},
 			ClusterIP: "10.254.42.44",
 		},
 	}
 
-	kube.ServiceInterface.On("Update", service1).Return(service1, nil)
+	env.Start()
 
-	shutdown := make(chan struct{})
-	go controller.Run(shutdown)
+	installPods(env, "testns", 3)
+	env.AddService(service1, "pod01")
+	env.AddService(service2, "pod02")
+	env.AddService(service3, "pod01")
+	env.SyncBarrier()
+	env.Shutdown()
 
-	controller.AddService(service1)
-	controller.AddService(service2)
-	controller.AddService(service3)
-	serviceStore.On("List").Return([]interface{}{service1, service2, service3})
-	time.Sleep(100 * time.Millisecond)
-
-	type shutdownMsg struct {
-	}
-	shutdown <- shutdownMsg{}
-	time.Sleep(100 * time.Millisecond)
-
-	assert.True(t, checker.Check())
+	assert.True(t, env.checker.Check())
 
 	pool, err := types.FloatingIpPoolByName(client, "default-domain:testns:service-services:service-services")
 	assert.NoError(t, err)
@@ -344,33 +291,24 @@ func TestConsistencyServiceIp(t *testing.T) {
 	vip.SetFQName(vip.GetDefaultParentType(), fqn)
 	vip.AddVirtualMachineInterface(vmi)
 	assert.NoError(t, client.Create(vip))
-	assert.False(t, checker.Check())
+	assert.False(t, env.checker.Check())
 
 	assert.NoError(t, client.Delete(vip))
-	assert.True(t, checker.Check())
+	assert.True(t, env.checker.Check())
 
 	vip, err = types.FloatingIpByName(client, "default-domain:testns:service-services:service-services:s3")
 	assert.NoError(t, err)
 	assert.NoError(t, client.Delete(vip))
 
-	assert.False(t, checker.Check())
-}
-
-func addPodToStore(pod *api.Pod, podInterface *mocks.KubePodInterface, podStore *mocks.Store, keys *[]string, times int) {
-	key := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
-	*keys = append(*keys, key)
-
-	podStore.On("GetByKey", key).Return(pod, true, nil).Times(times)
-	podInterface.On("Update", pod).Return(pod, nil)
+	assert.False(t, env.checker.Check())
 }
 
 func TestConsistencyConnectionsDelete(t *testing.T) {
-	kube := mocks.NewKubeClient()
-	client := createTestClient()
-	controller := NewTestController(kube, client, nil, nil)
-	config := controller.config
-	checker, podStore, serviceStore := newTestConsistencyChecker(controller)
+	env := new(TestFramework)
+	env.SetUp("192.0.2.0/24")
 
+	client := env.client
+	config := env.config
 	config.ClusterServices = []string{"kube-system/dns", "kube-system/monitoring"}
 
 	// 2 client pods in network "private"
@@ -380,6 +318,7 @@ func TestConsistencyConnectionsDelete(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":                  "private",
 				config.NetworkTag:       "private",
 				config.NetworkAccessTag: "tagA",
 			},
@@ -392,6 +331,7 @@ func TestConsistencyConnectionsDelete(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":                  "private",
 				config.NetworkTag:       "private",
 				config.NetworkAccessTag: "tagB",
 			},
@@ -405,6 +345,7 @@ func TestConsistencyConnectionsDelete(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":            "provider01",
 				config.NetworkTag: "svc-backend",
 				"app":             "provider01",
 			},
@@ -417,6 +358,7 @@ func TestConsistencyConnectionsDelete(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":            "provider02",
 				config.NetworkTag: "svc-backend",
 				"app":             "provider02",
 			},
@@ -466,54 +408,32 @@ func TestConsistencyConnectionsDelete(t *testing.T) {
 	sysProject.SetFQName("domain", []string{"default-domain", "kube-system"})
 	client.Create(sysProject)
 
-	keys := make([]string, 0)
-	for _, pod := range []*api.Pod{pod1, pod2, pod3, pod4} {
-		addPodToStore(pod, kube.PodInterface, podStore, &keys, 0)
-	}
-	podStore.On("ListKeys").Return(keys).Once()
+	env.Start()
 
-	serviceStore.On("List").Return([]interface{}{service1, service2})
+	env.AddPod(pod1)
+	env.AddPod(pod2)
+	env.AddPod(pod3)
+	env.AddPod(pod4)
+	env.AddService(service1, "provider01")
+	env.AddService(service2, "provider02")
 
-	s1Pods := makeListOptSelector(map[string]string{"app": "provider01"})
-	kube.PodInterface.On("List", s1Pods).Return(&api.PodList{Items: []api.Pod{*pod3}}, nil)
+	env.SyncBarrier()
+	assert.True(t, env.checker.Check())
 
-	s2Pods := makeListOptSelector(map[string]string{"app": "provider02"})
-	kube.PodInterface.On("List", s2Pods).Return(&api.PodList{Items: []api.Pod{*pod4}}, nil)
+	env.DeletePod(pod2)
+	env.SyncBarrier()
 
-	kube.ServiceInterface.On("Update", service1).Return(service1, nil)
-	kube.ServiceInterface.On("Update", service2).Return(service2, nil)
-
-	shutdown := make(chan struct{})
-	go controller.Run(shutdown)
-
-	controller.AddPod(pod1)
-	controller.AddPod(pod2)
-	controller.AddPod(pod3)
-	controller.AddPod(pod4)
-	controller.AddService(service1)
-	controller.AddService(service2)
-
-	time.Sleep(100 * time.Millisecond)
-	assert.True(t, checker.Check())
-
-	controller.DeletePod(pod2)
-	time.Sleep(100 * time.Millisecond)
-	keys = append(keys[0:1], keys[2:]...)
-	podStore.On("ListKeys").Return(keys)
-
-	assert.False(t, checker.Check())
-	assert.False(t, checker.Check())
-	assert.True(t, checker.Check())
+	assert.False(t, env.checker.Check())
+	assert.False(t, env.checker.Check())
+	assert.True(t, env.checker.Check())
 
 	config.ClusterServices = []string{"kube-system/dns"}
 
-	assert.False(t, checker.Check())
-	assert.False(t, checker.Check())
-	assert.True(t, checker.Check())
+	assert.False(t, env.checker.Check())
+	assert.False(t, env.checker.Check())
+	assert.True(t, env.checker.Check())
 
-	type shutdownMsg struct {
-	}
-	shutdown <- shutdownMsg{}
+	env.Shutdown()
 }
 
 func getNetworkServiceConnections(t *testing.T, client contrail.ApiClient, config *Config, namespace, networkName string) []string {
@@ -532,26 +452,11 @@ func getNetworkServiceConnections(t *testing.T, client contrail.ApiClient, confi
 	return serviceList
 }
 
-func MockRemoveExpectedCall(m *mock.Mock, methodName string, arguments ...interface{}) bool {
-	for i, call := range m.ExpectedCalls {
-		if call.Method == methodName {
-			_, difference := call.Arguments.Diff(arguments)
-			if difference == 0 {
-				m.ExpectedCalls = append(m.ExpectedCalls[:i], m.ExpectedCalls[i+1:]...)
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func TestConsistencyPodUpdateRemovePrev(t *testing.T) {
-	kube := mocks.NewKubeClient()
-	client := createTestClient()
-	controller := NewTestController(kube, client, nil, nil)
-	checker, podStore, serviceStore := newTestConsistencyChecker(controller)
-
-	config := controller.config
+	env := new(TestFramework)
+	env.SetUp("192.0.2.0/24")
+	client := env.client
+	config := env.config
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -559,6 +464,7 @@ func TestConsistencyPodUpdateRemovePrev(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":                  "client",
 				config.NetworkTag:       "client",
 				config.NetworkAccessTag: "red",
 			},
@@ -571,6 +477,7 @@ func TestConsistencyPodUpdateRemovePrev(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":                  "client",
 				config.NetworkTag:       "client",
 				config.NetworkAccessTag: "red",
 			},
@@ -637,38 +544,19 @@ func TestConsistencyPodUpdateRemovePrev(t *testing.T) {
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	selectRed := makeListOptSelector(map[string]string{"Name": "red"})
-	kube.PodInterface.On("List", selectRed).Return(&api.PodList{Items: []api.Pod{*pod3}}, nil)
-	selectBlue := makeListOptSelector(map[string]string{"Name": "blue"})
-	kube.PodInterface.On("List", selectBlue).Return(&api.PodList{Items: []api.Pod{*pod4}}, nil)
+	env.Start()
 
-	kube.ServiceInterface.On("Update", redService).Return(redService, nil)
-	kube.ServiceInterface.On("Update", blueService).Return(blueService, nil)
-
-	keys := make([]string, 0)
-	addPodToStore(pod1, kube.PodInterface, podStore, &keys, 1*2)
-	addPodToStore(pod2, kube.PodInterface, podStore, &keys, 2*2)
-	for _, pod := range []*api.Pod{pod3, pod4} {
-		addPodToStore(pod, kube.PodInterface, podStore, &keys, 0)
-	}
-	podStore.On("ListKeys").Return(keys)
-	serviceStore.On("List").Return([]interface{}{redService, blueService})
-
-	shutdown := make(chan struct{})
-	go controller.Run(shutdown)
-
-	controller.AddPod(pod1)
-	controller.AddService(redService)
-	controller.AddPod(pod2)
-	controller.AddPod(pod3)
-	controller.AddPod(pod4)
-	controller.AddService(blueService)
-
-	time.Sleep(100 * time.Millisecond)
+	env.AddPod(pod1)
+	env.AddService(redService, "red")
+	env.AddPod(pod2)
+	env.AddPod(pod3)
+	env.AddPod(pod4)
+	env.AddService(blueService, "blue")
+	env.SyncBarrier()
 
 	serviceConnections := getNetworkServiceConnections(t, client, config, "testns", "client")
 	assert.EqualValues(t, []string{"default", "red"}, serviceConnections)
-	assert.True(t, checker.Check())
+	assert.True(t, env.checker.Check())
 	policyName := makeServicePolicyName(config, "testns", "red")
 	_, err := types.NetworkPolicyByName(client, strings.Join(policyName, ":"))
 	assert.NoError(t, err)
@@ -686,55 +574,45 @@ func TestConsistencyPodUpdateRemovePrev(t *testing.T) {
 
 	// Update connections on pod1
 	nPod1 := clonePodAndUpdateAccessTag(pod1, "blue")
-	controller.UpdatePod(pod1, nPod1)
-	podStore.On("GetByKey", "testns/"+nPod1.Name).Return(nPod1, true, nil)
-
-	time.Sleep(100 * time.Millisecond)
+	env.UpdatePod(pod1, nPod1)
+	env.SyncBarrier()
 
 	serviceConnections = getNetworkServiceConnections(t, client, config, "testns", "client")
 	assert.EqualValues(t, []string{"default", "red", "blue"}, serviceConnections)
-	assert.True(t, checker.Check(), "red and blue present")
+	assert.True(t, env.checker.Check(), "red and blue present")
 
 	// Update connections on pod2
 	// This will leave a stale connection to network red.
 	nPod2 := clonePodAndUpdateAccessTag(pod2, "blue")
-	controller.UpdatePod(pod2, nPod2)
-	podStore.On("GetByKey", "testns/"+nPod2.Name).Return(nPod2, true, nil)
+	env.UpdatePod(pod2, nPod2)
+	env.SyncBarrier()
 
-	time.Sleep(100 * time.Millisecond)
 	serviceConnections = getNetworkServiceConnections(t, client, config, "testns", "client")
 	assert.EqualValues(t, []string{"default", "red", "blue"}, serviceConnections)
 
-	assert.False(t, checker.Check())
+	assert.False(t, env.checker.Check())
 
-	controller.DeleteService(redService)
-	MockRemoveExpectedCall(&serviceStore.Mock, "List")
-	serviceStore.On("List").Return([]interface{}{blueService})
-	time.Sleep(100 * time.Millisecond)
+	env.DeleteService(redService, "red")
+	env.SyncBarrier()
 
 	// The second pass will delete the connection to network red.
-	assert.False(t, checker.Check())
+	assert.False(t, env.checker.Check())
 	serviceConnections = getNetworkServiceConnections(t, client, config, "testns", "client")
 	assert.EqualValues(t, []string{"default", "blue"}, serviceConnections)
 
-	assert.True(t, checker.Check())
+	assert.True(t, env.checker.Check())
 
-	type shutdownMsg struct {
-	}
-	shutdown <- shutdownMsg{}
+	env.Shutdown()
 
 	_, err = types.NetworkPolicyByName(client, strings.Join(policyName, ":"))
 	assert.Error(t, err)
 }
 
 func TestGlobalNetworkConsistencyUpdateNetwork(t *testing.T) {
-	kube := mocks.NewKubeClient()
+	env := new(TestFramework)
+	env.SetUp("192.0.2.0/24")
 
-	client := createTestClient()
-	controller := NewTestController(kube, client, nil, nil)
-	checker, podStore, serviceStore := newTestConsistencyChecker(controller)
-
-	config := controller.config
+	config := env.config
 	config.GlobalNetworks = []string{"default-domain:cluster:global"}
 
 	pod1 := &api.Pod{
@@ -754,6 +632,7 @@ func TestGlobalNetworkConsistencyUpdateNetwork(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":                  "client",
 				config.NetworkTag:       "client",
 				config.NetworkAccessTag: "svc",
 			},
@@ -765,6 +644,7 @@ func TestGlobalNetworkConsistencyUpdateNetwork(t *testing.T) {
 			Namespace: "cluster",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":            "global",
 				config.NetworkTag: "global",
 			},
 		},
@@ -788,40 +668,28 @@ func TestGlobalNetworkConsistencyUpdateNetwork(t *testing.T) {
 
 	clusterProject := new(types.Project)
 	clusterProject.SetFQName("", []string{"default-domain", "cluster"})
-	require.NoError(t, client.Create(clusterProject))
+	require.NoError(t, env.client.Create(clusterProject))
 
 	netnsProject := new(types.Project)
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
-	require.NoError(t, client.Create(netnsProject))
+	require.NoError(t, env.client.Create(netnsProject))
 
-	keys := make([]string, 0)
-	for _, pod := range []*api.Pod{pod1, pod2} {
-		addPodToStore(pod, kube.PodInterface, podStore, &keys, 0)
-	}
-	addPodToStore(pod3, kube.PodInterface, podStore, &keys, 0)
-	podStore.On("ListKeys").Return(keys)
-	serviceStore.On("List").Return([]interface{}{service})
+	env.Start()
 
-	kube.PodInterface.On("List", makeListOptSelector(service.Spec.Selector)).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
-
-	shutdown := make(chan struct{})
-	go controller.Run(shutdown)
-
-	controller.AddPod(pod1)
-	controller.AddPod(pod2)
-	controller.AddPod(pod3)
-	controller.AddService(service)
-
-	time.Sleep(100 * time.Millisecond)
+	env.AddPod(pod1)
+	env.AddPod(pod2)
+	env.AddPod(pod3)
+	env.AddService(service, "server")
+	env.SyncBarrier()
 
 	// This connects the global-network policy with the respective network which is created after
 	// the policy.
-	assert.False(t, checker.Check())
+	assert.False(t, env.checker.Check())
 	// It should be ok now.
-	assert.True(t, checker.Check())
+	assert.True(t, env.checker.Check())
 
 	policyName := makeGlobalNetworkPolicyName(config, []string{"default-domain", "cluster", "global"})
-	policy, err := types.NetworkPolicyByName(client, strings.Join(policyName, ":"))
+	policy, err := types.NetworkPolicyByName(env.client, strings.Join(policyName, ":"))
 	require.NoError(t, err)
 
 	netRefs, err := policy.GetVirtualNetworkBackRefs()
@@ -829,33 +697,24 @@ func TestGlobalNetworkConsistencyUpdateNetwork(t *testing.T) {
 	assert.Len(t, netRefs, 3)
 	assert.Len(t, policy.GetNetworkPolicyEntries().PolicyRule, 2)
 
-	controller.DeletePod(pod1)
-	controller.DeletePod(pod2)
-	controller.DeleteService(service)
-	time.Sleep(100 * time.Microsecond)
+	env.DeletePod(pod1)
+	env.DeletePod(pod2)
+	env.DeleteService(service, "server")
+	env.SyncBarrier()
 
-	_, err = types.NetworkPolicyByName(client, strings.Join(policyName, ":"))
+	_, err = types.NetworkPolicyByName(env.client, strings.Join(policyName, ":"))
 	assert.Error(t, err)
 
-	MockRemoveExpectedCall(&podStore.Mock, "ListKeys")
-	podStore.On("ListKeys").Return([]string{"cluster/gPod"})
-	MockRemoveExpectedCall(&serviceStore.Mock, "List")
-	serviceStore.On("List").Return([]interface{}{})
-	assert.True(t, checker.Check())
+	assert.True(t, env.checker.Check())
 
-	type shutdownMsg struct {
-	}
-	shutdown <- shutdownMsg{}
+	env.Shutdown()
 }
 
 func TestGlobalNetworkConsistencyConfigChange(t *testing.T) {
-	kube := mocks.NewKubeClient()
+	env := new(TestFramework)
+	env.SetUp("192.0.2.0/24")
 
-	client := createTestClient()
-	controller := NewTestController(kube, client, nil, nil)
-	checker, podStore, serviceStore := newTestConsistencyChecker(controller)
-
-	config := controller.config
+	config := env.config
 	config.GlobalNetworks = []string{"default-domain:cluster:global"}
 
 	pod1 := &api.Pod{
@@ -875,6 +734,7 @@ func TestGlobalNetworkConsistencyConfigChange(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":                  "client",
 				config.NetworkTag:       "client",
 				config.NetworkAccessTag: "svc",
 			},
@@ -886,6 +746,7 @@ func TestGlobalNetworkConsistencyConfigChange(t *testing.T) {
 			Namespace: "cluster",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":            "global",
 				config.NetworkTag: "global",
 			},
 		},
@@ -909,59 +770,40 @@ func TestGlobalNetworkConsistencyConfigChange(t *testing.T) {
 
 	clusterProject := new(types.Project)
 	clusterProject.SetFQName("", []string{"default-domain", "cluster"})
-	require.NoError(t, client.Create(clusterProject))
+	require.NoError(t, env.client.Create(clusterProject))
 
 	netnsProject := new(types.Project)
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
-	require.NoError(t, client.Create(netnsProject))
+	require.NoError(t, env.client.Create(netnsProject))
 
-	keys := make([]string, 0)
-	for _, pod := range []*api.Pod{pod1, pod2} {
-		addPodToStore(pod, kube.PodInterface, podStore, &keys, 0)
-	}
-	addPodToStore(pod3, kube.PodInterface, podStore, &keys, 0)
-	podStore.On("ListKeys").Return(keys)
-	serviceStore.On("List").Return([]interface{}{service})
+	env.Start()
 
-	kube.PodInterface.On("List", makeListOptSelector(service.Spec.Selector)).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+	env.AddPod(pod3)
+	env.AddPod(pod1)
+	env.AddPod(pod2)
+	env.AddService(service, "server")
+	env.SyncBarrier()
 
-	shutdown := make(chan struct{})
-	go controller.Run(shutdown)
-
-	controller.AddPod(pod3)
-	controller.AddPod(pod1)
-	controller.AddPod(pod2)
-	controller.AddService(service)
-
-	time.Sleep(100 * time.Millisecond)
-
-	assert.True(t, checker.Check())
+	assert.True(t, env.checker.Check())
 
 	config.GlobalNetworks = []string{}
 	for i := 0; i < 2; i++ {
-		assert.False(t, checker.Check())
+		assert.False(t, env.checker.Check())
 	}
 
-	assert.True(t, checker.Check())
+	assert.True(t, env.checker.Check())
 
 	policyName := makeGlobalNetworkPolicyName(config, []string{"default-domain", "cluster", "global"})
-	_, err := types.NetworkPolicyByName(client, strings.Join(policyName, ":"))
+	_, err := types.NetworkPolicyByName(env.client, strings.Join(policyName, ":"))
 	require.Error(t, err)
 
-	controller.DeletePod(pod1)
-	controller.DeletePod(pod2)
-	controller.DeletePod(pod3)
-	controller.DeleteService(service)
-	time.Sleep(100 * time.Microsecond)
+	env.DeletePod(pod1)
+	env.DeletePod(pod2)
+	env.DeletePod(pod3)
+	env.DeleteService(service, "server")
+	env.SyncBarrier()
 
-	MockRemoveExpectedCall(&podStore.Mock, "ListKeys")
-	podStore.On("ListKeys").Return([]string{})
-	MockRemoveExpectedCall(&serviceStore.Mock, "List")
-	serviceStore.On("List").Return([]interface{}{})
+	env.Shutdown()
 
-	type shutdownMsg struct {
-	}
-	shutdown <- shutdownMsg{}
-
-	assert.True(t, checker.Check())
+	assert.True(t, env.checker.Check())
 }

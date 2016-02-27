@@ -55,6 +55,16 @@ type InstanceMetadata struct {
 	Gateway string `json:"gateway"`
 }
 
+// makeSyncController creates a controller that uses a non-buffered (synchronous channel)
+// This is used in unit tests to avoid timing problems.
+func makeSyncController(kube kubeclient.Interface, config *Config) *Controller {
+	controller := new(Controller)
+	controller.eventChannel = make(chan notification)
+	controller.kube = kube
+	controller.config = config
+	return controller
+}
+
 func NewController(kube *kubeclient.Client, args []string) network.NetworkController {
 	controller := new(Controller)
 	controller.eventChannel = make(chan notification, 32)
@@ -62,6 +72,15 @@ func NewController(kube *kubeclient.Client, args []string) network.NetworkContro
 	controller.config = NewConfig()
 	controller.config.Parse(args)
 	return controller
+}
+
+func (c *Controller) initComponents(client contrail.ApiClient) {
+	c.client = client
+	c.allocator = NewAddressAllocator(client, c.config)
+	c.instanceMgr = NewInstanceManager(client, c.config, c.allocator)
+	c.networkMgr = NewNetworkManager(client, c.config)
+	c.serviceMgr = NewServiceManager(client, c.config, c.networkMgr)
+	c.namespaceMgr = NewNamespaceManager(client, c.config)
 }
 
 func (c *Controller) Init(global *network.Config, reader io.Reader) error {
@@ -76,12 +95,7 @@ func (c *Controller) Init(global *network.Config, reader io.Reader) error {
 	glog.Infof("Public Subnet:   %s", c.config.PublicSubnet)
 
 	client := contrail.NewClient(c.config.ApiAddress, c.config.ApiPort)
-	c.client = client
-	c.allocator = NewAddressAllocator(client, c.config)
-	c.instanceMgr = NewInstanceManager(client, c.config, c.allocator)
-	c.networkMgr = NewNetworkManager(client, c.config)
-	c.serviceMgr = NewServiceManager(client, c.config, c.networkMgr)
-	c.namespaceMgr = NewNamespaceManager(client, c.config)
+	c.initComponents(client)
 	c.consistencyPeriod = time.Duration(1) * time.Minute
 
 	return nil

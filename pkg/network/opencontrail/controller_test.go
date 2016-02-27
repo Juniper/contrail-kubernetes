@@ -82,42 +82,6 @@ func NewTestController(kube kubeclient.Interface, client contrail.ApiClient, all
 	return controller
 }
 
-type VmiInterceptor struct{}
-
-func (v *VmiInterceptor) Get(ptr contrail.IObject) {
-	nic := ptr.(*types.VirtualMachineInterface)
-	mac := nic.GetVirtualMachineInterfaceMacAddresses()
-	if len(mac.MacAddress) == 0 {
-		mac.AddMacAddress("00:01:02:03:04:05")
-		nic.SetVirtualMachineInterfaceMacAddresses(&mac)
-	}
-}
-
-func (v *VmiInterceptor) Put(ptr contrail.IObject) {
-}
-
-type NetworkInterceptor struct{}
-
-func (i *NetworkInterceptor) Put(ptr contrail.IObject) {
-	network := ptr.(*types.VirtualNetwork)
-	refs, err := network.GetNetworkIpamRefs()
-	if err != nil || len(refs) == 0 {
-		glog.Infof("%s: no ipam refs", network.GetName())
-		return
-	}
-
-	attr := refs[0].Attr.(types.VnSubnetsType)
-	if len(attr.IpamSubnets) == 0 {
-		glog.Infof("%s: no subnets", network.GetName())
-		return
-	}
-
-	attr.IpamSubnets[0].DefaultGateway = "1.1.1.1"
-}
-
-func (i *NetworkInterceptor) Get(ptr contrail.IObject) {
-}
-
 func policyHasRule(policy *types.NetworkPolicy, lhsName, rhsName string) bool {
 	entries := policy.GetNetworkPolicyEntries()
 	for _, rule := range entries.PolicyRule {
@@ -166,7 +130,7 @@ func TestPodCreate(t *testing.T) {
 		controller.config.PrivateSubnet).Return(testnet, nil)
 	networkMgr.On("GetGatewayAddress", testnet).Return("10.0.255.254", nil)
 
-	kube.PodInterface.On("Update", pod).Return(pod, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod).Return(pod, nil)
 
 	shutdown := make(chan struct{})
 	go controller.Run(shutdown)
@@ -179,7 +143,7 @@ func TestPodCreate(t *testing.T) {
 	shutdown <- shutdownMsg{}
 
 	assert.True(t, controller.podAnnotationsCheck(pod))
-	kube.PodInterface.AssertExpectations(t)
+	kube.Pods("testns").(*mocks.KubePodInterface).AssertExpectations(t)
 }
 
 func TestPodDelete(t *testing.T) {
@@ -357,8 +321,8 @@ func TestServiceAddWithPod(t *testing.T) {
 
 	allocator.On("LocateIpAddress", string(pod.ObjectMeta.UID)).Return("10.0.0.1", nil)
 
-	kube.PodInterface.On("Update", pod).Return(pod, nil)
-	kube.PodInterface.On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod}}, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod).Return(pod, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod}}, nil)
 
 	shutdown := make(chan struct{})
 	go controller.Run(shutdown)
@@ -437,7 +401,7 @@ func TestPodAddWithService(t *testing.T) {
 
 	allocator.On("LocateIpAddress", string(pod.ObjectMeta.UID)).Return("10.0.0.1", nil)
 
-	kube.PodInterface.On("Update", pod).Return(pod, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod).Return(pod, nil)
 
 	shutdown := make(chan struct{})
 	go controller.Run(shutdown)
@@ -450,7 +414,7 @@ func TestPodAddWithService(t *testing.T) {
 	}
 	shutdown <- shutdownMsg{}
 
-	kube.PodInterface.AssertExpectations(t)
+	kube.Pods("testns").(*mocks.KubePodInterface).AssertExpectations(t)
 
 	obj, err := client.FindByName("virtual-network", "default-domain:testns:service-x1")
 	assert.NoError(t, err)
@@ -520,9 +484,9 @@ func TestServiceDeleteWithPod(t *testing.T) {
 	allocator.On("LocateIpAddress", string(pod1.ObjectMeta.UID)).Return("10.0.0.1", nil)
 	allocator.On("LocateIpAddress", string(pod2.ObjectMeta.UID)).Return("10.0.0.2", nil)
 
-	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
-	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
-	kube.PodInterface.On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1, *pod2}}, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod1).Return(pod1, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod2).Return(pod2, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1, *pod2}}, nil)
 
 	shutdown := make(chan struct{})
 	go controller.Run(shutdown)
@@ -626,9 +590,9 @@ func TestPodUsesService(t *testing.T) {
 	allocator.On("ReleaseIpAddress", string(pod1.ObjectMeta.UID)).Return()
 	allocator.On("ReleaseIpAddress", string(pod2.ObjectMeta.UID)).Return()
 
-	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
-	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
-	kube.PodInterface.On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod1).Return(pod1, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod2).Return(pod2, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
 
 	shutdown := make(chan struct{})
 	go controller.Run(shutdown)
@@ -773,9 +737,9 @@ func TestPodUsesServiceCreatedAfter(t *testing.T) {
 	allocator.On("ReleaseIpAddress", string(pod1.ObjectMeta.UID)).Return()
 	allocator.On("ReleaseIpAddress", string(pod2.ObjectMeta.UID)).Return()
 
-	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
-	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
-	kube.PodInterface.On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod1).Return(pod1, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod2).Return(pod2, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
 
 	shutdown := make(chan struct{})
 	go controller.Run(shutdown)
@@ -865,7 +829,7 @@ func TestPodUsesNonExistingService(t *testing.T) {
 
 	allocator.On("LocateIpAddress", string(pod1.ObjectMeta.UID)).Return("10.0.0.1", nil)
 	allocator.On("ReleaseIpAddress", string(pod1.ObjectMeta.UID)).Return()
-	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod1).Return(pod1, nil)
 
 	shutdown := make(chan struct{})
 	go controller.Run(shutdown)
@@ -981,11 +945,11 @@ func TestServiceWithMultipleUsers(t *testing.T) {
 	allocator.On("ReleaseIpAddress", string(pod3.ObjectMeta.UID)).Return()
 	allocator.On("ReleaseIpAddress", string(pod4.ObjectMeta.UID)).Return()
 
-	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
-	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
-	kube.PodInterface.On("Update", pod3).Return(pod3, nil)
-	kube.PodInterface.On("Update", pod4).Return(pod4, nil)
-	kube.PodInterface.On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod1).Return(pod1, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod2).Return(pod2, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod3).Return(pod3, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod4).Return(pod4, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
 
 	shutdown := make(chan struct{})
 	go controller.Run(shutdown)
@@ -1054,18 +1018,11 @@ func TestServiceWithMultipleUsers(t *testing.T) {
 }
 
 func TestServiceWithMultipleBackends(t *testing.T) {
-	kube := mocks.NewKubeClient()
-
-	client := new(contrail_mocks.ApiClient)
-	client.Init()
-
-	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
-	client.AddInterceptor("instance-ip", &IpInterceptor{})
-
-	controller := NewTestController(kube, client, nil, nil)
-	config := controller.config
+	env := new(TestFramework)
+	env.SetUp("192.0.2.0/24")
+	config := env.config
 	config.NamespaceServices = nil
+	client := env.client
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -1073,6 +1030,7 @@ func TestServiceWithMultipleBackends(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":            "backend",
 				config.NetworkTag: "backend",
 			},
 		},
@@ -1083,6 +1041,7 @@ func TestServiceWithMultipleBackends(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":            "backend",
 				config.NetworkTag: "backend",
 			},
 		},
@@ -1098,7 +1057,7 @@ func TestServiceWithMultipleBackends(t *testing.T) {
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				config.NetworkTag: "backend",
+				"Name": "backend",
 			},
 			ClusterIP: "10.254.42.42",
 		},
@@ -1108,22 +1067,13 @@ func TestServiceWithMultipleBackends(t *testing.T) {
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	store := new(mocks.Store)
-	controller.SetServiceStore(store)
+	env.Start()
 
-	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
-	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
-	kube.PodInterface.On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
-	store.On("List").Return([]interface{}{service})
-
-	shutdown := make(chan struct{})
-	go controller.Run(shutdown)
-
-	controller.AddPod(pod1)
-	controller.AddService(service)
+	env.AddPod(pod1)
+	env.AddService(service, "backend")
 	time.Sleep(100 * time.Millisecond)
 
-	controller.AddPod(pod2)
+	env.AddPod(pod2)
 	time.Sleep(100 * time.Millisecond)
 
 	fip, err := types.FloatingIpByName(client, "default-domain:testns:service-svc:service-svc:service")
@@ -1134,7 +1084,7 @@ func TestServiceWithMultipleBackends(t *testing.T) {
 		assert.Len(t, refs, 2)
 	}
 
-	controller.DeletePod(pod1)
+	env.DeletePod(pod1)
 	time.Sleep(100 * time.Millisecond)
 
 	fip, err = types.FloatingIpByName(client, "default-domain:testns:service-svc:service-svc:service")
@@ -1154,7 +1104,7 @@ func TestServiceWithMultipleBackends(t *testing.T) {
 		}
 	}
 
-	controller.AddPod(pod1)
+	env.AddPod(pod1)
 	time.Sleep(100 * time.Millisecond)
 
 	fip, err = types.FloatingIpByName(client, "default-domain:testns:service-svc:service-svc:service")
@@ -1165,8 +1115,8 @@ func TestServiceWithMultipleBackends(t *testing.T) {
 		assert.Len(t, refs, 2)
 	}
 
-	controller.DeletePod(pod1)
-	controller.DeletePod(pod2)
+	env.DeletePod(pod1)
+	env.DeletePod(pod2)
 	time.Sleep(100 * time.Millisecond)
 
 	fip, err = types.FloatingIpByName(client, "default-domain:testns:service-svc:service-svc:service")
@@ -1177,23 +1127,20 @@ func TestServiceWithMultipleBackends(t *testing.T) {
 		assert.Len(t, refs, 0)
 	}
 
-	controller.DeleteService(service)
+	env.DeleteService(service, "backend")
 	time.Sleep(100 * time.Millisecond)
 
-	type shutdownMsg struct {
-	}
-	shutdown <- shutdownMsg{}
+	env.Shutdown()
 
 	_, err = types.FloatingIpByName(client, "default-domain:testns:service-svc:service-svc:service")
 	assert.Error(t, err)
 }
 
 func TestServiceWithLoadBalancer(t *testing.T) {
-	kube := mocks.NewKubeClient()
-
-	client := createTestClient()
-	controller := NewTestController(kube, client, nil, nil)
-	config := controller.config
+	env := new(TestFramework)
+	env.SetUp("192.0.2.0/24")
+	config := env.config
+	client := env.client
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -1201,6 +1148,7 @@ func TestServiceWithLoadBalancer(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":            "backend",
 				config.NetworkTag: "backend",
 			},
 		},
@@ -1211,6 +1159,7 @@ func TestServiceWithLoadBalancer(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":            "backend",
 				config.NetworkTag: "backend",
 			},
 		},
@@ -1226,7 +1175,7 @@ func TestServiceWithLoadBalancer(t *testing.T) {
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				config.NetworkTag: "backend",
+				"Name": "backend",
 			},
 			ClusterIP: "10.254.42.42",
 			Type:      api.ServiceTypeLoadBalancer,
@@ -1237,23 +1186,12 @@ func TestServiceWithLoadBalancer(t *testing.T) {
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	store := new(mocks.Store)
-	controller.SetServiceStore(store)
-
-	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
-	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
-	kube.PodInterface.On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
-	kube.ServiceInterface.On("Update", service).Return(service, nil)
-	store.On("List").Return([]interface{}{service})
-
-	shutdown := make(chan struct{})
-	go controller.Run(shutdown)
-
-	controller.AddPod(pod1)
-	controller.AddService(service)
+	env.Start()
+	env.AddPod(pod1)
+	env.AddService(service, "backend")
 	time.Sleep(100 * time.Millisecond)
 
-	controller.AddPod(pod2)
+	env.AddPod(pod2)
 	time.Sleep(100 * time.Millisecond)
 
 	fqn := strings.Split(config.PublicNetwork, ":")
@@ -1267,12 +1205,10 @@ func TestServiceWithLoadBalancer(t *testing.T) {
 		assert.Len(t, refs, 2)
 	}
 
-	controller.DeleteService(service)
+	env.DeleteService(service, "backend")
 	time.Sleep(100 * time.Millisecond)
 
-	type shutdownMsg struct {
-	}
-	shutdown <- shutdownMsg{}
+	env.Shutdown()
 
 	_, err = types.FloatingIpByName(client, strings.Join(fqn, ":"))
 	assert.Error(t, err)
@@ -1368,15 +1304,15 @@ func TestServiceUpdateSelector(t *testing.T) {
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
-	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
-	kube.PodInterface.On("Update", pod3).Return(pod3, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod1).Return(pod1, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod2).Return(pod2, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod3).Return(pod3, nil)
 
 	selectRed := makeListOptSelector(map[string]string{config.NetworkTag: "red"})
 	selectBlue := makeListOptSelector(map[string]string{config.NetworkTag: "blue"})
-	kube.PodInterface.On("List", selectRed).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
-	kube.PodInterface.On("List", selectBlue).Return(&api.PodList{Items: []api.Pod{*pod2}}, nil)
-	kube.ServiceInterface.On("Update", service).Return(service, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("List", selectRed).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("List", selectBlue).Return(&api.PodList{Items: []api.Pod{*pod2}}, nil)
+	kube.Services("testns").(*mocks.KubeServiceInterface).On("Update", service).Return(service, nil)
 
 	shutdown := make(chan struct{})
 	go controller.Run(shutdown)
@@ -1449,11 +1385,10 @@ func TestServiceUpdateSelector(t *testing.T) {
 }
 
 func TestServiceUpdateLabel(t *testing.T) {
-	kube := mocks.NewKubeClient()
-
-	client := createTestClient()
-	controller := NewTestController(kube, client, nil, nil)
-	config := controller.config
+	env := new(TestFramework)
+	env.SetUp("192.0.2.0/24")
+	config := env.config
+	client := env.client
 	config.NamespaceServices = nil
 
 	pod1 := &api.Pod{
@@ -1462,6 +1397,7 @@ func TestServiceUpdateLabel(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":            "server",
 				config.NetworkTag: "server",
 			},
 		},
@@ -1473,6 +1409,7 @@ func TestServiceUpdateLabel(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":                  "client",
 				config.NetworkTag:       "client1",
 				config.NetworkAccessTag: "red",
 			},
@@ -1485,6 +1422,7 @@ func TestServiceUpdateLabel(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":                  "client",
 				config.NetworkTag:       "client2",
 				config.NetworkAccessTag: "blue",
 			},
@@ -1501,7 +1439,7 @@ func TestServiceUpdateLabel(t *testing.T) {
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				config.NetworkTag: "server",
+				"Name": "server",
 			},
 			ClusterIP: "10.254.42.42",
 			Type:      api.ServiceTypeLoadBalancer,
@@ -1512,20 +1450,12 @@ func TestServiceUpdateLabel(t *testing.T) {
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
-	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
-	kube.PodInterface.On("Update", pod3).Return(pod3, nil)
-	selectServer := makeListOptSelector(map[string]string{config.NetworkTag: "server"})
-	kube.PodInterface.On("List", selectServer).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
-	kube.ServiceInterface.On("Update", service).Return(service, nil)
+	env.Start()
 
-	shutdown := make(chan struct{})
-	go controller.Run(shutdown)
-
-	controller.AddPod(pod1)
-	controller.AddPod(pod2)
-	controller.AddPod(pod3)
-	controller.AddService(service)
+	env.AddPod(pod1)
+	env.AddPod(pod2)
+	env.AddPod(pod3)
+	env.AddService(service, "server")
 	time.Sleep(100 * time.Millisecond)
 
 	redPolicyName := makeServicePolicyName(config, "testns", "red")
@@ -1558,14 +1488,12 @@ func TestServiceUpdateLabel(t *testing.T) {
 	}
 	// The service will receive a different PublicIP because this is translated into a service delete operation,
 	// followed by an add.
-	kube.ServiceInterface.On("Update", nService).Return(nService, nil)
+	env.kubeMock.Services("testns").(*mocks.KubeServiceInterface).On("Update", nService).Return(nService, nil)
 
-	controller.UpdateService(service, nService)
+	env.controller.UpdateService(service, nService)
 	time.Sleep(100 * time.Millisecond)
 
-	type shutdownMsg struct {
-	}
-	shutdown <- shutdownMsg{}
+	env.Shutdown()
 
 	bluePolicy, err = types.NetworkPolicyByName(client, strings.Join(bluePolicyName, ":"))
 	assert.NoError(t, err)
@@ -1661,12 +1589,12 @@ func TestServiceUpdatePublicIp(t *testing.T) {
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
-	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
-	kube.PodInterface.On("Update", pod3).Return(pod3, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod1).Return(pod1, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod2).Return(pod2, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod3).Return(pod3, nil)
 	selectPods := makeListOptSelector(map[string]string{config.NetworkTag: "service"})
-	kube.PodInterface.On("List", selectPods).Return(&api.PodList{Items: []api.Pod{*pod1, *pod2}}, nil)
-	kube.ServiceInterface.On("Update", service).Return(service, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("List", selectPods).Return(&api.PodList{Items: []api.Pod{*pod1, *pod2}}, nil)
+	kube.Services("testns").(*mocks.KubeServiceInterface).On("Update", service).Return(service, nil)
 
 	shutdown := make(chan struct{})
 	go controller.Run(shutdown)
@@ -1728,14 +1656,10 @@ func TestServiceUpdatePublicIp(t *testing.T) {
 }
 
 func TestNetworkWithMultipleServices(t *testing.T) {
-	kube := mocks.NewKubeClient()
-
-	client := createTestClient()
-	controller := NewTestController(kube, client, nil, nil)
-
-	store := new(mocks.Store)
-	controller.SetServiceStore(store)
-	config := controller.config
+	env := new(TestFramework)
+	env.SetUp("192.0.2.0/24")
+	config := env.config
+	client := env.client
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -1743,6 +1667,7 @@ func TestNetworkWithMultipleServices(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":            "service1",
 				"app":             "service1",
 				config.NetworkTag: "internal-net",
 			},
@@ -1755,6 +1680,7 @@ func TestNetworkWithMultipleServices(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":            "service2",
 				"app":             "service2",
 				config.NetworkTag: "internal-net",
 			},
@@ -1767,6 +1693,7 @@ func TestNetworkWithMultipleServices(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":                  "client",
 				config.NetworkTag:       "client",
 				config.NetworkAccessTag: "common",
 			},
@@ -1811,28 +1738,13 @@ func TestNetworkWithMultipleServices(t *testing.T) {
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
-	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
-	kube.PodInterface.On("Update", pod3).Return(pod3, nil)
+	env.Start()
 
-	s1Pods := makeListOptSelector(map[string]string{"app": "service1"})
-	kube.PodInterface.On("List", s1Pods).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
-	s2Pods := makeListOptSelector(map[string]string{"app": "service2"})
-	kube.PodInterface.On("List", s2Pods).Return(&api.PodList{Items: []api.Pod{*pod2}}, nil)
-
-	kube.ServiceInterface.On("Update", service1).Return(service1, nil)
-	kube.ServiceInterface.On("Update", service2).Return(service2, nil)
-
-	store.On("List").Return([]interface{}{})
-
-	shutdown := make(chan struct{})
-	go controller.Run(shutdown)
-
-	controller.AddPod(pod1)
-	controller.AddPod(pod2)
-	controller.AddPod(pod3)
-	controller.AddService(service1)
-	controller.AddService(service2)
+	env.AddPod(pod1)
+	env.AddPod(pod2)
+	env.AddPod(pod3)
+	env.AddService(service1, "service1")
+	env.AddService(service2, "service2")
 	time.Sleep(100 * time.Millisecond)
 
 	vip1, err := types.FloatingIpByName(client, "default-domain:testns:service-common:service-common:service1")
@@ -1861,14 +1773,10 @@ func TestNetworkWithMultipleServices(t *testing.T) {
 		assert.True(t, policyHasRule(policy, "default-domain:testns:client", "default-domain:testns:service-common"))
 	}
 
-	store.On("GetByKey", "testns/service1").Return(service1, true, nil)
-
-	controller.DeleteService(service2)
+	env.DeleteService(service2, "service2")
 	time.Sleep(100 * time.Millisecond)
 
-	type shutdownMsg struct {
-	}
-	shutdown <- shutdownMsg{}
+	env.Shutdown()
 
 	vip1, err = types.FloatingIpByName(client, "default-domain:testns:service-common:service-common:service1")
 	assert.NoError(t, err)
@@ -1891,15 +1799,10 @@ func TestNetworkWithMultipleServices(t *testing.T) {
 }
 
 func TestPodSelectedBy2Services(t *testing.T) {
-	kube := mocks.NewKubeClient()
-
-	client := createTestClient()
-	controller := NewTestController(kube, client, nil, nil)
-	config := controller.config
-
-	store := new(mocks.Store)
-	controller.SetServiceStore(store)
-	store.On("List").Return([]interface{}{})
+	env := new(TestFramework)
+	env.SetUp("192.0.2.0/24")
+	config := env.config
+	client := env.client
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -1907,6 +1810,7 @@ func TestPodSelectedBy2Services(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":            "svc",
 				config.NetworkTag: "svc",
 			},
 		},
@@ -1922,7 +1826,7 @@ func TestPodSelectedBy2Services(t *testing.T) {
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				config.NetworkTag: "svc",
+				"Name": "svc",
 			},
 			ClusterIP: "10.254.42.42",
 			Type:      api.ServiceTypeClusterIP,
@@ -1939,7 +1843,7 @@ func TestPodSelectedBy2Services(t *testing.T) {
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				config.NetworkTag: "svc",
+				"Name": "svc",
 			},
 			ClusterIP: "10.254.42.43",
 			Type:      api.ServiceTypeClusterIP,
@@ -1950,20 +1854,11 @@ func TestPodSelectedBy2Services(t *testing.T) {
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
+	env.Start()
 
-	selectPods := makeListOptSelector(map[string]string{config.NetworkTag: "svc"})
-	kube.PodInterface.On("List", selectPods).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
-
-	kube.ServiceInterface.On("Update", service1).Return(service1, nil)
-	kube.ServiceInterface.On("Update", service2).Return(service2, nil)
-
-	shutdown := make(chan struct{})
-	go controller.Run(shutdown)
-
-	controller.AddPod(pod1)
-	controller.AddService(service1)
-	controller.AddService(service2)
+	env.AddPod(pod1)
+	env.AddService(service1, "svc")
+	env.AddService(service2, "svc")
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -1985,14 +1880,10 @@ func TestPodSelectedBy2Services(t *testing.T) {
 		assert.Contains(t, vmList, string(pod1.UID))
 	}
 
-	store.On("GetByKey", "testns/service1").Return(service1, true, nil)
-
-	controller.DeleteService(service2)
+	env.DeleteService(service2, "svc")
 	time.Sleep(100 * time.Millisecond)
 
-	type shutdownMsg struct {
-	}
-	shutdown <- shutdownMsg{}
+	env.Shutdown()
 
 	vip1, err = types.FloatingIpByName(client, "default-domain:testns:service-common:service-common:service1")
 	assert.NoError(t, err)
@@ -2008,16 +1899,11 @@ func TestPodSelectedBy2Services(t *testing.T) {
 }
 
 func TestPodUsing2Services(t *testing.T) {
-	kube := mocks.NewKubeClient()
-
-	client := createTestClient()
-	controller := NewTestController(kube, client, nil, nil)
-
-	store := new(mocks.Store)
-	controller.SetServiceStore(store)
-	config := controller.config
+	env := new(TestFramework)
+	env.SetUp("192.0.2.0/24")
+	config := env.config
 	config.NamespaceServices = nil
-	store.On("List").Return([]interface{}{})
+	client := env.client
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -2025,6 +1911,7 @@ func TestPodUsing2Services(t *testing.T) {
 			Namespace: "testns",
 			UID:       kubetypes.UID(uuid.New()),
 			Labels: map[string]string{
+				"Name":            "private",
 				config.NetworkTag: "private",
 			},
 			Annotations: map[string]string{
@@ -2043,7 +1930,7 @@ func TestPodUsing2Services(t *testing.T) {
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				config.NetworkTag: "app1",
+				"Name": "app1",
 			},
 			ClusterIP: "10.254.42.42",
 			Type:      api.ServiceTypeClusterIP,
@@ -2060,7 +1947,7 @@ func TestPodUsing2Services(t *testing.T) {
 		},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
-				config.NetworkTag: "app2",
+				"Name": "app2",
 			},
 			ClusterIP: "10.254.42.43",
 			Type:      api.ServiceTypeClusterIP,
@@ -2071,23 +1958,11 @@ func TestPodUsing2Services(t *testing.T) {
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
+	env.Start()
 
-	s1Pods := makeListOptSelector(map[string]string{config.NetworkTag: "app1"})
-	kube.PodInterface.On("List", s1Pods).Return(&api.PodList{Items: []api.Pod{}}, nil)
-
-	s2Pods := makeListOptSelector(map[string]string{config.NetworkTag: "app2"})
-	kube.PodInterface.On("List", s2Pods).Return(&api.PodList{Items: []api.Pod{}}, nil)
-
-	kube.ServiceInterface.On("Update", service1).Return(service1, nil)
-	kube.ServiceInterface.On("Update", service2).Return(service2, nil)
-
-	shutdown := make(chan struct{})
-	go controller.Run(shutdown)
-
-	controller.AddPod(pod1)
-	controller.AddService(service1)
-	controller.AddService(service2)
+	env.AddPod(pod1)
+	env.AddService(service1, "app1")
+	env.AddService(service2, "app2")
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -2108,10 +1983,7 @@ func TestPodUsing2Services(t *testing.T) {
 	}
 
 	// TODO: update pod
-
-	type shutdownMsg struct {
-	}
-	shutdown <- shutdownMsg{}
+	env.Shutdown()
 }
 
 // Issue #75
@@ -2144,7 +2016,7 @@ func TestServiceBeforeNamespace(t *testing.T) {
 			Name: "newns",
 		},
 	}
-	kube.PodInterface.On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{}}, nil)
+	kube.Pods("newns").(*mocks.KubePodInterface).On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{}}, nil)
 	kube.NamespaceInterface.On("Get", ns.Name).Return(ns, nil)
 
 	shutdown := make(chan struct{})
@@ -2213,9 +2085,9 @@ func TestDomainVariable(t *testing.T) {
 	netnsProject.SetFQName("", []string{controller.config.DefaultDomain, "testns"})
 	client.Create(netnsProject)
 
-	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
-	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
-	kube.PodInterface.On("List", mock.Anything, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod1).Return(pod1, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod2).Return(pod2, nil)
+	kube.Pods("testns").(*mocks.KubePodInterface).On("List", mock.Anything, mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
 
 	shutdown := make(chan struct{})
 	go controller.Run(shutdown)
@@ -2235,12 +2107,11 @@ func TestDomainVariable(t *testing.T) {
 }
 
 func TestGlobalNetworkConnectPodNetworks(t *testing.T) {
-	kube := mocks.NewKubeClient()
+	env := new(TestFramework)
+	env.SetUp("192.0.2.0/24")
+	config := env.config
+	client := env.client
 
-	client := createTestClient()
-	controller := NewTestController(kube, client, nil, nil)
-
-	config := controller.config
 	config.GlobalNetworks = []string{"default-domain:cluster:external"}
 
 	pod1 := &api.Pod{
@@ -2294,16 +2165,11 @@ func TestGlobalNetworkConnectPodNetworks(t *testing.T) {
 	externalNetwork.SetFQName("project", []string{config.DefaultDomain, "cluster", "external"})
 	require.NoError(t, client.Create(externalNetwork))
 
-	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
-	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
-	kube.PodInterface.On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod1, *pod2}}, nil)
+	env.Start()
 
-	shutdown := make(chan struct{})
-	go controller.Run(shutdown)
-
-	controller.AddPod(pod1)
-	controller.AddPod(pod2)
-	controller.AddService(service)
+	env.AddPod(pod1)
+	env.AddPod(pod2)
+	env.AddService(service, "server")
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -2316,7 +2182,7 @@ func TestGlobalNetworkConnectPodNetworks(t *testing.T) {
 	assert.Len(t, netRefs, 3)
 	assert.Len(t, policy.GetNetworkPolicyEntries().PolicyRule, 2)
 
-	controller.DeletePod(pod1)
+	env.DeletePod(pod1)
 	time.Sleep(100 * time.Millisecond)
 
 	policy, err = types.NetworkPolicyByName(client, strings.Join(policyName, ":"))
@@ -2327,27 +2193,23 @@ func TestGlobalNetworkConnectPodNetworks(t *testing.T) {
 	assert.Len(t, netRefs, 2)
 	assert.Len(t, policy.GetNetworkPolicyEntries().PolicyRule, 1)
 
-	controller.DeletePod(pod2)
-	controller.DeleteService(service)
+	env.DeletePod(pod2)
+	env.DeleteService(service, "server")
 	time.Sleep(100 * time.Microsecond)
 
 	_, err = types.NetworkPolicyByName(client, strings.Join(policyName, ":"))
 	assert.Error(t, err)
 
-	type shutdownMsg struct {
-	}
-	shutdown <- shutdownMsg{}
+	env.Shutdown()
 }
 
 // client pod relies on default NamespaceService in order to connect to server
 // since it has no NetworkAccessTag label.
 func TestNamespaceServicesDefault(t *testing.T) {
-	kube := mocks.NewKubeClient()
-
-	client := createTestClient()
-	controller := NewTestController(kube, client, nil, nil)
-
-	config := controller.config
+	env := new(TestFramework)
+	env.SetUp("192.0.2.0/24")
+	config := env.config
+	client := env.client
 
 	pod1 := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
@@ -2388,16 +2250,11 @@ func TestNamespaceServicesDefault(t *testing.T) {
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
 	require.NoError(t, client.Create(netnsProject))
 
-	kube.PodInterface.On("Update", pod1).Return(pod1, nil)
-	kube.PodInterface.On("Update", pod2).Return(pod2, nil)
-	kube.PodInterface.On("List", makeListOptSelector(service.Spec.Selector)).Return(&api.PodList{Items: []api.Pod{*pod1}}, nil)
+	env.Start()
 
-	shutdown := make(chan struct{})
-	go controller.Run(shutdown)
-
-	controller.AddPod(pod1)
-	controller.AddPod(pod2)
-	controller.AddService(service)
+	env.AddPod(pod1)
+	env.AddPod(pod2)
+	env.AddService(service, "server")
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -2410,7 +2267,7 @@ func TestNamespaceServicesDefault(t *testing.T) {
 	assert.Len(t, netRefs, 3)
 	assert.Len(t, policy.GetNetworkPolicyEntries().PolicyRule, 2)
 
-	controller.DeletePod(pod1)
+	env.DeletePod(pod1)
 	time.Sleep(100 * time.Millisecond)
 
 	policy, err = types.NetworkPolicyByName(client, strings.Join(policyName, ":"))
@@ -2421,14 +2278,12 @@ func TestNamespaceServicesDefault(t *testing.T) {
 	assert.Len(t, netRefs, 2)
 	assert.Len(t, policy.GetNetworkPolicyEntries().PolicyRule, 1)
 
-	controller.DeletePod(pod2)
-	controller.DeleteService(service)
+	env.DeletePod(pod2)
+	env.DeleteService(service, "server")
 	time.Sleep(100 * time.Millisecond)
 
 	_, err = types.NetworkPolicyByName(client, strings.Join(policyName, ":"))
 	assert.Error(t, err)
 
-	type shutdownMsg struct {
-	}
-	shutdown <- shutdownMsg{}
+	env.Shutdown()
 }

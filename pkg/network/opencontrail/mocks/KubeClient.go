@@ -26,27 +26,37 @@ import (
 )
 
 type KubeClient struct {
-	PodInterface       *KubePodInterface
-	ServiceInterface   *KubeServiceInterface
+	podMocks           map[string]*KubePodInterface
+	serviceMocks       map[string]*KubeServiceInterface
 	NamespaceInterface *KubeNamespaceInterface
 }
 
 func NewKubeClient() *KubeClient {
 	client := new(KubeClient)
-	client.PodInterface = new(KubePodInterface)
-	client.ServiceInterface = new(KubeServiceInterface)
+	client.podMocks = make(map[string]*KubePodInterface, 0)
+	client.serviceMocks = make(map[string]*KubeServiceInterface, 0)
 	client.NamespaceInterface = new(KubeNamespaceInterface)
 	return client
 }
 
 func (m *KubeClient) Pods(namespace string) kubeclient.PodInterface {
-	return m.PodInterface
+	pods, ok := m.podMocks[namespace]
+	if !ok {
+		pods = new(KubePodInterface)
+		m.podMocks[namespace] = pods
+	}
+	return pods
 }
 func (m *KubeClient) ReplicationControllers(namespace string) kubeclient.ReplicationControllerInterface {
 	return nil
 }
 func (m *KubeClient) Services(namespace string) kubeclient.ServiceInterface {
-	return m.ServiceInterface
+	services, ok := m.serviceMocks[namespace]
+	if !ok {
+		services = new(KubeServiceInterface)
+		m.serviceMocks[namespace] = services
+	}
+	return services
 }
 
 func (m *KubeClient) Endpoints(namespace string) kubeclient.EndpointsInterface {
