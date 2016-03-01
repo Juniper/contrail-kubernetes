@@ -31,6 +31,12 @@ import (
 
 const (
 	MetadataAnnotationTag = "opencontrail.org/pod-state"
+
+	servicePolicyPrefix = "__svc_"
+	networkPolicyPrefix = "__net_"
+
+	DefaultPodNetworkName     = "default-network"
+	DefaultServiceNetworkName = "default"
 )
 
 // InstanceMetadata contains the information required in the kubernetes minion to

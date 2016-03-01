@@ -85,6 +85,8 @@ func (c *Controller) UpdatePod(oldPod, newPod *api.Pod) {
 	if IgnorePod(newPod) {
 		if !IgnorePod(oldPod) {
 			c.eventChannel <- notification{evDeletePod, oldPod}
+		} else {
+			glog.V(3).Infof("Update pod %s: ignore", newPod.Name)
 		}
 		return
 	}
@@ -95,10 +97,13 @@ func (c *Controller) UpdatePod(oldPod, newPod *api.Pod) {
 	}
 	update := false
 	if !c.podAnnotationsCheck(newPod) {
-		glog.V(3).Infof("Pod %s: annotations not current", newPod.Name)
+		glog.V(3).Infof("Pod %s: opencontrail annotations not current", newPod.Name)
 		update = true
 	} else if !EqualTags(oldPod.Labels, newPod.Labels, watchTags) {
-		glog.V(3).Infof("Pod %s: tags have changed", newPod.Name)
+		glog.V(3).Infof("Pod %s: labels have changed", newPod.Name)
+		update = true
+	} else if !EqualTags(oldPod.Annotations, newPod.Annotations, []string{c.config.NetworkAccessTag}) {
+		glog.V(3).Infof("Pod %s: annotations have changed", newPod.Name)
 		update = true
 	}
 	if update {

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"regexp"
 	"strings"
 
 	flag "github.com/spf13/pflag"
@@ -57,20 +58,33 @@ type Config struct {
 	// Label used to connect pods with services
 	NetworkAccessTag string `gcfg:"service-label"`
 
+	// Networks connected to all pod networks
+	GlobalNetworks []string `gcfg:"global-network"`
+	// Connect networks that match this pattern to the global network list.
+	GlobalConnectInclude string `gcfg:"global-connect-include"`
+	// Exclude networks that match the following pattern from connecting to the global network list.
+	GlobalConnectExclude string `gcfg:"global-connect-exclude"`
+
+	// Cluster-wide service networks
 	ClusterServices []string `gcfg:"cluster-service"`
+
+	// Tenant-specific service networks that are automatically attached to tenant networks
+	NamespaceServices []string `gcfg:"namespace-service"`
 }
 
 func NewConfig() *Config {
 	config := &Config{
-		DefaultDomain:    "default-domain",
-		ApiAddress:       "localhost",
-		ApiPort:          8082,
-		DefaultProject:   "default-domain:default-project",
-		PublicNetwork:    "default-domain:default-project:Public",
-		PrivateSubnet:    "10.0.0.0/16",
-		ServiceSubnet:    DefaultServiceSubnet,
-		NetworkTag:       "opencontrail.org/name",
-		NetworkAccessTag: "opencontrail.org/services",
+		DefaultDomain:        "default-domain",
+		ApiAddress:           "localhost",
+		ApiPort:              8082,
+		DefaultProject:       "default-domain:default-project",
+		PublicNetwork:        "default-domain:default-project:Public",
+		PrivateSubnet:        "10.0.0.0/16",
+		ServiceSubnet:        DefaultServiceSubnet,
+		NetworkTag:           "opencontrail.org/name",
+		NetworkAccessTag:     "opencontrail.org/services",
+		GlobalConnectInclude: ".*",
+		NamespaceServices:    []string{DefaultServiceNetworkName},
 	}
 	return config
 }
@@ -102,10 +116,30 @@ type configWrapper struct {
 	OpenContrail Config
 }
 
-func validateClusterServiceName(name string) error {
+func validateQualifiedNetworkName(name string) error {
 	serviceName := strings.Split(name, "/")
 	if len(serviceName) != 2 {
 		return fmt.Errorf("Expected 'namespace/service', got \"%s\"", name)
+	}
+	return nil
+}
+
+func validateColonSeparatedNetworkName(name string) error {
+	networkName := strings.Split(name, ":")
+	if len(networkName) != 3 {
+		return fmt.Errorf("Expected 'domain:project:network', got \"%s\"", name)
+	}
+	for _, v := range networkName {
+		if v == "" {
+			return fmt.Errorf("Empty element in fully qualified network name")
+		}
+	}
+	return nil
+}
+
+func validateNamespaceService(name string) error {
+	if strings.Contains(name, "/") {
+		return fmt.Errorf("Namespace-specific service \"%s\": cannot contain namespace separator (\"/\")", name)
 	}
 	return nil
 }
@@ -124,11 +158,37 @@ func (c *Config) Validate() error {
 	}
 
 	for _, svc := range c.ClusterServices {
-		err := validateClusterServiceName(svc)
+		err := validateQualifiedNetworkName(svc)
 		if err != nil {
 			return err
 		}
 	}
+
+	if c.GlobalConnectInclude != "" {
+		if _, err := regexp.Compile(c.GlobalConnectInclude); err != nil {
+			return err
+		}
+	}
+
+	if c.GlobalConnectExclude != "" {
+		if _, err := regexp.Compile(c.GlobalConnectExclude); err != nil {
+			return err
+		}
+	}
+
+	for _, net := range c.GlobalNetworks {
+		err := validateColonSeparatedNetworkName(net)
+		if err != nil {
+			return err
+		}
+	}
+	for _, svc := range c.NamespaceServices {
+		err := validateNamespaceService(svc)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

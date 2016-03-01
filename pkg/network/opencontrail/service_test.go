@@ -21,12 +21,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	contrail_mocks "github.com/Juniper/contrail-go-api/mocks"
 	"github.com/Juniper/contrail-go-api/types"
 )
 
-func TestPurgeServiceList(t *testing.T) {
+func TestServiceDeleteConnections(t *testing.T) {
 	client := new(contrail_mocks.ApiClient)
 	client.Init()
 
@@ -70,10 +71,20 @@ func TestPurgeServiceList(t *testing.T) {
 	serviceList.Add("testns", "s1")
 	serviceList.Add("global", "s3")
 
-	err = serviceMgr.PurgeStalePolicyRefs(network, serviceList,
-		func(namespace, name string) bool {
-			return true
-		})
+	purgeList := make([]string, 0)
+	policyRefs, err := network.GetNetworkPolicyRefs()
+	require.NoError(t, err)
+	for _, ref := range policyRefs {
+		require.Len(t, ref.To, 3)
+		svcName, err := serviceNameFromPolicyName(ref.To[2])
+		require.NoError(t, err)
+		if serviceList.Contains(ref.To[1], svcName) {
+			continue
+		}
+		purgeList = append(purgeList, ref.Uuid)
+	}
+
+	err = serviceMgr.DeleteConnections(network, purgeList)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +98,11 @@ func TestPurgeServiceList(t *testing.T) {
 	}
 	actual := make([]string, 0)
 	for _, ref := range refs {
-		actual = append(actual, ref.To[1]+"/"+ref.To[2])
+		svc, err := serviceNameFromPolicyName(ref.To[2])
+		if err != nil {
+			continue
+		}
+		actual = append(actual, ref.To[1]+"/"+svc)
 	}
 	assert.EqualValues(t, []string{"testns/s1", "global/s3"}, actual)
 }

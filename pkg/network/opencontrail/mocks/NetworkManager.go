@@ -1,8 +1,10 @@
 package mocks
 
-import "github.com/stretchr/testify/mock"
+import (
+	"github.com/stretchr/testify/mock"
 
-import "github.com/Juniper/contrail-go-api/types"
+	"github.com/Juniper/contrail-go-api/types"
+)
 
 type NetworkManager struct {
 	mock.Mock
@@ -109,4 +111,21 @@ func (m *NetworkManager) GetGatewayAddress(network *types.VirtualNetwork) (strin
 	r1 := ret.Error(1)
 
 	return r0, r1
+}
+
+func (m *NetworkManager) Connect(network *types.VirtualNetwork, networkFQN string) error {
+	ret := m.Called(network, networkFQN)
+	r0 := ret.Error(0)
+	return r0
+}
+func (m *NetworkManager) Disconnect(networkFQN []string, targetCDN string) error {
+	ret := m.Called(networkFQN, targetCDN)
+	r0 := ret.Error(0)
+	return r0
+}
+
+func (m *NetworkManager) DeleteConnections(network *types.VirtualNetwork, policies map[string]string) error {
+	ret := m.Called(network, policies)
+	r0 := ret.Error(0)
+	return r0
 }

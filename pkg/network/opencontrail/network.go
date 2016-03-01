@@ -18,6 +18,7 @@ package opencontrail
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/golang/glog"
@@ -39,6 +40,9 @@ type NetworkManager interface {
 	DeleteFloatingIp(network *types.VirtualNetwork, resourceName string) error
 	GetPublicNetwork() *types.VirtualNetwork
 	GetGatewayAddress(network *types.VirtualNetwork) (string, error)
+	Connect(network *types.VirtualNetwork, targetCSN string) error
+	Disconnect(networkFQN []string, targetCSN string) error
+	DeleteConnections(network *types.VirtualNetwork, policies map[string]string) error
 }
 
 type NetworkManagerImpl struct {
@@ -120,7 +124,7 @@ func (m *NetworkManagerImpl) DeleteFloatingIpPool(network *types.VirtualNetwork,
 
 // Subnets can only be deleted if there are no instance-ips or floating-ips associated
 // with the subnet.
-func (m *NetworkManagerImpl) updateSubnetConfig(network *types.VirtualNetwork, prefix string) {
+func (m *NetworkManagerImpl) updateSubnetConfig(network *types.VirtualNetwork, prefix string) error {
 	prefixList, err := m.NetworkIPPrefixList(network)
 	if err != nil {
 		glog.Fatal(err)
@@ -174,7 +178,9 @@ func (m *NetworkManagerImpl) updateSubnetConfig(network *types.VirtualNetwork, p
 		if err != nil {
 			glog.Error(err)
 		}
+		return err
 	}
+	return nil
 }
 
 func (m *NetworkManagerImpl) initializePublicNetwork() {
@@ -222,6 +228,9 @@ func (m *NetworkManagerImpl) LookupNetwork(projectName, networkName string) (*ty
 	return obj.(*types.VirtualNetwork), nil
 }
 
+// LocateNetwork creates a private network.
+//
+// It is used to create pod and service networks.
 func (m *NetworkManagerImpl) LocateNetwork(project, name, subnet string) (*types.VirtualNetwork, error) {
 	fqn := []string{m.config.DefaultDomain, project, name}
 	fqname := strings.Join(fqn, ":")
@@ -231,17 +240,17 @@ func (m *NetworkManagerImpl) LocateNetwork(project, name, subnet string) (*types
 		return obj.(*types.VirtualNetwork), nil
 	}
 
-	projectId, err := m.client.UuidByName("project", fmt.Sprintf("%s:%s", m.config.DefaultDomain, project))
+	projectID, err := m.client.UuidByName("project", fmt.Sprintf("%s:%s", m.config.DefaultDomain, project))
 	if err != nil {
 		glog.Infof("GET %s: %v", project, err)
 		return nil, err
 	}
-	uid, err := config.CreateNetworkWithSubnet(
-		m.client, projectId, name, subnet)
+	uid, err := config.CreateNetworkWithSubnet(m.client, projectID, name, subnet)
 	if err != nil {
 		glog.Infof("Create %s: %v", name, err)
 		return nil, err
 	}
+
 	obj, err = m.client.FindByUuid("virtual-network", uid)
 	if err != nil {
 		glog.Infof("GET %s: %v", name, err)
@@ -270,6 +279,7 @@ func (m *NetworkManagerImpl) ReleaseNetworkIfEmpty(namespace, name string) (bool
 			glog.Errorf("Delete virtual-network %s: %v", name, err)
 			return false, err
 		}
+		glog.V(3).Infof("Delete network %s", name)
 		return true, nil
 	}
 	return false, nil
@@ -395,4 +405,168 @@ func (m *NetworkManagerImpl) NetworkIPPrefixList(network *types.VirtualNetwork) 
 	}
 
 	return prefixList, nil
+}
+
+func makeGlobalNetworkPolicyName(config *Config, targetName []string) []string {
+	if targetName[0] == config.DefaultDomain {
+		return []string{config.DefaultDomain, targetName[1], networkPolicyPrefix + targetName[2]}
+	}
+	name := networkPolicyPrefix + strings.Join(escapeFQN(targetName), "_")
+	return []string{config.DefaultDomain, config.DefaultProject, name}
+}
+
+func globalNetworkFromPolicyName(config *Config, policyName []string) (string, error) {
+	if len(policyName) != 3 {
+		return "", fmt.Errorf("Invalid name for policy object")
+	}
+	if !strings.HasPrefix(policyName[2], networkPolicyPrefix) {
+		return "", fmt.Errorf("Not a global-network policy")
+	}
+	networkName := policyName[2][len(networkPolicyPrefix):]
+	if policyName[0] == config.DefaultDomain {
+		networkFQN := []string{config.DefaultDomain, policyName[1], networkName}
+		return strings.Join(networkFQN, ":"), nil
+	}
+	networkFQN := splitEscapedString(networkName)
+	return strings.Join(networkFQN, ":"), nil
+}
+
+func (m *NetworkManagerImpl) locatePolicy(targetName []string) (*types.NetworkPolicy, error) {
+	policyName := makeGlobalNetworkPolicyName(m.config, targetName)
+	policy, err := types.NetworkPolicyByName(m.client, strings.Join(policyName, ":"))
+	if err != nil {
+		policy = new(types.NetworkPolicy)
+		policy.SetFQName("project", policyName)
+		err = m.client.Create(policy)
+	}
+	return policy, err
+}
+
+// Connect creates a network-policy and corresponding policy rule (when they do not exist) in order to
+// connect the source network with the target. The target network may or not exist yet.
+func (m *NetworkManagerImpl) Connect(network *types.VirtualNetwork, targetCSN string) error {
+	targetName := strings.Split(targetCSN, ":")
+	policy, err := m.locatePolicy(targetName)
+	if err != nil {
+		return err
+	}
+
+	policyAttach(m.client, network, policy)
+
+	target, err := types.VirtualNetworkByName(m.client, targetCSN)
+	if err == nil {
+		err = policyAttach(m.client, target, policy)
+		if err != nil {
+			glog.Error(err)
+		}
+	}
+
+	err = policyLocateRuleByFQN(m.client, policy, network.GetFQName(), targetName)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m *NetworkManagerImpl) disconnectNetworkFromPolicy(policy *types.NetworkPolicy, targetCSN string) error {
+	target, err := types.VirtualNetworkByName(m.client, targetCSN)
+	if err != nil {
+		return err
+	}
+	err = target.DeleteNetworkPolicy(policy.GetUuid())
+	if err != nil {
+		return err
+	}
+	return m.client.Update(target)
+}
+
+// Disconnect is called after the virtual network is deleted.
+// The corresponding rule should be removed from the policy; and the policy should be
+// deleted if no longer in use.
+func (m *NetworkManagerImpl) Disconnect(networkFQN []string, targetCSN string) error {
+	policy, err := m.locatePolicy(strings.Split(targetCSN, ":"))
+	if err != nil {
+		return err
+	}
+
+	networkRefs, err := policy.GetVirtualNetworkBackRefs()
+	if err == nil {
+		glog.V(3).Infof("policy %s: %d connections", policy.GetName(), len(networkRefs))
+		if len(networkRefs) < 2 {
+			if len(networkRefs) == 1 && strings.Join(networkRefs[0].To, ":") == targetCSN {
+				err = m.disconnectNetworkFromPolicy(policy, targetCSN)
+				if err != nil {
+					glog.Error(err)
+				}
+			}
+			return m.client.Delete(policy)
+		}
+	} else {
+		glog.Error(err)
+	}
+	return policyDeleteRule(m.client, policy, strings.Join(networkFQN, ":"), targetCSN)
+}
+
+func isGlobalNetworkName(config *Config, networkName string) bool {
+	for _, gbl := range config.GlobalNetworks {
+		if gbl == networkName {
+			return true
+		}
+	}
+	return false
+}
+
+func networkAccessGlobalNetworks(config *Config, networkFQN []string) bool {
+	networkName := networkFQN[1] + "/" + networkFQN[2]
+
+	if config.GlobalConnectExclude != "" {
+		re := regexp.MustCompile(config.GlobalConnectExclude)
+		if re.MatchString(networkName) {
+			return false
+		}
+	}
+	if config.GlobalConnectInclude != "" {
+		re := regexp.MustCompile(config.GlobalConnectInclude)
+		if !re.MatchString(networkName) {
+			return false
+		}
+	}
+
+	return !isGlobalNetworkName(config, strings.Join(networkFQN, ":"))
+}
+
+func (m *NetworkManagerImpl) DeleteConnections(network *types.VirtualNetwork, policies map[string]string) error {
+	for policyID, _ := range policies {
+		network.DeleteNetworkPolicy(policyID)
+	}
+	err := m.client.Update(network)
+
+	for policyID, targetName := range policies {
+		policy, policyErr := types.NetworkPolicyByUuid(m.client, policyID)
+		if policyErr != nil {
+			glog.Error(policyErr)
+			continue
+		}
+		networkRefs, policyErr := policy.GetVirtualNetworkBackRefs()
+		if len(networkRefs) > 1 {
+			continue
+		}
+		if len(networkRefs) == 1 {
+			if strings.Join(networkRefs[0].To, ":") == targetName {
+				policyErr = m.disconnectNetworkFromPolicy(policy, targetName)
+				if policyErr != nil {
+					glog.Error(policyErr)
+					continue
+				}
+			} else {
+				continue
+			}
+		}
+		policyErr = m.client.Delete(policy)
+		if policyErr != nil {
+			glog.Error(policyErr)
+		}
+	}
+
+	return err
 }

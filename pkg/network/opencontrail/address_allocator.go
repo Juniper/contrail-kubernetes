@@ -71,7 +71,7 @@ func (a *AddressAllocatorImpl) initializeAllocator() {
 	glog.Infof("Created network %s", AddressAllocationNetwork)
 	obj, err = a.client.FindByUuid("virtual-network", netId)
 	if err != nil {
-		glog.Fatal("Get virtual-network %s: %v", netId, err)
+		glog.Fatalf("Get virtual-network %s: %v", netId, err)
 	}
 	a.network = obj.(*types.VirtualNetwork)
 }

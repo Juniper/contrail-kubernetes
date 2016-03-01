@@ -18,13 +18,17 @@ package opencontrail
 
 import (
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"k8s.io/kubernetes/pkg/api"
 )
 
 func TestServiceIdList(t *testing.T) {
 	config := NewConfig()
+	config.NamespaceServices = nil
 	pod := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
 			Name:      "test-xz1",
@@ -40,7 +44,7 @@ func TestServiceIdList(t *testing.T) {
 
 	// ServiceIdList is a slice; it must be passed as a pointer in order to be
 	// modified.
-	BuildPodServiceList(pod, config, &list)
+	buildPodServiceList(pod, config, &list)
 
 	if len(list) != 1 {
 		t.Errorf("expected list length 1, got %d", len(list))
@@ -51,5 +55,18 @@ func TestServiceIdList(t *testing.T) {
 	}
 	if !reflect.DeepEqual(names, []string{"service1"}) {
 		t.Errorf("expected [\"service1\"], got %+v", names)
+	}
+}
+
+func TestEscapedNames(t *testing.T) {
+	values := []string{
+		"a_b:c_d:x",
+		"a\\_b:c_d:x",
+		"foo:bar:baz",
+	}
+	for _, v := range values {
+		escapedName := escapeFQN(strings.Split(v, ":"))
+		result := splitEscapedString(strings.Join(escapedName, ":"))
+		assert.Equal(t, v, strings.Join(result, ":"))
 	}
 }

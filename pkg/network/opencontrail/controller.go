@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -86,7 +87,7 @@ func (c *Controller) Run(shutdown chan struct{}) {
 	if c.consistencyPeriod != 0 {
 		glog.V(3).Infof("Consistency checker interval %s", c.consistencyPeriod.String())
 		timerChan = time.NewTicker(c.consistencyPeriod).C
-		c.consistencyWorker = NewConsistencyChecker(c.client, c.config, c.podStore, c.serviceStore, c.serviceMgr)
+		c.consistencyWorker = NewConsistencyChecker(c.client, c.config, c.podStore, c.serviceStore, c.networkMgr, c.serviceMgr)
 	}
 
 	for {
@@ -162,17 +163,17 @@ func (c *Controller) updateInstanceMetadata(
 	}
 }
 
-func PodNetworkName(pod *api.Pod, config *Config) string {
+func podNetworkName(pod *api.Pod, config *Config) string {
 	name, ok := pod.Labels[config.NetworkTag]
 	if !ok {
-		name = "default-network"
+		name = DefaultPodNetworkName
 	}
 	return name
 }
 
 // Retrieve the private network for this Pod.
 func (c *Controller) getPodNetwork(pod *api.Pod) *types.VirtualNetwork {
-	name := PodNetworkName(pod, c.config)
+	name := podNetworkName(pod, c.config)
 	network, err := c.networkMgr.LocateNetwork(pod.Namespace, name, c.config.PrivateSubnet)
 	if err != nil {
 		return nil
@@ -183,7 +184,7 @@ func (c *Controller) getPodNetwork(pod *api.Pod) *types.VirtualNetwork {
 func ServiceName(config *Config, labels map[string]string) string {
 	name, ok := labels[config.NetworkTag]
 	if !ok {
-		return "default"
+		return DefaultServiceNetworkName
 	}
 
 	return name
@@ -253,8 +254,24 @@ func decodeAccessTag(tag string) []string {
 	return []string{tag}
 }
 
-func BuildPodServiceList(pod *api.Pod, config *Config, serviceList *ServiceIdList) {
+func buildPodServiceList(pod *api.Pod, config *Config, serviceList *ServiceIdList) {
+	for _, svc := range config.ClusterServices {
+		namespace, service := serviceIdFromName(svc)
+		serviceList.Add(namespace, service)
+	}
+	for _, svc := range config.NamespaceServices {
+		serviceList.Add(pod.Namespace, svc)
+	}
+
 	policyTag, ok := pod.Labels[config.NetworkAccessTag]
+	if ok {
+		serviceLabels := decodeAccessTag(policyTag)
+		for _, srv := range serviceLabels {
+			serviceList.Add(pod.Namespace, srv)
+		}
+	}
+
+	policyTag, ok = pod.Annotations[config.NetworkAccessTag]
 	if ok {
 		serviceLabels := decodeAccessTag(policyTag)
 		for _, srv := range serviceLabels {
@@ -269,7 +286,7 @@ func makeListOptSelector(labelMap map[string]string) api.ListOptions {
 }
 
 func (c *Controller) updatePod(pod *api.Pod) {
-	glog.Infof("Pod %s", pod.Name)
+	glog.Infof("Update Pod %s", pod.Name)
 
 	c.ensureNamespace(pod.Namespace)
 	instance := c.instanceMgr.LocateInstance(pod.Namespace, pod.Name, string(pod.ObjectMeta.UID))
@@ -278,6 +295,7 @@ func (c *Controller) updatePod(pod *api.Pod) {
 	if network == nil {
 		return
 	}
+	c.globalNetworkConnectionUpdate(network)
 	nic := c.instanceMgr.LocateInterface(network, instance)
 	if nic == nil {
 		return
@@ -293,18 +311,10 @@ func (c *Controller) updatePod(pod *api.Pod) {
 	c.updateInstanceMetadata(pod, nic, address.GetInstanceIpAddress(), gateway)
 
 	serviceList := MakeServiceIdList()
-	for _, svc := range c.config.ClusterServices {
-		namespace, service := serviceIdFromName(svc)
-		serviceList.Add(namespace, service)
-	}
-	BuildPodServiceList(pod, c.config, &serviceList)
+	buildPodServiceList(pod, c.config, &serviceList)
 	for _, srv := range serviceList {
 		c.serviceMgr.Connect(srv.Namespace, srv.Service, network)
 	}
-
-	// TODO(prm): disconnect of services that are no longer used
-	// in consistency checker after building a list of all services
-	// used by pods in this network.
 
 	for _, item := range c.serviceStore.List() {
 		service := item.(*api.Service)
@@ -331,22 +341,26 @@ func (c *Controller) deletePod(pod *api.Pod) {
 	c.instanceMgr.ReleaseInterface(pod.Namespace, pod.Name)
 	c.instanceMgr.DeleteInstance(string(pod.ObjectMeta.UID))
 
-	netname, ok := pod.Labels[c.config.NetworkTag]
-	if !ok {
-		netname = "default-network"
-	}
-	deleted, err := c.networkMgr.ReleaseNetworkIfEmpty(pod.Namespace, netname)
+	networkName := podNetworkName(pod, c.config)
+	deleted, err := c.networkMgr.ReleaseNetworkIfEmpty(pod.Namespace, networkName)
 	if err != nil {
-		glog.Infof("Release network %s: %v", netname, err)
+		glog.Infof("Release network %s: %v", networkName, err)
 	}
 
-	// TODO(prm): cleanup all the policies
 	if deleted {
-		policyTag, ok := pod.Labels[c.config.NetworkAccessTag]
-		if ok {
-			serviceList := decodeAccessTag(policyTag)
-			for _, srv := range serviceList {
-				c.serviceMgr.Disconnect(pod.Namespace, srv, netname)
+		serviceList := MakeServiceIdList()
+		buildPodServiceList(pod, c.config, &serviceList)
+		for _, srv := range serviceList {
+			c.serviceMgr.Disconnect(srv.Namespace, srv.Service, networkName)
+		}
+
+		networkFQN := []string{c.config.DefaultDomain, pod.Namespace, networkName}
+		if networkAccessGlobalNetworks(c.config, networkFQN) {
+			for _, gbl := range c.config.GlobalNetworks {
+				err = c.networkMgr.Disconnect(networkFQN, gbl)
+				if err != nil {
+					glog.Error(err)
+				}
 			}
 		}
 	}
@@ -378,6 +392,21 @@ func (c *Controller) updateServicePublicIP(service *api.Service) (*types.Floatin
 	}
 
 	return publicIp, err
+}
+
+func (c *Controller) globalNetworkConnectionUpdate(network *types.VirtualNetwork) {
+	if !networkAccessGlobalNetworks(c.config, network.GetFQName()) {
+		return
+	}
+	// connect to each of the global-networks
+	for _, gbl := range c.config.GlobalNetworks {
+		err := c.networkMgr.Connect(network, gbl)
+		if err != nil {
+			glog.Error(err)
+			continue
+		}
+		glog.V(2).Infof("Connected %s to %s", strings.Join(network.GetFQName(), ":"), gbl)
+	}
 }
 
 // Services can specify "publicIPs", these are mapped to floating-ip
