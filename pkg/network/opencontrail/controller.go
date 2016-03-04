@@ -74,11 +74,16 @@ const (
 	evAddService      eventType = "AddService"
 	evDeleteService   eventType = "DeleteService"
 	evUpdateService   eventType = "UpdateService"
+	evSync            eventType = "Sync"
 )
 
 type notification struct {
 	event  eventType
 	object runtime.Object
+}
+
+func (c *Controller) newConsistencyChecker() ConsistencyChecker {
+	return NewConsistencyChecker(c.client, c.config, c.podStore, c.serviceStore, c.networkMgr, c.serviceMgr)
 }
 
 func (c *Controller) Run(shutdown chan struct{}) {
@@ -87,7 +92,7 @@ func (c *Controller) Run(shutdown chan struct{}) {
 	if c.consistencyPeriod != 0 {
 		glog.V(3).Infof("Consistency checker interval %s", c.consistencyPeriod.String())
 		timerChan = time.NewTicker(c.consistencyPeriod).C
-		c.consistencyWorker = NewConsistencyChecker(c.client, c.config, c.podStore, c.serviceStore, c.networkMgr, c.serviceMgr)
+		c.consistencyWorker = c.newConsistencyChecker()
 	}
 
 	for {
@@ -110,6 +115,7 @@ func (c *Controller) Run(shutdown chan struct{}) {
 				c.addNamespace(event.object.(*api.Namespace))
 			case evDeleteNamespace:
 				c.deleteNamespace(event.object.(*api.Namespace))
+			case evSync:
 			}
 		case <-timerChan:
 			c.consistencyWorker.Check()
@@ -428,10 +434,11 @@ func (c *Controller) addService(service *api.Service) {
 	}
 
 	if len(pods.Items) == 0 {
+		glog.V(5).Infof("No existing pods for service %s", service.Name)
 		return
 	}
 
-	var serviceIp *types.FloatingIp = nil
+	var serviceIp *types.FloatingIp
 	// Allocate this IP address on the service network.
 	if service.Spec.ClusterIP != "" {
 		serviceNetwork, err := c.serviceMgr.LocateServiceNetwork(service.Namespace, serviceName)
