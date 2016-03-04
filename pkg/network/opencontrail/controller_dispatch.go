@@ -26,7 +26,7 @@ import (
 	kubetypes "k8s.io/kubernetes/pkg/kubelet/types"
 )
 
-func EqualTags(m1, m2 map[string]string, tags []string) bool {
+func equalTags(m1, m2 map[string]string, tags []string) bool {
 	if m1 == nil {
 		return m2 == nil
 	}
@@ -38,9 +38,9 @@ func EqualTags(m1, m2 map[string]string, tags []string) bool {
 	return true
 }
 
-// IgnorePod returns true if this pod should not be managed by OpenContrail.
+// ignorePod returns true if this pod should not be managed by OpenContrail.
 // Pods that use host networking on kubelet static pods fall into this category.
-func IgnorePod(pod *api.Pod) bool {
+func ignorePod(pod *api.Pod) bool {
 	context := pod.Spec.SecurityContext
 	if context != nil && context.HostNetwork {
 		return true
@@ -52,8 +52,9 @@ func IgnorePod(pod *api.Pod) bool {
 	return false
 }
 
+// AddPod informs the Controller that a new Pod has been added to the cache.
 func (c *Controller) AddPod(pod *api.Pod) {
-	if IgnorePod(pod) {
+	if ignorePod(pod) {
 		return
 	}
 	c.eventChannel <- notification{evAddPod, pod}
@@ -75,15 +76,16 @@ func (c *Controller) podAnnotationsCheck(pod *api.Pod) bool {
 	}
 
 	nic := c.instanceMgr.LookupInterface(pod.Namespace, pod.Name)
-	if nic == nil || nic.GetUuid() != state.Uuid {
+	if nic == nil || nic.GetUuid() != state.UUID {
 		return false
 	}
 	return true
 }
 
+// UpdatePod informs the Controller that a Pod object has been modified.
 func (c *Controller) UpdatePod(oldPod, newPod *api.Pod) {
-	if IgnorePod(newPod) {
-		if !IgnorePod(oldPod) {
+	if ignorePod(newPod) {
+		if !ignorePod(oldPod) {
 			c.eventChannel <- notification{evDeletePod, oldPod}
 		} else {
 			glog.V(3).Infof("Update pod %s: ignore", newPod.Name)
@@ -99,10 +101,10 @@ func (c *Controller) UpdatePod(oldPod, newPod *api.Pod) {
 	if !c.podAnnotationsCheck(newPod) {
 		glog.V(3).Infof("Pod %s: opencontrail annotations not current", newPod.Name)
 		update = true
-	} else if !EqualTags(oldPod.Labels, newPod.Labels, watchTags) {
+	} else if !equalTags(oldPod.Labels, newPod.Labels, watchTags) {
 		glog.V(3).Infof("Pod %s: labels have changed", newPod.Name)
 		update = true
-	} else if !EqualTags(oldPod.Annotations, newPod.Annotations, []string{c.config.NetworkAccessTag}) {
+	} else if !equalTags(oldPod.Annotations, newPod.Annotations, []string{c.config.NetworkAccessTag}) {
 		glog.V(3).Infof("Pod %s: annotations have changed", newPod.Name)
 		update = true
 	}
@@ -111,10 +113,12 @@ func (c *Controller) UpdatePod(oldPod, newPod *api.Pod) {
 	}
 }
 
+// DeletePod informs the Controller that the Pod has been deleted from the local cache
 func (c *Controller) DeletePod(pod *api.Pod) {
 	c.eventChannel <- notification{evDeletePod, pod}
 }
 
+// AddService informs the Controller that a Service has been added to the local cache
 func (c *Controller) AddService(service *api.Service) {
 	if len(service.Spec.Selector) == 0 {
 		return
@@ -123,6 +127,7 @@ func (c *Controller) AddService(service *api.Service) {
 	c.eventChannel <- notification{evAddService, service}
 }
 
+// UpdateService informs the Controller that a Service object has been updated.
 func (c *Controller) UpdateService(oldObj, newObj *api.Service) {
 	update := false
 
@@ -160,26 +165,21 @@ func (c *Controller) UpdateService(oldObj, newObj *api.Service) {
 	}
 }
 
+// DeleteService informs the Controller that a Service object has been deleted from the cache
 func (c *Controller) DeleteService(service *api.Service) {
 	c.eventChannel <- notification{evDeleteService, service}
 }
 
+// AddNamespace informs the Controller that a Namespace has been added to the cache
 func (c *Controller) AddNamespace(namespace *api.Namespace) {
 	c.eventChannel <- notification{evAddNamespace, namespace}
 }
 
+// UpdateNamespace informs the Controller that a Namespace has been updated
 func (c *Controller) UpdateNamespace(oldObj, newObj *api.Namespace) {
 }
 
+// DeleteNamespace informs the Controller that a Namespace has been deleted
 func (c *Controller) DeleteNamespace(namespace *api.Namespace) {
 	c.eventChannel <- notification{evDeleteNamespace, namespace}
-}
-
-func (c *Controller) AddReplicationController(rc *api.ReplicationController) {
-}
-
-func (c *Controller) UpdateReplicationController(oldObj, newObj *api.ReplicationController) {
-}
-
-func (c *Controller) DeleteReplicationController(rc *api.ReplicationController) {
 }

@@ -40,16 +40,16 @@ func TestServiceIdList(t *testing.T) {
 		},
 	}
 
-	list := MakeServiceIdList()
+	list := makeServiceIDList()
 
-	// ServiceIdList is a slice; it must be passed as a pointer in order to be
+	// serviceIDList is a slice; it must be passed as a pointer in order to be
 	// modified.
 	buildPodServiceList(pod, config, &list)
 
 	if len(list) != 1 {
 		t.Errorf("expected list length 1, got %d", len(list))
 	}
-	names := make([]string, 0)
+	var names []string
 	for _, v := range list {
 		names = append(names, v.Service)
 	}

@@ -6,11 +6,13 @@ import (
 	"github.com/Juniper/contrail-go-api/types"
 )
 
+// NetworkManager provides a Mock of the NetworkManager interface
 type NetworkManager struct {
 	mock.Mock
 }
 
-func (m *NetworkManager) LocateFloatingIpPool(network *types.VirtualNetwork) (*types.FloatingIpPool, error) {
+// LocateFloatingIPPool mock implementation
+func (m *NetworkManager) LocateFloatingIPPool(network *types.VirtualNetwork) (*types.FloatingIpPool, error) {
 	ret := m.Called(network)
 
 	var r0 *types.FloatingIpPool
@@ -21,7 +23,9 @@ func (m *NetworkManager) LocateFloatingIpPool(network *types.VirtualNetwork) (*t
 
 	return r0, r1
 }
-func (m *NetworkManager) LookupFloatingIpPool(network *types.VirtualNetwork) (*types.FloatingIpPool, error) {
+
+// LookupFloatingIPPool mock implementation
+func (m *NetworkManager) LookupFloatingIPPool(network *types.VirtualNetwork) (*types.FloatingIpPool, error) {
 	ret := m.Called(network)
 
 	var r0 *types.FloatingIpPool
@@ -32,13 +36,17 @@ func (m *NetworkManager) LookupFloatingIpPool(network *types.VirtualNetwork) (*t
 
 	return r0, r1
 }
-func (m *NetworkManager) DeleteFloatingIpPool(network *types.VirtualNetwork, cascade bool) error {
+
+// DeleteFloatingIPPool mock implementation
+func (m *NetworkManager) DeleteFloatingIPPool(network *types.VirtualNetwork, cascade bool) error {
 	ret := m.Called(network, cascade)
 
 	r0 := ret.Error(0)
 
 	return r0
 }
+
+// LookupNetwork mock implementation
 func (m *NetworkManager) LookupNetwork(projectName string, networkName string) (*types.VirtualNetwork, error) {
 	ret := m.Called(projectName, networkName)
 
@@ -50,6 +58,8 @@ func (m *NetworkManager) LookupNetwork(projectName string, networkName string) (
 
 	return r0, r1
 }
+
+// LocateNetwork mock implementation
 func (m *NetworkManager) LocateNetwork(project string, name string, subnet string) (*types.VirtualNetwork, error) {
 	ret := m.Called(project, name, subnet)
 
@@ -61,6 +71,8 @@ func (m *NetworkManager) LocateNetwork(project string, name string, subnet strin
 
 	return r0, r1
 }
+
+// DeleteNetwork mock implementation
 func (m *NetworkManager) DeleteNetwork(_a0 *types.VirtualNetwork) error {
 	ret := m.Called(_a0)
 
@@ -68,6 +80,8 @@ func (m *NetworkManager) DeleteNetwork(_a0 *types.VirtualNetwork) error {
 
 	return r0
 }
+
+// ReleaseNetworkIfEmpty mock implementation
 func (m *NetworkManager) ReleaseNetworkIfEmpty(namespace string, name string) (bool, error) {
 	ret := m.Called(namespace, name)
 
@@ -76,7 +90,9 @@ func (m *NetworkManager) ReleaseNetworkIfEmpty(namespace string, name string) (b
 
 	return r0, r1
 }
-func (m *NetworkManager) LocateFloatingIp(network *types.VirtualNetwork, resourceName string, address string) (*types.FloatingIp, error) {
+
+// LocateFloatingIP mock implementation
+func (m *NetworkManager) LocateFloatingIP(network *types.VirtualNetwork, resourceName string, address string) (*types.FloatingIp, error) {
 	ret := m.Called(network, resourceName, address)
 
 	var r0 *types.FloatingIp
@@ -87,13 +103,17 @@ func (m *NetworkManager) LocateFloatingIp(network *types.VirtualNetwork, resourc
 
 	return r0, r1
 }
-func (m *NetworkManager) DeleteFloatingIp(network *types.VirtualNetwork, resourceName string) error {
+
+// DeleteFloatingIP mock implementation
+func (m *NetworkManager) DeleteFloatingIP(network *types.VirtualNetwork, resourceName string) error {
 	ret := m.Called(network, resourceName)
 
 	r0 := ret.Error(0)
 
 	return r0
 }
+
+// GetPublicNetwork mock implementation
 func (m *NetworkManager) GetPublicNetwork() *types.VirtualNetwork {
 	ret := m.Called()
 
@@ -104,6 +124,8 @@ func (m *NetworkManager) GetPublicNetwork() *types.VirtualNetwork {
 
 	return r0
 }
+
+// GetGatewayAddress mock implementation
 func (m *NetworkManager) GetGatewayAddress(network *types.VirtualNetwork) (string, error) {
 	ret := m.Called(network)
 
@@ -113,17 +135,21 @@ func (m *NetworkManager) GetGatewayAddress(network *types.VirtualNetwork) (strin
 	return r0, r1
 }
 
+// Connect mock implementation
 func (m *NetworkManager) Connect(network *types.VirtualNetwork, networkFQN string) error {
 	ret := m.Called(network, networkFQN)
 	r0 := ret.Error(0)
 	return r0
 }
+
+// Disconnect mock implementation
 func (m *NetworkManager) Disconnect(networkFQN []string, targetCDN string) error {
 	ret := m.Called(networkFQN, targetCDN)
 	r0 := ret.Error(0)
 	return r0
 }
 
+// DeleteConnections mock implementation
 func (m *NetworkManager) DeleteConnections(network *types.VirtualNetwork, policies map[string]string) error {
 	ret := m.Called(network, policies)
 	r0 := ret.Error(0)

@@ -67,11 +67,11 @@ func TestServiceDeleteConnections(t *testing.T) {
 		}
 	}
 
-	serviceList := MakeServiceIdList()
+	serviceList := makeServiceIDList()
 	serviceList.Add("testns", "s1")
 	serviceList.Add("global", "s3")
 
-	purgeList := make([]string, 0)
+	var purgeList []string
 	policyRefs, err := network.GetNetworkPolicyRefs()
 	require.NoError(t, err)
 	for _, ref := range policyRefs {
@@ -96,7 +96,7 @@ func TestServiceDeleteConnections(t *testing.T) {
 	if len(refs) != len(serviceList) {
 		t.Errorf("expected %d policy refs, got %d", len(serviceList), len(refs))
 	}
-	actual := make([]string, 0)
+	var actual []string
 	for _, ref := range refs {
 		svc, err := serviceNameFromPolicyName(ref.To[2])
 		if err != nil {

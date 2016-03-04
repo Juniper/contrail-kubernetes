@@ -35,16 +35,17 @@ import (
 )
 
 const (
-	ResyncTimeDefault     = time.Duration(5) * time.Minute
-	ClusterIpRangeDefault = "10.254.0.0/16"
+	resyncTimeDefault     = time.Duration(5) * time.Minute
+	clusterIPRangeDefault = "10.254.0.0/16"
 )
 
+// NetworkManager is the main class for the network manager process
 type NetworkManager struct {
 	ConfigFile string
 	config     network.Config
 
 	Client     *client.Client
-	Controller network.NetworkController
+	Controller network.Controller
 
 	PodStore    cache.Store
 	PodInformer *framework.Controller
@@ -52,30 +53,29 @@ type NetworkManager struct {
 	NamespaceStore    cache.Store
 	NamespaceInformer *framework.Controller
 
-	RCStore    cache.Store
-	RCInformer *framework.Controller
-
 	ServiceStore    cache.Store
 	ServiceInformer *framework.Controller
 
 	Shutdown chan struct{}
 }
 
+// NewNetworkManager allocates and initializes a NetworkManager
 func NewNetworkManager() *NetworkManager {
 	manager := new(NetworkManager)
 	manager.config = network.Config{
-		ResyncPeriod:   ResyncTimeDefault,
-		ClusterIpRange: ClusterIpRangeDefault,
+		ResyncPeriod:   resyncTimeDefault,
+		ClusterIPRange: clusterIPRangeDefault,
 	}
 	manager.Shutdown = make(chan struct{})
 	return manager
 }
 
+// AddFlags adds command line flags specific to the implementation.
 func (m *NetworkManager) AddFlags(fs *flag.FlagSet) {
 	fs.StringVar(&m.ConfigFile, "config-file", "/etc/kubernetes/network.conf",
 		"Network manager configuration")
 	// DEPRECATED
-	fs.StringVar(&m.config.KubeUrl, "master", m.config.KubeUrl,
+	fs.StringVar(&m.config.KubeURL, "master", m.config.KubeURL,
 		"Kubernetes API endpoint")
 }
 
@@ -115,8 +115,8 @@ func (m *NetworkManager) init(args []string) {
 		loadingRules.ExplicitPath = m.config.KubeConfig
 	}
 	configOverrides := &clientcmd.ConfigOverrides{}
-	if m.config.KubeUrl != "" {
-		configOverrides.ClusterInfo.Server = m.config.KubeUrl
+	if m.config.KubeURL != "" {
+		configOverrides.ClusterInfo.Server = m.config.KubeURL
 	}
 	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
 	config, err := kubeConfig.ClientConfig()
@@ -128,7 +128,7 @@ func (m *NetworkManager) init(args []string) {
 		glog.Fatalf("Invalid API configuratin: %v", err)
 	}
 
-	m.Controller = network.NewNetworkFactory().Create(m.Client, args)
+	m.Controller = network.NewFactory().Create(m.Client, args)
 	m.Controller.Init(&m.config, configFile)
 }
 
@@ -187,33 +187,6 @@ func (m *NetworkManager) start(args []string) {
 		},
 	)
 
-	m.RCStore, m.RCInformer = framework.NewInformer(
-		cache.NewListWatchFromClient(
-			m.Client,
-			string(api.ResourceReplicationControllers),
-			api.NamespaceAll,
-			fields.Everything(),
-		),
-		&api.ReplicationController{},
-		m.config.ResyncPeriod,
-		framework.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-				m.Controller.AddReplicationController(
-					obj.(*api.ReplicationController))
-			},
-			UpdateFunc: func(oldObj, newObj interface{}) {
-				m.Controller.UpdateReplicationController(
-					oldObj.(*api.ReplicationController),
-					newObj.(*api.ReplicationController))
-			},
-			DeleteFunc: func(obj interface{}) {
-				if rc, ok := obj.(*api.ReplicationController); ok {
-					m.Controller.DeleteReplicationController(rc)
-				}
-			},
-		},
-	)
-
 	m.ServiceStore, m.ServiceInformer = framework.NewInformer(
 		cache.NewListWatchFromClient(
 			m.Client,
@@ -243,15 +216,14 @@ func (m *NetworkManager) start(args []string) {
 
 	m.Controller.SetPodStore(m.PodStore)
 	m.Controller.SetNamespaceStore(m.NamespaceStore)
-	m.Controller.SetReplicationControllerStore(m.RCStore)
 	m.Controller.SetServiceStore(m.ServiceStore)
 }
 
+// Run starts the NetworkManager and implements the main forever loop.
 func (m *NetworkManager) Run(args []string) error {
 	m.start(args)
 	go m.PodInformer.Run(m.Shutdown)
 	go m.NamespaceInformer.Run(m.Shutdown)
-	go m.RCInformer.Run(m.Shutdown)
 	go m.ServiceInformer.Run(m.Shutdown)
 	go m.Controller.Run(m.Shutdown)
 	select {}

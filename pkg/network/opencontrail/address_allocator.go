@@ -26,31 +26,35 @@ import (
 	"github.com/Juniper/contrail-go-api/types"
 )
 
+// AddressAllocator defines the interface between the controller and address allocation.
 type AddressAllocator interface {
-	LocateIpAddress(uid string) (string, error)
-	ReleaseIpAddress(uid string)
+	LocateIPAddress(uid string) (string, error)
+	ReleaseIPAddress(uid string)
 }
 
-// Allocate an unique address for each Pod.
-type AddressAllocatorImpl struct {
+// addressAllocatorImpl uses the contrail API to allocate an unique address for each Pod.
+type addressAllocatorImpl struct {
 	client        contrail.ApiClient
 	network       *types.VirtualNetwork
 	privateSubnet string
 }
 
 const (
+	// AddressAllocationNetwork is the network used to allocate IP addresses.
+	// This network is used only to allocate instance-ip objects.
 	AddressAllocationNetwork = "default-domain:default-project:addr-alloc"
 )
 
+// NewAddressAllocator returns the default AddressAllocator implementation.
 func NewAddressAllocator(client contrail.ApiClient, config *Config) AddressAllocator {
-	allocator := new(AddressAllocatorImpl)
+	allocator := new(addressAllocatorImpl)
 	allocator.client = client
 	allocator.privateSubnet = config.PrivateSubnet
 	allocator.initializeAllocator()
 	return allocator
 }
 
-func (a *AddressAllocatorImpl) initializeAllocator() {
+func (a *addressAllocatorImpl) initializeAllocator() {
 	obj, err := a.client.FindByName("virtual-network", AddressAllocationNetwork)
 	if err == nil {
 		a.network = obj.(*types.VirtualNetwork)
@@ -59,24 +63,24 @@ func (a *AddressAllocatorImpl) initializeAllocator() {
 
 	fqn := strings.Split(AddressAllocationNetwork, ":")
 	parent := strings.Join(fqn[0:len(fqn)-1], ":")
-	projectId, err := a.client.UuidByName("project", parent)
+	projectID, err := a.client.UuidByName("project", parent)
 	if err != nil {
 		glog.Fatalf("%s: %v", parent, err)
 	}
-	netId, err := config.CreateNetworkWithSubnet(
-		a.client, projectId, fqn[len(fqn)-1], a.privateSubnet)
+	netID, err := config.CreateNetworkWithSubnet(
+		a.client, projectID, fqn[len(fqn)-1], a.privateSubnet)
 	if err != nil {
 		glog.Fatalf("%s: %v", parent, err)
 	}
 	glog.Infof("Created network %s", AddressAllocationNetwork)
-	obj, err = a.client.FindByUuid("virtual-network", netId)
+	obj, err = a.client.FindByUuid("virtual-network", netID)
 	if err != nil {
-		glog.Fatalf("Get virtual-network %s: %v", netId, err)
+		glog.Fatalf("Get virtual-network %s: %v", netID, err)
 	}
 	a.network = obj.(*types.VirtualNetwork)
 }
 
-func (a *AddressAllocatorImpl) allocateIpAddress(uid string) (contrail.IObject, error) {
+func (a *addressAllocatorImpl) allocateIPAddress(uid string) (contrail.IObject, error) {
 	ipObj := new(types.InstanceIp)
 	ipObj.SetName(uid)
 	ipObj.AddVirtualNetwork(a.network)
@@ -93,10 +97,10 @@ func (a *AddressAllocatorImpl) allocateIpAddress(uid string) (contrail.IObject, 
 	return obj, err
 }
 
-func (a *AddressAllocatorImpl) LocateIpAddress(uid string) (string, error) {
+func (a *addressAllocatorImpl) LocateIPAddress(uid string) (string, error) {
 	obj, err := a.client.FindByName("instance-ip", uid)
 	if err != nil {
-		obj, err = a.allocateIpAddress(uid)
+		obj, err = a.allocateIPAddress(uid)
 		if err != nil {
 			return "", err
 		}
@@ -106,7 +110,7 @@ func (a *AddressAllocatorImpl) LocateIpAddress(uid string) (string, error) {
 	return ipObj.GetInstanceIpAddress(), nil
 }
 
-func (a *AddressAllocatorImpl) ReleaseIpAddress(uid string) {
+func (a *addressAllocatorImpl) ReleaseIPAddress(uid string) {
 	objid, err := a.client.UuidByName("instance-ip", uid)
 	if err != nil {
 		glog.V(1).Infof("IP address for %s: %v", uid, err)

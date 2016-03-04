@@ -25,11 +25,13 @@ import (
 	"github.com/Juniper/contrail-go-api/types"
 )
 
+// NamespaceManager maps Namespaces in the k8s API to Projects in the contrail API.
 type NamespaceManager struct {
 	client contrail.ApiClient
 	config *Config
 }
 
+// NewNamespaceManager allocates and initializes a NamespaceManager
 func NewNamespaceManager(client contrail.ApiClient, config *Config) *NamespaceManager {
 	manager := new(NamespaceManager)
 	manager.client = client
@@ -37,6 +39,7 @@ func NewNamespaceManager(client contrail.ApiClient, config *Config) *NamespaceMa
 	return manager
 }
 
+// LookupNamespace returns the Project corresponding to a Namespace, if it exists
 func (m *NamespaceManager) LookupNamespace(name string) *types.Project {
 	fqn := []string{m.config.DefaultDomain, name}
 
@@ -47,6 +50,7 @@ func (m *NamespaceManager) LookupNamespace(name string) *types.Project {
 	return obj.(*types.Project)
 }
 
+// LocateNamespace returns the Project corresponding to a Namespace, allocating one if required
 func (m *NamespaceManager) LocateNamespace(name, uid string) *types.Project {
 	fqn := []string{m.config.DefaultDomain, name}
 
@@ -64,6 +68,7 @@ func (m *NamespaceManager) LocateNamespace(name, uid string) *types.Project {
 	return project
 }
 
+// DeleteNamespace deletes the Project corresponding to the Namespace
 func (m *NamespaceManager) DeleteNamespace(name string) error {
 	fqn := []string{m.config.DefaultDomain, name}
 

@@ -71,7 +71,7 @@ func removeRulesIndex(rules []types.PolicyRuleType, index int) []types.PolicyRul
 
 func policyDeleteRule(client contrail.ApiClient, policy *types.NetworkPolicy, lhsName, rhsName string) error {
 	entries := policy.GetNetworkPolicyEntries()
-	var index int = -1
+	index := -1
 	for i, rule := range entries.PolicyRule {
 		if rule.SrcAddresses[0].VirtualNetwork == lhsName &&
 			rule.DstAddresses[0].VirtualNetwork == rhsName {

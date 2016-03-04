@@ -30,12 +30,15 @@ import (
 )
 
 const (
+	// MetadataAnnotationTag is the name of the InstanceMetadata annotation on the Pod
 	MetadataAnnotationTag = "opencontrail.org/pod-state"
 
 	servicePolicyPrefix = "__svc_"
 	networkPolicyPrefix = "__net_"
 
-	DefaultPodNetworkName     = "default-network"
+	// DefaultPodNetworkName is the name for a Pod network, if not specified by the NetworkTag Label.
+	DefaultPodNetworkName = "default-network"
+	// DefaultServiceNetworkName is the name of the Service network, if not specified by the NetworkTag Label.
 	DefaultServiceNetworkName = "default"
 )
 
@@ -43,13 +46,13 @@ const (
 // connect the Pod interface to the network.
 type InstanceMetadata struct {
 	// Interface uuid
-	Uuid string `json:"uuid"`
+	UUID string `json:"uuid"`
 
 	// The OpenContrail vrouter verifies the source-mac of the virtual interface.
 	MacAddress string `json:"macAddress"`
 
 	// Private IP address
-	IpAddress string `json:"ipAddress"`
+	IPAddress string `json:"ipAddress"`
 
 	// Default gateway (VRouter address)
 	Gateway string `json:"gateway"`
@@ -65,7 +68,8 @@ func makeSyncController(kube kubeclient.Interface, config *Config) *Controller {
 	return controller
 }
 
-func NewController(kube *kubeclient.Client, args []string) network.NetworkController {
+// NewController allocates a Controller
+func NewController(kube *kubeclient.Client, args []string) network.Controller {
 	controller := new(Controller)
 	controller.eventChannel = make(chan notification, 32)
 	controller.kube = kube
@@ -83,6 +87,7 @@ func (c *Controller) initComponents(client contrail.ApiClient) {
 	c.namespaceMgr = NewNamespaceManager(client, c.config)
 }
 
+// Init initializes the Controller with the configuration.
 func (c *Controller) Init(global *network.Config, reader io.Reader) error {
 	err := c.config.ReadConfiguration(global, reader)
 	if err != nil {
@@ -94,25 +99,24 @@ func (c *Controller) Init(global *network.Config, reader io.Reader) error {
 	glog.Infof("Services Subnet: %s", c.config.ServiceSubnet)
 	glog.Infof("Public Subnet:   %s", c.config.PublicSubnet)
 
-	client := contrail.NewClient(c.config.ApiAddress, c.config.ApiPort)
+	client := contrail.NewClient(c.config.APIAddress, c.config.APIPort)
 	c.initComponents(client)
 	c.consistencyPeriod = time.Duration(1) * time.Minute
 
 	return nil
 }
 
+// SetNamespaceStore is used to pass the pointer of the Namespace cache
 func (c *Controller) SetNamespaceStore(store cache.Store) {
 	//	c.NamespaceStore = store
 }
 
+// SetPodStore is used to pass the pointer of the Pod cache.
 func (c *Controller) SetPodStore(store cache.Store) {
 	c.podStore = store
 }
 
-func (c *Controller) SetReplicationControllerStore(store cache.Store) {
-	//	c.RCStore = store
-}
-
+// SetServiceStore is used to pass the pointer of the Service cache
 func (c *Controller) SetServiceStore(store cache.Store) {
 	c.serviceStore = store
 }
