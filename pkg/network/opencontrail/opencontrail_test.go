@@ -91,20 +91,27 @@ func (t *TestFramework) SetUp(publicSubnet string) {
 
 	t.shutdown = make(chan struct{})
 
-	keysCall := t.podStore.On("ListKeys").Return()
-	keysCall.Run(func(arg mock.Arguments) {
-		keysCall.Return(t.keyList)
+	t.podStore.On("ListKeys").Return()
+	listKeysReturnArgs := []interface{}{nil}
+	call := &t.podStore.Mock.ExpectedCalls[len(t.podStore.Mock.ExpectedCalls)-1]
+	call.ReturnArguments = listKeysReturnArgs
+	t.podStore.Mock.Run(func(arg mock.Arguments) {
+		listKeysReturnArgs[0] = t.keyList
 	})
 
-	listCall := t.serviceStore.On("List").Return()
-	listCall.Run(func(arg mock.Arguments) {
+	t.serviceStore.On("List").Return()
+	serviceListReturnArgs := []interface{}{nil}
+	call = &t.serviceStore.Mock.ExpectedCalls[len(t.serviceStore.Mock.ExpectedCalls)-1]
+	call.ReturnArguments = serviceListReturnArgs
+
+	t.serviceStore.Mock.Run(func(arg mock.Arguments) {
 		serviceList := make([]interface{}, 0)
 		for _, v := range t.state {
 			for _, svc := range v.Services {
 				serviceList = append(serviceList, svc)
 			}
 		}
-		listCall.Return(serviceList)
+		serviceListReturnArgs[0] = serviceList
 	})
 }
 
@@ -213,13 +220,18 @@ func (t *TestFramework) AddService(service *api.Service, groupName string) {
 	podsMock := t.kubeMock.Pods(service.Namespace).(*mocks.KubePodInterface)
 	selector := api.ListOptions{
 		LabelSelector: labels.SelectorFromSet(labels.Set(service.Spec.Selector))}
-	call := podsMock.On("List", selector).Return()
-	call.Run(func(args mock.Arguments) {
+	podsMock.On("List", selector).Return()
+
+	listPodsReturnArgs := []interface{}{nil, nil}
+	call := &podsMock.ExpectedCalls[len(podsMock.ExpectedCalls)-1]
+	call.ReturnArguments = listPodsReturnArgs
+
+	podsMock.Run(func(args mock.Arguments) {
 		podList := make([]api.Pod, len(state.Pods))
 		for i, v := range state.Pods {
 			podList[i] = *v
 		}
-		call.Return(&api.PodList{Items: podList}, nil)
+		listPodsReturnArgs[0] = &api.PodList{Items: podList}
 	})
 	servicesMock := t.kubeMock.Services(service.Namespace).(*mocks.KubeServiceInterface)
 	servicesMock.On("Update", service).Return(service, nil)
