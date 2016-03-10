@@ -123,24 +123,10 @@ func (c *KubeClient) Extensions() kubeclient.ExtensionsInterface {
 	return nil
 }
 
-func (c *KubeClient) Autoscaling() kubeclient.AutoscalingInterface {
-	return nil
-}
-
-func (c *KubeClient) Batch() kubeclient.BatchInterface {
-	return nil
-}
-
 func (c *KubeClient) Discovery() kubeclient.DiscoveryInterface {
 	return nil
 }
 
-func (m *KubeServiceInterface) UpdateStatus(srv *api.Service) (*api.Service, error) {
-	ret := m.Called(srv)
-	var r0 *api.Service
-	if ret.Get(0) != nil {
-		r0 = ret.Get(0).(*api.Service)
-	}
-	r1 := ret.Error(1)
-	return r0, r1
+func (c *KubeClient) SecurityContextConstraints() kubeclient.SecurityContextConstraintInterface {
+	return nil
 }
