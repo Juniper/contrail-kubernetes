@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/scalingdata/gcfg"
+	"gopkg.in/gcfg.v1"
 )
 
 type Config struct {

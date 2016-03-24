@@ -25,7 +25,7 @@ import (
 
 	flag "github.com/spf13/pflag"
 
-	"github.com/scalingdata/gcfg"
+	"gopkg.in/gcfg.v1"
 
 	"github.com/Juniper/contrail-kubernetes/pkg/network"
 )
