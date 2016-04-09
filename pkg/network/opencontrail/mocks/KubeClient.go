@@ -22,6 +22,7 @@ import (
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/unversioned"
 	kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
+	discovery "k8s.io/kubernetes/pkg/client/typed/discovery"
 	"k8s.io/kubernetes/pkg/version"
 )
 
@@ -131,7 +132,7 @@ func (c *KubeClient) Batch() kubeclient.BatchInterface {
 	return nil
 }
 
-func (c *KubeClient) Discovery() kubeclient.DiscoveryInterface {
+func (c *KubeClient) Discovery() discovery.DiscoveryInterface {
 	return nil
 }
 
