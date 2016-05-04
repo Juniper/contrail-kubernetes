@@ -25,12 +25,15 @@ import (
 	"github.com/Juniper/contrail-go-api/types"
 )
 
+// InstanceManager defines the interface between the Controller and the class that
+// manages instance (types.VirtualMachine) objects corresponding to Pods.
 type InstanceManager struct {
 	client    contrail.ApiClient
 	config    *Config
 	allocator AddressAllocator
 }
 
+// NewInstanceManager allocates and initializes an Instance Manager
 func NewInstanceManager(client contrail.ApiClient, config *Config, allocator AddressAllocator) *InstanceManager {
 	manager := new(InstanceManager)
 	manager.client = client
@@ -44,6 +47,8 @@ func instanceFQName(domain, tenant, podName string) []string {
 	return fqn
 }
 
+// LocateInstance returns a VirtualMachine object corresponding to a Pod name/ID.
+// Creating the object if it is not already present in the contrail API.
 func (m *InstanceManager) LocateInstance(tenant, podName, uid string) *types.VirtualMachine {
 	obj, err := m.client.FindByUuid("virtual-machine", string(uid))
 	if err == nil {
@@ -61,6 +66,7 @@ func (m *InstanceManager) LocateInstance(tenant, podName, uid string) *types.Vir
 	return instance
 }
 
+// DeleteInstance deletes the VirtualMachine object from the contrail API.
 func (m *InstanceManager) DeleteInstance(uid string) error {
 	err := m.client.DeleteByUuid("virtual-machine", uid)
 	return err
@@ -71,6 +77,7 @@ func interfaceFQName(defaultDomain, tenant, podName string) []string {
 	return fqn
 }
 
+// LookupInterface returns the VMI corresponding to a Pod, if it exists
 func (m *InstanceManager) LookupInterface(tenant, podName string) *types.VirtualMachineInterface {
 	fqn := interfaceFQName(m.config.DefaultDomain, tenant, podName)
 	obj, err := m.client.FindByName("virtual-machine-interface", strings.Join(fqn, ":"))
@@ -81,6 +88,7 @@ func (m *InstanceManager) LookupInterface(tenant, podName string) *types.Virtual
 	return obj.(*types.VirtualMachineInterface)
 }
 
+// LocateInterface returns the VMI corresponding to a Pod, creating it if required
 func (m *InstanceManager) LocateInterface(
 	network *types.VirtualNetwork, instance *types.VirtualMachine) *types.VirtualMachineInterface {
 	tenant := instance.GetFQName()[len(instance.GetFQName())-2]
@@ -114,6 +122,7 @@ func (m *InstanceManager) LocateInterface(
 	return obj.(*types.VirtualMachineInterface)
 }
 
+// ReleaseInterface frees the VMI corresponding to a Pod.
 func (m *InstanceManager) ReleaseInterface(tenant, podName string) {
 	fqn := interfaceFQName(m.config.DefaultDomain, tenant, podName)
 	obj, err := m.client.FindByName("virtual-machine-interface", strings.Join(fqn, ":"))
@@ -145,21 +154,23 @@ func (m *InstanceManager) ReleaseInterface(tenant, podName string) {
 	}
 }
 
-func makeInstanceIpName(tenant, nicName string) string {
+func makeInstanceIPName(tenant, nicName string) string {
 	return tenant + "_" + nicName
 }
 
-func (m *InstanceManager) LocateInstanceIp(
+// LocateInstanceIP returns an InstanceIp object for a Pod, allocating one if required.
+// Pods have unique IP addresses in the PrivateSubnet range.
+func (m *InstanceManager) LocateInstanceIP(
 	network *types.VirtualNetwork, instanceUID string, nic *types.VirtualMachineInterface) *types.InstanceIp {
 	tenant := nic.GetFQName()[len(nic.GetFQName())-2]
-	name := makeInstanceIpName(tenant, nic.GetName())
+	name := makeInstanceIPName(tenant, nic.GetName())
 	obj, err := m.client.FindByName("instance-ip", name)
 	if err == nil {
 		// TODO(prm): ensure that attributes are as expected
 		return obj.(*types.InstanceIp)
 	}
 
-	address, err := m.allocator.LocateIpAddress(instanceUID)
+	address, err := m.allocator.LocateIPAddress(instanceUID)
 	if err != nil {
 		return nil
 	}
@@ -184,8 +195,9 @@ func (m *InstanceManager) LocateInstanceIp(
 	return ipObj
 }
 
-func (m *InstanceManager) ReleaseInstanceIp(tenant, nicName, instanceUID string) {
-	name := makeInstanceIpName(tenant, nicName)
+// ReleaseInstanceIP frees the IntanceIp object associated with a Pod.
+func (m *InstanceManager) ReleaseInstanceIP(tenant, nicName, instanceUID string) {
+	name := makeInstanceIPName(tenant, nicName)
 	uid, err := m.client.UuidByName("instance-ip", name)
 	if err != nil {
 		glog.Errorf("Get instance-ip %s: %v", name, err)
@@ -196,11 +208,11 @@ func (m *InstanceManager) ReleaseInstanceIp(tenant, nicName, instanceUID string)
 		glog.Errorf("Delete instance-ip %s: %v", uid, err)
 	}
 
-	m.allocator.ReleaseIpAddress(instanceUID)
+	m.allocator.ReleaseIPAddress(instanceUID)
 }
 
-func (m *InstanceManager) AttachFloatingIp(
-	podName, projectName string, floatingIp *types.FloatingIp) {
+// AttachFloatingIP associates the VMI with a service or Public FloatingIp.
+func (m *InstanceManager) AttachFloatingIP(podName, projectName string, floatingIP *types.FloatingIp) {
 
 	fqn := []string{m.config.DefaultDomain, projectName, podName}
 	obj, err := m.client.FindByName(
@@ -212,9 +224,9 @@ func (m *InstanceManager) AttachFloatingIp(
 
 	vmi := obj.(*types.VirtualMachineInterface)
 
-	refs, err := floatingIp.GetVirtualMachineInterfaceRefs()
+	refs, err := floatingIP.GetVirtualMachineInterfaceRefs()
 	if err != nil {
-		glog.Errorf("GET floating-ip %s: %v", floatingIp.GetUuid(), err)
+		glog.Errorf("GET floating-ip %s: %v", floatingIP.GetUuid(), err)
 		return
 	}
 	for _, ref := range refs {
@@ -223,8 +235,8 @@ func (m *InstanceManager) AttachFloatingIp(
 		}
 	}
 
-	floatingIp.AddVirtualMachineInterface(vmi)
-	err = m.client.Update(floatingIp)
+	floatingIP.AddVirtualMachineInterface(vmi)
+	err = m.client.Update(floatingIP)
 	if err != nil {
 		glog.Errorf("Update floating-ip %s: %v", podName, err)
 	}

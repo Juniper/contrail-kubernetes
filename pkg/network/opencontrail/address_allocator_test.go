@@ -17,40 +17,25 @@ limitations under the License.
 package opencontrail
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/golang/glog"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/Juniper/contrail-go-api"
 	contrail_mocks "github.com/Juniper/contrail-go-api/mocks"
 	"github.com/Juniper/contrail-go-api/types"
 )
 
-type IpInterceptor struct {
-	count int
-}
-
-func (i *IpInterceptor) Put(ptr contrail.IObject) {
-	ip := ptr.(*types.InstanceIp)
-	i.count += 1
-	ip.SetInstanceIpAddress(fmt.Sprintf("10.254.%d.%d", i.count/256, i.count&0xff))
-}
-
-func (i *IpInterceptor) Get(ptr contrail.IObject) {
-}
-
 func TestAllocator(t *testing.T) {
 	client := new(contrail_mocks.ApiClient)
 	client.Init()
-	client.AddInterceptor("instance-ip", &IpInterceptor{})
+	client.AddInterceptor("instance-ip", &ipInterceptor{})
 
 	allocator := NewAddressAllocator(client, NewConfig())
 
 	id := uuid.New()
-	addr, err := allocator.LocateIpAddress(id)
+	addr, err := allocator.LocateIPAddress(id)
 	assert.NoError(t, err)
 	assert.Equal(t, "10.254.0.1", addr)
 
@@ -58,7 +43,7 @@ func TestAllocator(t *testing.T) {
 	assert.NoError(t, err)
 	glog.Infof(ipObj.GetInstanceIpAddress())
 
-	allocator.ReleaseIpAddress(id)
+	allocator.ReleaseIPAddress(id)
 	_, err = types.InstanceIpByName(client, id)
 	assert.Error(t, err)
 }

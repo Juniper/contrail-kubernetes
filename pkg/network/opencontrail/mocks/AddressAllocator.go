@@ -2,11 +2,13 @@ package mocks
 
 import "github.com/stretchr/testify/mock"
 
+// AddressAllocator provides a mock implementation of the AddressAllocator interface
 type AddressAllocator struct {
 	mock.Mock
 }
 
-func (m *AddressAllocator) LocateIpAddress(uid string) (string, error) {
+// LocateIPAddress allocates an IP address
+func (m *AddressAllocator) LocateIPAddress(uid string) (string, error) {
 	ret := m.Called(uid)
 
 	r0 := ret.Get(0).(string)
@@ -14,6 +16,8 @@ func (m *AddressAllocator) LocateIpAddress(uid string) (string, error) {
 
 	return r0, r1
 }
-func (m *AddressAllocator) ReleaseIpAddress(uid string) {
+
+// ReleaseIPAddress frees an allocated address
+func (m *AddressAllocator) ReleaseIPAddress(uid string) {
 	m.Called(uid)
 }

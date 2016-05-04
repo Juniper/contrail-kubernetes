@@ -25,26 +25,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/Juniper/contrail-go-api"
 	"github.com/Juniper/contrail-go-api/types"
 
 	contrail_mocks "github.com/Juniper/contrail-go-api/mocks"
 )
-
-type FloatingIpInterceptor struct {
-	count int
-}
-
-func (i *FloatingIpInterceptor) Put(ptr contrail.IObject) {
-}
-
-func (i *FloatingIpInterceptor) Get(ptr contrail.IObject) {
-	fip := ptr.(*types.FloatingIp)
-	if fip.GetFloatingIpAddress() == "" {
-		i.count += 1
-		fip.SetFloatingIpAddress(fmt.Sprintf("100.64.%d.%d", i.count/256, i.count&0xff))
-	}
-}
 
 func TestNetworkLocate(t *testing.T) {
 	client := new(contrail_mocks.ApiClient)
@@ -107,7 +91,7 @@ func TestPublicNetworkSubnetChangeWhenInUse(t *testing.T) {
 	config.PublicNetwork = "default-domain:default-project:Public"
 	config.PublicSubnet = "192.0.2.0/24"
 	netman := NewNetworkManager(client, config)
-	_, err := netman.LocateFloatingIp(netman.GetPublicNetwork(), "test", "192.0.2.1")
+	_, err := netman.LocateFloatingIP(netman.GetPublicNetwork(), "test", "192.0.2.1")
 	require.NoError(t, err)
 
 	config.PublicSubnet = "198.51.100.0/24"
@@ -121,7 +105,7 @@ func TestPublicNetworkSubnetChangeWhenInUse(t *testing.T) {
 		attr := refs[0].Attr.(types.VnSubnetsType)
 		assert.Len(t, attr.IpamSubnets, 2)
 	}
-	netman.DeleteFloatingIp(network, "test")
+	netman.DeleteFloatingIP(network, "test")
 }
 
 func TestGlobalNetworkMatch(t *testing.T) {

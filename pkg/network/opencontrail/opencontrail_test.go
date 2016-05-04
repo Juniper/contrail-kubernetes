@@ -17,6 +17,7 @@ limitations under the License.
 package opencontrail
 
 import (
+	"fmt"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -61,10 +62,10 @@ func (t *TestFramework) SetUp(publicSubnet string) {
 	t.client = new(contrail_mocks.ApiClient)
 	t.client.Init()
 
-	t.client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	t.client.AddInterceptor("virtual-network", &NetworkInterceptor{})
-	t.client.AddInterceptor("instance-ip", &IpInterceptor{})
-	t.client.AddInterceptor("floating-ip", &FloatingIpInterceptor{})
+	t.client.AddInterceptor("virtual-machine-interface", &vmiInterceptor{})
+	t.client.AddInterceptor("virtual-network", &networkInterceptor{})
+	t.client.AddInterceptor("instance-ip", &ipInterceptor{})
+	t.client.AddInterceptor("floating-ip", &floatingIPInterceptor{})
 
 	t.podStore = new(mocks.Store)
 	t.serviceStore = new(mocks.Store)
@@ -98,7 +99,7 @@ func (t *TestFramework) SetUp(publicSubnet string) {
 
 	listCall := t.serviceStore.On("List").Return()
 	listCall.Run(func(arg mock.Arguments) {
-		serviceList := make([]interface{}, 0)
+		var serviceList []interface{}
 		for _, v := range t.state {
 			for _, svc := range v.Services {
 				serviceList = append(serviceList, svc)
@@ -252,7 +253,7 @@ func (t *TestFramework) AllocateClusterIP(groupName string) string {
 		}
 	}
 
-	address, _ := PrefixToAddressLen(t.config.ServiceSubnet)
+	address, _ := prefixToAddressLen(t.config.ServiceSubnet)
 	bytes := strings.Split(address, ".")
 	bytes[2] = strconv.Itoa(lowerBytes >> 8)
 	bytes[3] = strconv.Itoa(lowerBytes & 255)
@@ -267,9 +268,9 @@ func (t *TestFramework) ReleaseClusterIP(address string) {
 	delete(t.clusterIPs, lowerBytes)
 }
 
-type VmiInterceptor struct{}
+type vmiInterceptor struct{}
 
-func (v *VmiInterceptor) Get(ptr contrail.IObject) {
+func (v *vmiInterceptor) Get(ptr contrail.IObject) {
 	nic := ptr.(*types.VirtualMachineInterface)
 	mac := nic.GetVirtualMachineInterfaceMacAddresses()
 	if len(mac.MacAddress) == 0 {
@@ -278,12 +279,12 @@ func (v *VmiInterceptor) Get(ptr contrail.IObject) {
 	}
 }
 
-func (v *VmiInterceptor) Put(ptr contrail.IObject) {
+func (v *vmiInterceptor) Put(ptr contrail.IObject) {
 }
 
-type NetworkInterceptor struct{}
+type networkInterceptor struct{}
 
-func (i *NetworkInterceptor) Put(ptr contrail.IObject) {
+func (i *networkInterceptor) Put(ptr contrail.IObject) {
 	network := ptr.(*types.VirtualNetwork)
 	refs, err := network.GetNetworkIpamRefs()
 	if err != nil || len(refs) == 0 {
@@ -300,5 +301,33 @@ func (i *NetworkInterceptor) Put(ptr contrail.IObject) {
 	attr.IpamSubnets[0].DefaultGateway = "1.1.1.1"
 }
 
-func (i *NetworkInterceptor) Get(ptr contrail.IObject) {
+func (i *networkInterceptor) Get(ptr contrail.IObject) {
+}
+
+type ipInterceptor struct {
+	count int
+}
+
+func (i *ipInterceptor) Put(ptr contrail.IObject) {
+	ip := ptr.(*types.InstanceIp)
+	i.count++
+	ip.SetInstanceIpAddress(fmt.Sprintf("10.254.%d.%d", i.count/256, i.count&0xff))
+}
+
+func (i *ipInterceptor) Get(ptr contrail.IObject) {
+}
+
+type floatingIPInterceptor struct {
+	count int
+}
+
+func (i *floatingIPInterceptor) Put(ptr contrail.IObject) {
+}
+
+func (i *floatingIPInterceptor) Get(ptr contrail.IObject) {
+	fip := ptr.(*types.FloatingIp)
+	if fip.GetFloatingIpAddress() == "" {
+		i.count++
+		fip.SetFloatingIpAddress(fmt.Sprintf("100.64.%d.%d", i.count/256, i.count&0xff))
+	}
 }

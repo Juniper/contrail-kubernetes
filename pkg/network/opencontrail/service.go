@@ -26,6 +26,8 @@ import (
 	"github.com/Juniper/contrail-go-api/types"
 )
 
+// ServiceManager defines the interface between the Controller and the class that manages
+// the contrail API representation of Services
 type ServiceManager interface {
 	Create(tenant, serviceName string) error
 	Delete(tenant, serviceName string) error
@@ -37,46 +39,47 @@ type ServiceManager interface {
 	DeleteConnections(*types.VirtualNetwork, []string) error
 }
 
-type ServiceManagerImpl struct {
+type serviceManagerImpl struct {
 	client     contrail.ApiClient
 	config     *Config
 	networkMgr NetworkManager
 }
 
 const (
-	ServiceNetworkFmt = "service-%s"
+	serviceNetworkFmt = "service-%s"
 )
 
+// NewServiceManager allocates and initializes a ServiceManager implementation.
 func NewServiceManager(client contrail.ApiClient, config *Config, networkMgr NetworkManager) ServiceManager {
-	serviceMgr := new(ServiceManagerImpl)
+	serviceMgr := new(serviceManagerImpl)
 	serviceMgr.client = client
 	serviceMgr.config = config
 	serviceMgr.networkMgr = networkMgr
 	return serviceMgr
 }
 
-func (m *ServiceManagerImpl) LocateServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error) {
-	networkName := fmt.Sprintf(ServiceNetworkFmt, serviceName)
+func (m *serviceManagerImpl) LocateServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error) {
+	networkName := fmt.Sprintf(serviceNetworkFmt, serviceName)
 	network, err := m.networkMgr.LocateNetwork(tenant, networkName, m.config.ServiceSubnet)
 	if err != nil {
 		return nil, err
 	}
-	m.networkMgr.LocateFloatingIpPool(network)
+	m.networkMgr.LocateFloatingIPPool(network)
 	return network, nil
 }
 
-func (m *ServiceManagerImpl) LookupServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error) {
-	networkName := fmt.Sprintf(ServiceNetworkFmt, serviceName)
+func (m *serviceManagerImpl) LookupServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error) {
+	networkName := fmt.Sprintf(serviceNetworkFmt, serviceName)
 	return m.networkMgr.LookupNetwork(tenant, networkName)
 }
 
-func (m *ServiceManagerImpl) IsEmpty(tenant, serviceName string) (bool, []string) {
+func (m *serviceManagerImpl) IsEmpty(tenant, serviceName string) (bool, []string) {
 	empty := []string{}
 	network, err := m.LookupServiceNetwork(tenant, serviceName)
 	if err != nil {
 		return true, empty
 	}
-	pool, err := m.networkMgr.LookupFloatingIpPool(network)
+	pool, err := m.networkMgr.LookupFloatingIPPool(network)
 	if err != nil {
 		return true, empty
 	}
@@ -95,7 +98,7 @@ func (m *ServiceManagerImpl) IsEmpty(tenant, serviceName string) (bool, []string
 		return true, empty
 	}
 	existing := make([]string, 0, len(existMap))
-	for key, _ := range existMap {
+	for key := range existMap {
 		existing = append(existing, key)
 	}
 	return false, existing
@@ -112,8 +115,8 @@ func serviceNameFromPolicyName(policyName string) (string, error) {
 	return "", fmt.Errorf("%s is not a service policy", policyName)
 }
 
-func (m *ServiceManagerImpl) locatePolicy(tenant, serviceName string) (*types.NetworkPolicy, error) {
-	var policy *types.NetworkPolicy = nil
+func (m *serviceManagerImpl) locatePolicy(tenant, serviceName string) (*types.NetworkPolicy, error) {
+	var policy *types.NetworkPolicy
 
 	policyName := makeServicePolicyName(m.config, tenant, serviceName)
 	obj, err := m.client.FindByName("network-policy", strings.Join(policyName, ":"))
@@ -133,7 +136,7 @@ func (m *ServiceManagerImpl) locatePolicy(tenant, serviceName string) (*types.Ne
 
 // Attach the network to the service policy.
 // The policy can be created either by the first referer or when the service is created.
-func (m *ServiceManagerImpl) Connect(tenant, serviceName string, network *types.VirtualNetwork) error {
+func (m *serviceManagerImpl) Connect(tenant, serviceName string, network *types.VirtualNetwork) error {
 	policy, err := m.locatePolicy(tenant, serviceName)
 	if err != nil {
 		return err
@@ -146,7 +149,7 @@ func (m *ServiceManagerImpl) Connect(tenant, serviceName string, network *types.
 	return nil
 }
 
-func (m *ServiceManagerImpl) Create(tenant, serviceName string) error {
+func (m *serviceManagerImpl) Create(tenant, serviceName string) error {
 	network, err := m.LocateServiceNetwork(tenant, serviceName)
 	if err != nil {
 		return err
@@ -173,22 +176,22 @@ func (m *ServiceManagerImpl) Create(tenant, serviceName string) error {
 	return nil
 }
 
-func (m *ServiceManagerImpl) Delete(tenant, serviceName string) error {
+func (m *serviceManagerImpl) Delete(tenant, serviceName string) error {
 	policyName := makeServicePolicyName(m.config, tenant, serviceName)
 
 	// Delete network
-	networkName := fmt.Sprintf(ServiceNetworkFmt, serviceName)
+	networkName := fmt.Sprintf(serviceNetworkFmt, serviceName)
 	network, err := m.networkMgr.LookupNetwork(tenant, networkName)
 	if network != nil {
 		policyDetach(m.client, network, strings.Join(policyName, ":"))
-		m.networkMgr.DeleteFloatingIpPool(network, true)
+		m.networkMgr.DeleteFloatingIPPool(network, true)
 
 		// Do not delete cluster-service networks.
 		// Often the cluster-service network is statically configured on a
 		// software gateway. When that is the case, the delete is not processed
 		// by the control-node since the downstream compute-node is still subscribed
 		// to the corresponding routing-instance.
-		if !IsClusterService(m.config, tenant, serviceName) {
+		if !isClusterService(m.config, tenant, serviceName) {
 			m.networkMgr.DeleteNetwork(network)
 		}
 	}
@@ -202,7 +205,7 @@ func (m *ServiceManagerImpl) Delete(tenant, serviceName string) error {
 	return err
 }
 
-func (m *ServiceManagerImpl) releasePolicyIfEmpty(tenant, serviceName string) (*types.NetworkPolicy, error) {
+func (m *serviceManagerImpl) releasePolicyIfEmpty(tenant, serviceName string) (*types.NetworkPolicy, error) {
 	policyName := makeServicePolicyName(m.config, tenant, serviceName)
 	policy, err := types.NetworkPolicyByName(m.client, strings.Join(policyName, ":"))
 	if err != nil {
@@ -222,30 +225,30 @@ func (m *ServiceManagerImpl) releasePolicyIfEmpty(tenant, serviceName string) (*
 	return policy, err
 }
 
-func (m *ServiceManagerImpl) Disconnect(tenant, serviceName, netName string) error {
+func (m *serviceManagerImpl) Disconnect(tenant, serviceName, netName string) error {
 	policy, err := m.releasePolicyIfEmpty(tenant, serviceName)
 	if policy != nil {
 		netFQN := []string{m.config.DefaultDomain, tenant, netName}
-		serviceFQN := []string{m.config.DefaultDomain, tenant, fmt.Sprintf(ServiceNetworkFmt, serviceName)}
+		serviceFQN := []string{m.config.DefaultDomain, tenant, fmt.Sprintf(serviceNetworkFmt, serviceName)}
 		err = policyDeleteRule(m.client, policy, strings.Join(netFQN, ":"), strings.Join(serviceFQN, ":"))
 		return err
 	}
 	return nil
 }
 
-func (m *ServiceManagerImpl) DeleteConnections(network *types.VirtualNetwork, purgeList []string) error {
+func (m *serviceManagerImpl) DeleteConnections(network *types.VirtualNetwork, purgeList []string) error {
 	if len(purgeList) == 0 {
 		return nil
 	}
-	for _, policyId := range purgeList {
-		network.DeleteNetworkPolicy(policyId)
+	for _, policyID := range purgeList {
+		network.DeleteNetworkPolicy(policyID)
 	}
 	err := m.client.Update(network)
 	if err != nil {
 		return err
 	}
-	for _, policyId := range purgeList {
-		policy, err := types.NetworkPolicyByUuid(m.client, policyId)
+	for _, policyID := range purgeList {
+		policy, err := types.NetworkPolicyByUuid(m.client, policyID)
 		if err != nil {
 			glog.Error(err)
 			continue

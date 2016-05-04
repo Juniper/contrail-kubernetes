@@ -36,8 +36,8 @@ option = value
 	if err != nil {
 		t.Error(err)
 	}
-	if config.KubeUrl != "https://master:443" {
-		t.Errorf("expected https://master:443, got %s", config.KubeUrl)
+	if config.KubeURL != "https://master:443" {
+		t.Errorf("expected https://master:443, got %s", config.KubeURL)
 	}
 }
 

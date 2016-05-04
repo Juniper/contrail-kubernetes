@@ -49,10 +49,10 @@ func createTestClient() contrail.ApiClient {
 	client := new(contrail_mocks.ApiClient)
 	client.Init()
 
-	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
-	client.AddInterceptor("instance-ip", &IpInterceptor{})
-	client.AddInterceptor("floating-ip", &FloatingIpInterceptor{})
+	client.AddInterceptor("virtual-machine-interface", &vmiInterceptor{})
+	client.AddInterceptor("virtual-network", &networkInterceptor{})
+	client.AddInterceptor("instance-ip", &ipInterceptor{})
+	client.AddInterceptor("floating-ip", &floatingIPInterceptor{})
 	return client
 }
 
@@ -98,7 +98,7 @@ func TestPodCreate(t *testing.T) {
 	client := new(contrail_mocks.ApiClient)
 	client.Init()
 
-	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
+	client.AddInterceptor("virtual-machine-interface", &vmiInterceptor{})
 	allocator := new(mocks.AddressAllocator)
 	networkMgr := new(mocks.NetworkManager)
 
@@ -124,7 +124,7 @@ func TestPodCreate(t *testing.T) {
 	testnet.SetFQName("project", []string{"default-domain", "testns", "testnet"})
 	client.Create(testnet)
 
-	allocator.On("LocateIpAddress", string(pod.ObjectMeta.UID)).Return("10.0.0.42", nil)
+	allocator.On("LocateIPAddress", string(pod.ObjectMeta.UID)).Return("10.0.0.42", nil)
 	networkMgr.On("LookupNetwork", "testns", "service-default").Return(nil, fmt.Errorf("404 Not found"))
 	networkMgr.On("LocateNetwork", "testns", "testnet",
 		controller.config.PrivateSubnet).Return(testnet, nil)
@@ -185,7 +185,7 @@ func TestPodDelete(t *testing.T) {
 	ipObj.SetName("testns_test")
 	assert.NoError(t, client.Create(ipObj))
 
-	allocator.On("ReleaseIpAddress", string(pod.ObjectMeta.UID)).Return()
+	allocator.On("ReleaseIPAddress", string(pod.ObjectMeta.UID)).Return()
 	networkMgr.On("ReleaseNetworkIfEmpty", "testns", "testnet").Return(true, nil)
 
 	shutdown := make(chan struct{})
@@ -281,8 +281,8 @@ func TestServiceAddWithPod(t *testing.T) {
 	client := new(contrail_mocks.ApiClient)
 	client.Init()
 
-	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
+	client.AddInterceptor("virtual-machine-interface", &vmiInterceptor{})
+	client.AddInterceptor("virtual-network", &networkInterceptor{})
 
 	netnsProject := new(types.Project)
 	netnsProject.SetFQName("domain", []string{"default-domain", "testns"})
@@ -319,7 +319,7 @@ func TestServiceAddWithPod(t *testing.T) {
 		},
 	}
 
-	allocator.On("LocateIpAddress", string(pod.ObjectMeta.UID)).Return("10.0.0.1", nil)
+	allocator.On("LocateIPAddress", string(pod.ObjectMeta.UID)).Return("10.0.0.1", nil)
 
 	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod).Return(pod, nil)
 	kube.Pods("testns").(*mocks.KubePodInterface).On("List", mock.Anything).Return(&api.PodList{Items: []api.Pod{*pod}}, nil)
@@ -341,7 +341,7 @@ func TestServiceAddWithPod(t *testing.T) {
 	obj, err := client.FindByName("virtual-network", "default-domain:testns:service-x1")
 	require.NoError(t, err)
 	serviceNet := obj.(*types.VirtualNetwork)
-	sip, err := controller.networkMgr.LocateFloatingIp(serviceNet, service.Name, service.Spec.ClusterIP)
+	sip, err := controller.networkMgr.LocateFloatingIP(serviceNet, service.Name, service.Spec.ClusterIP)
 	assert.NoError(t, err)
 	refList, err := sip.GetVirtualMachineInterfaceRefs()
 	assert.Nil(t, err)
@@ -361,8 +361,8 @@ func TestPodAddWithService(t *testing.T) {
 	client := new(contrail_mocks.ApiClient)
 	client.Init()
 
-	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
+	client.AddInterceptor("virtual-machine-interface", &vmiInterceptor{})
+	client.AddInterceptor("virtual-network", &networkInterceptor{})
 
 	allocator := new(mocks.AddressAllocator)
 
@@ -399,7 +399,7 @@ func TestPodAddWithService(t *testing.T) {
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	allocator.On("LocateIpAddress", string(pod.ObjectMeta.UID)).Return("10.0.0.1", nil)
+	allocator.On("LocateIPAddress", string(pod.ObjectMeta.UID)).Return("10.0.0.1", nil)
 
 	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod).Return(pod, nil)
 
@@ -419,7 +419,7 @@ func TestPodAddWithService(t *testing.T) {
 	obj, err := client.FindByName("virtual-network", "default-domain:testns:service-x1")
 	assert.NoError(t, err)
 	serviceNet := obj.(*types.VirtualNetwork)
-	sip, err := controller.networkMgr.LocateFloatingIp(serviceNet, service.Name, service.Spec.ClusterIP)
+	sip, err := controller.networkMgr.LocateFloatingIP(serviceNet, service.Name, service.Spec.ClusterIP)
 	assert.NoError(t, err)
 	refList, err := sip.GetVirtualMachineInterfaceRefs()
 	assert.Nil(t, err)
@@ -432,8 +432,8 @@ func TestServiceDeleteWithPod(t *testing.T) {
 	client := new(contrail_mocks.ApiClient)
 	client.Init()
 
-	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
+	client.AddInterceptor("virtual-machine-interface", &vmiInterceptor{})
+	client.AddInterceptor("virtual-network", &networkInterceptor{})
 
 	allocator := new(mocks.AddressAllocator)
 
@@ -481,8 +481,8 @@ func TestServiceDeleteWithPod(t *testing.T) {
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	allocator.On("LocateIpAddress", string(pod1.ObjectMeta.UID)).Return("10.0.0.1", nil)
-	allocator.On("LocateIpAddress", string(pod2.ObjectMeta.UID)).Return("10.0.0.2", nil)
+	allocator.On("LocateIPAddress", string(pod1.ObjectMeta.UID)).Return("10.0.0.1", nil)
+	allocator.On("LocateIPAddress", string(pod2.ObjectMeta.UID)).Return("10.0.0.2", nil)
 
 	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod1).Return(pod1, nil)
 	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod2).Return(pod2, nil)
@@ -500,7 +500,7 @@ func TestServiceDeleteWithPod(t *testing.T) {
 	obj, err := client.FindByName("virtual-network", "default-domain:testns:service-x1")
 	assert.NoError(t, err)
 	serviceNet := obj.(*types.VirtualNetwork)
-	sip, err := controller.networkMgr.LocateFloatingIp(serviceNet, service.Name, service.Spec.ClusterIP)
+	sip, err := controller.networkMgr.LocateFloatingIP(serviceNet, service.Name, service.Spec.ClusterIP)
 	sipName := sip.GetFQName()
 	assert.NoError(t, err)
 	refList, err := sip.GetVirtualMachineInterfaceRefs()
@@ -533,8 +533,8 @@ func TestPodUsesService(t *testing.T) {
 	client := new(contrail_mocks.ApiClient)
 	client.Init()
 
-	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
+	client.AddInterceptor("virtual-machine-interface", &vmiInterceptor{})
+	client.AddInterceptor("virtual-network", &networkInterceptor{})
 
 	allocator := new(mocks.AddressAllocator)
 
@@ -584,11 +584,11 @@ func TestPodUsesService(t *testing.T) {
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	allocator.On("LocateIpAddress", string(pod1.ObjectMeta.UID)).Return("10.0.0.1", nil)
-	allocator.On("LocateIpAddress", string(pod2.ObjectMeta.UID)).Return("10.0.0.2", nil)
+	allocator.On("LocateIPAddress", string(pod1.ObjectMeta.UID)).Return("10.0.0.1", nil)
+	allocator.On("LocateIPAddress", string(pod2.ObjectMeta.UID)).Return("10.0.0.2", nil)
 
-	allocator.On("ReleaseIpAddress", string(pod1.ObjectMeta.UID)).Return()
-	allocator.On("ReleaseIpAddress", string(pod2.ObjectMeta.UID)).Return()
+	allocator.On("ReleaseIPAddress", string(pod1.ObjectMeta.UID)).Return()
+	allocator.On("ReleaseIPAddress", string(pod2.ObjectMeta.UID)).Return()
 
 	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod1).Return(pod1, nil)
 	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod2).Return(pod2, nil)
@@ -604,7 +604,7 @@ func TestPodUsesService(t *testing.T) {
 	policyName := makeServicePolicyName(config, "testns", "x1")
 	policy, err := types.NetworkPolicyByName(client, strings.Join(policyName, ":"))
 	require.NoError(t, err)
-	policyId := policy.GetUuid()
+	policyID := policy.GetUuid()
 	assert.NoError(t, err)
 
 	serviceNet, err := types.VirtualNetworkByName(client, "default-domain:testns:service-x1")
@@ -641,7 +641,7 @@ func TestPodUsesService(t *testing.T) {
 	policy, err = types.NetworkPolicyByName(client, strings.Join(policyName, ":"))
 	assert.NoError(t, err)
 	if err == nil {
-		assert.Equal(t, policyId, policy.GetUuid())
+		assert.Equal(t, policyID, policy.GetUuid())
 		refs, err := policy.GetVirtualNetworkBackRefs()
 		assert.NoError(t, err)
 		assert.Len(t, refs, 1)
@@ -654,7 +654,7 @@ func TestPodUsesService(t *testing.T) {
 	policy, err = types.NetworkPolicyByName(client, strings.Join(policyName, ":"))
 	assert.NoError(t, err)
 	if err == nil {
-		assert.Equal(t, policyId, policy.GetUuid())
+		assert.Equal(t, policyID, policy.GetUuid())
 		refs, err := policy.GetVirtualNetworkBackRefs()
 		assert.NoError(t, err)
 		assert.Len(t, refs, 2)
@@ -681,8 +681,8 @@ func TestPodUsesServiceCreatedAfter(t *testing.T) {
 	client := new(contrail_mocks.ApiClient)
 	client.Init()
 
-	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
+	client.AddInterceptor("virtual-machine-interface", &vmiInterceptor{})
+	client.AddInterceptor("virtual-network", &networkInterceptor{})
 
 	allocator := new(mocks.AddressAllocator)
 
@@ -732,10 +732,10 @@ func TestPodUsesServiceCreatedAfter(t *testing.T) {
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	allocator.On("LocateIpAddress", string(pod1.ObjectMeta.UID)).Return("10.0.0.1", nil)
-	allocator.On("LocateIpAddress", string(pod2.ObjectMeta.UID)).Return("10.0.0.2", nil)
-	allocator.On("ReleaseIpAddress", string(pod1.ObjectMeta.UID)).Return()
-	allocator.On("ReleaseIpAddress", string(pod2.ObjectMeta.UID)).Return()
+	allocator.On("LocateIPAddress", string(pod1.ObjectMeta.UID)).Return("10.0.0.1", nil)
+	allocator.On("LocateIPAddress", string(pod2.ObjectMeta.UID)).Return("10.0.0.2", nil)
+	allocator.On("ReleaseIPAddress", string(pod1.ObjectMeta.UID)).Return()
+	allocator.On("ReleaseIPAddress", string(pod2.ObjectMeta.UID)).Return()
 
 	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod1).Return(pod1, nil)
 	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod2).Return(pod2, nil)
@@ -802,8 +802,8 @@ func TestPodUsesNonExistingService(t *testing.T) {
 	client := new(contrail_mocks.ApiClient)
 	client.Init()
 
-	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
+	client.AddInterceptor("virtual-machine-interface", &vmiInterceptor{})
+	client.AddInterceptor("virtual-network", &networkInterceptor{})
 
 	allocator := new(mocks.AddressAllocator)
 
@@ -827,8 +827,8 @@ func TestPodUsesNonExistingService(t *testing.T) {
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	allocator.On("LocateIpAddress", string(pod1.ObjectMeta.UID)).Return("10.0.0.1", nil)
-	allocator.On("ReleaseIpAddress", string(pod1.ObjectMeta.UID)).Return()
+	allocator.On("LocateIPAddress", string(pod1.ObjectMeta.UID)).Return("10.0.0.1", nil)
+	allocator.On("ReleaseIPAddress", string(pod1.ObjectMeta.UID)).Return()
 	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod1).Return(pod1, nil)
 
 	shutdown := make(chan struct{})
@@ -865,8 +865,8 @@ func TestServiceWithMultipleUsers(t *testing.T) {
 	client := new(contrail_mocks.ApiClient)
 	client.Init()
 
-	client.AddInterceptor("virtual-machine-interface", &VmiInterceptor{})
-	client.AddInterceptor("virtual-network", &NetworkInterceptor{})
+	client.AddInterceptor("virtual-machine-interface", &vmiInterceptor{})
+	client.AddInterceptor("virtual-network", &networkInterceptor{})
 
 	allocator := new(mocks.AddressAllocator)
 
@@ -936,14 +936,14 @@ func TestServiceWithMultipleUsers(t *testing.T) {
 	netnsProject.SetFQName("", []string{"default-domain", "testns"})
 	client.Create(netnsProject)
 
-	allocator.On("LocateIpAddress", string(pod1.ObjectMeta.UID)).Return("10.0.0.1", nil)
-	allocator.On("LocateIpAddress", string(pod2.ObjectMeta.UID)).Return("10.0.0.2", nil)
-	allocator.On("LocateIpAddress", string(pod3.ObjectMeta.UID)).Return("10.0.0.3", nil)
-	allocator.On("LocateIpAddress", string(pod4.ObjectMeta.UID)).Return("10.0.0.4", nil)
-	allocator.On("ReleaseIpAddress", string(pod1.ObjectMeta.UID)).Return()
-	allocator.On("ReleaseIpAddress", string(pod2.ObjectMeta.UID)).Return()
-	allocator.On("ReleaseIpAddress", string(pod3.ObjectMeta.UID)).Return()
-	allocator.On("ReleaseIpAddress", string(pod4.ObjectMeta.UID)).Return()
+	allocator.On("LocateIPAddress", string(pod1.ObjectMeta.UID)).Return("10.0.0.1", nil)
+	allocator.On("LocateIPAddress", string(pod2.ObjectMeta.UID)).Return("10.0.0.2", nil)
+	allocator.On("LocateIPAddress", string(pod3.ObjectMeta.UID)).Return("10.0.0.3", nil)
+	allocator.On("LocateIPAddress", string(pod4.ObjectMeta.UID)).Return("10.0.0.4", nil)
+	allocator.On("ReleaseIPAddress", string(pod1.ObjectMeta.UID)).Return()
+	allocator.On("ReleaseIPAddress", string(pod2.ObjectMeta.UID)).Return()
+	allocator.On("ReleaseIPAddress", string(pod3.ObjectMeta.UID)).Return()
+	allocator.On("ReleaseIPAddress", string(pod4.ObjectMeta.UID)).Return()
 
 	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod1).Return(pod1, nil)
 	kube.Pods("testns").(*mocks.KubePodInterface).On("Update", pod2).Return(pod2, nil)
@@ -1214,8 +1214,8 @@ func TestServiceWithLoadBalancer(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func getFloatingIpToInstanceList(client contrail.ApiClient, fip *types.FloatingIp) ([]string, error) {
-	vmList := make([]string, 0)
+func getFloatingIPToInstanceList(client contrail.ApiClient, fip *types.FloatingIp) ([]string, error) {
+	var vmList []string
 	refs, err := fip.GetVirtualMachineInterfaceRefs()
 	if err != nil {
 		return vmList, err
@@ -1323,10 +1323,10 @@ func TestServiceUpdateSelector(t *testing.T) {
 	controller.AddService(service)
 	time.Sleep(100 * time.Millisecond)
 
-	srvIp, err := types.FloatingIpByName(client, "default-domain:testns:service-svc:service-svc:service")
+	serviceIP, err := types.FloatingIpByName(client, "default-domain:testns:service-svc:service-svc:service")
 	assert.NoError(t, err)
 	if err == nil {
-		vmList, err := getFloatingIpToInstanceList(client, srvIp)
+		vmList, err := getFloatingIPToInstanceList(client, serviceIP)
 		assert.NoError(t, err)
 		assert.Len(t, vmList, 1)
 		assert.Contains(t, vmList, string(pod1.UID))
@@ -1335,10 +1335,10 @@ func TestServiceUpdateSelector(t *testing.T) {
 	fqn := strings.Split(config.PublicNetwork, ":")
 	fqn = append(fqn, fqn[len(fqn)-1])
 	fqn = append(fqn, fmt.Sprintf("%s_%s", service.Namespace, service.Name))
-	publicIp, err := types.FloatingIpByName(client, strings.Join(fqn, ":"))
+	publicIP, err := types.FloatingIpByName(client, strings.Join(fqn, ":"))
 	assert.NoError(t, err)
 	if err == nil {
-		vmList, err := getFloatingIpToInstanceList(client, publicIp)
+		vmList, err := getFloatingIPToInstanceList(client, publicIP)
 		assert.NoError(t, err)
 		assert.Len(t, vmList, 1)
 		assert.Contains(t, vmList, string(pod1.UID))
@@ -1357,18 +1357,18 @@ func TestServiceUpdateSelector(t *testing.T) {
 	}
 	shutdown <- shutdownMsg{}
 
-	srvIp, err = types.FloatingIpByName(client, "default-domain:testns:service-svc:service-svc:service")
+	serviceIP, err = types.FloatingIpByName(client, "default-domain:testns:service-svc:service-svc:service")
 	assert.NoError(t, err)
 	if err == nil {
-		vmList, err := getFloatingIpToInstanceList(client, srvIp)
+		vmList, err := getFloatingIPToInstanceList(client, serviceIP)
 		assert.NoError(t, err)
 		assert.Len(t, vmList, 1)
 		assert.Contains(t, vmList, string(pod2.UID))
 	}
-	publicIp, err = types.FloatingIpByName(client, strings.Join(fqn, ":"))
+	publicIP, err = types.FloatingIpByName(client, strings.Join(fqn, ":"))
 	assert.NoError(t, err)
 	if err == nil {
-		vmList, err := getFloatingIpToInstanceList(client, publicIp)
+		vmList, err := getFloatingIPToInstanceList(client, publicIP)
 		assert.NoError(t, err)
 		assert.Len(t, vmList, 1)
 		assert.Contains(t, vmList, string(pod2.UID))
@@ -1519,7 +1519,7 @@ func TestServiceUpdateLabel(t *testing.T) {
 	fip, err := types.FloatingIpByName(client, "default-domain:testns:service-blue:service-blue:service")
 	assert.NoError(t, err)
 	if err == nil {
-		vmList, err := getFloatingIpToInstanceList(client, fip)
+		vmList, err := getFloatingIPToInstanceList(client, fip)
 		assert.NoError(t, err)
 		assert.Len(t, vmList, 1)
 		assert.Contains(t, vmList, string(pod1.UID))
@@ -1527,7 +1527,7 @@ func TestServiceUpdateLabel(t *testing.T) {
 
 }
 
-func TestServiceUpdatePublicIp(t *testing.T) {
+func TestServiceUpdatePublicIP(t *testing.T) {
 	kube := mocks.NewKubeClient()
 
 	client := createTestClient()
@@ -1611,7 +1611,7 @@ func TestServiceUpdatePublicIp(t *testing.T) {
 	fip, err := types.FloatingIpByName(client, strings.Join(fqn, ":"))
 	assert.NoError(t, err)
 	if err == nil {
-		vmList, err := getFloatingIpToInstanceList(client, fip)
+		vmList, err := getFloatingIPToInstanceList(client, fip)
 		assert.NoError(t, err)
 		assert.Len(t, vmList, 2)
 		assert.Contains(t, vmList, string(pod1.UID))
@@ -1638,7 +1638,7 @@ func TestServiceUpdatePublicIp(t *testing.T) {
 	fip, err = types.FloatingIpByName(client, strings.Join(fqn, ":"))
 	assert.NoError(t, err)
 	if err == nil {
-		vmList, err := getFloatingIpToInstanceList(client, fip)
+		vmList, err := getFloatingIPToInstanceList(client, fip)
 		assert.NoError(t, err)
 		assert.Len(t, vmList, 2)
 		assert.Contains(t, vmList, string(pod1.UID))
@@ -1750,7 +1750,7 @@ func TestNetworkWithMultipleServices(t *testing.T) {
 	vip1, err := types.FloatingIpByName(client, "default-domain:testns:service-common:service-common:service1")
 	assert.NoError(t, err)
 	if err == nil {
-		vmList, err := getFloatingIpToInstanceList(client, vip1)
+		vmList, err := getFloatingIPToInstanceList(client, vip1)
 		assert.NoError(t, err)
 		assert.Len(t, vmList, 1)
 		assert.Contains(t, vmList, string(pod1.UID))
@@ -1759,7 +1759,7 @@ func TestNetworkWithMultipleServices(t *testing.T) {
 	vip2, err := types.FloatingIpByName(client, "default-domain:testns:service-common:service-common:service2")
 	assert.NoError(t, err)
 	if err == nil {
-		vmList, err := getFloatingIpToInstanceList(client, vip2)
+		vmList, err := getFloatingIPToInstanceList(client, vip2)
 		assert.NoError(t, err)
 		assert.Len(t, vmList, 1)
 		assert.Contains(t, vmList, string(pod2.UID))
@@ -1781,7 +1781,7 @@ func TestNetworkWithMultipleServices(t *testing.T) {
 	vip1, err = types.FloatingIpByName(client, "default-domain:testns:service-common:service-common:service1")
 	assert.NoError(t, err)
 	if err == nil {
-		vmList, err := getFloatingIpToInstanceList(client, vip1)
+		vmList, err := getFloatingIPToInstanceList(client, vip1)
 		assert.NoError(t, err)
 		assert.Len(t, vmList, 1)
 		assert.Contains(t, vmList, string(pod1.UID))
@@ -1865,7 +1865,7 @@ func TestPodSelectedBy2Services(t *testing.T) {
 	vip1, err := types.FloatingIpByName(client, "default-domain:testns:service-common:service-common:service1")
 	assert.NoError(t, err)
 	if err == nil {
-		vmList, err := getFloatingIpToInstanceList(client, vip1)
+		vmList, err := getFloatingIPToInstanceList(client, vip1)
 		assert.NoError(t, err)
 		assert.Len(t, vmList, 1)
 		assert.Contains(t, vmList, string(pod1.UID))
@@ -1874,7 +1874,7 @@ func TestPodSelectedBy2Services(t *testing.T) {
 	vip2, err := types.FloatingIpByName(client, "default-domain:testns:service-common:service-common:service2")
 	assert.NoError(t, err)
 	if err == nil {
-		vmList, err := getFloatingIpToInstanceList(client, vip2)
+		vmList, err := getFloatingIPToInstanceList(client, vip2)
 		assert.NoError(t, err)
 		assert.Len(t, vmList, 1)
 		assert.Contains(t, vmList, string(pod1.UID))
@@ -1888,7 +1888,7 @@ func TestPodSelectedBy2Services(t *testing.T) {
 	vip1, err = types.FloatingIpByName(client, "default-domain:testns:service-common:service-common:service1")
 	assert.NoError(t, err)
 	if err == nil {
-		vmList, err := getFloatingIpToInstanceList(client, vip1)
+		vmList, err := getFloatingIPToInstanceList(client, vip1)
 		assert.NoError(t, err)
 		assert.Len(t, vmList, 1)
 		assert.Contains(t, vmList, string(pod1.UID))

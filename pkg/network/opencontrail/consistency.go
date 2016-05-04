@@ -30,13 +30,17 @@ import (
 	"github.com/Juniper/contrail-go-api/types"
 )
 
+// ConsistencyChecker defines the interface between the controller and consistency checker.
+// The kubernetes API is the "source of truth" for the desired state of the cluster. The
+// consistency checker ensures that the contents of the contrail api reflect what is the
+// desired end state.
 type ConsistencyChecker interface {
 	Check() bool
 }
 
 type policySet map[string]bool
 type networkConnectionMap map[string]policySet
-type networkServiceMap map[string]ServiceIdList
+type networkServiceMap map[string]serviceIDList
 
 type consistencyChecker struct {
 	client             contrail.ApiClient
@@ -48,6 +52,7 @@ type consistencyChecker struct {
 	staleConnectionMap networkConnectionMap
 }
 
+// NewConsistencyChecker allocates an implementation of the ConsistencyChecker interface.
 func NewConsistencyChecker(client contrail.ApiClient, config *Config, podStore cache.Store,
 	serviceStore cache.Store, networkMgr NetworkManager, serviceMgr ServiceManager) ConsistencyChecker {
 	checker := new(consistencyChecker)
@@ -64,7 +69,7 @@ func NewConsistencyChecker(client contrail.ApiClient, config *Config, podStore c
 type deltaFn func(key string)
 type compareFn func(key string) bool
 
-func CompareSortedLists(lhs, rhs []string, addFn, delFn deltaFn, cmpFn compareFn) bool {
+func compareSortedLists(lhs, rhs []string, addFn, delFn deltaFn, cmpFn compareFn) bool {
 	equal := true
 	i, j := 0, 0
 
@@ -109,12 +114,12 @@ func (c *consistencyChecker) instanceGetPod(key string) (*api.Pod, error) {
 	return pod, nil
 }
 
-func (c *consistencyChecker) vmCompare(pod *api.Pod, instanceId string) bool {
-	if string(pod.UID) != instanceId {
-		glog.Errorf("pod %s: cache UID %s, virtual-machine %s", pod.Name, string(pod.UID), instanceId)
+func (c *consistencyChecker) vmCompare(pod *api.Pod, instanceID string) bool {
+	if string(pod.UID) != instanceID {
+		glog.Errorf("pod %s: cache UID %s, virtual-machine %s", pod.Name, string(pod.UID), instanceID)
 		return false
 	}
-	_, err := types.VirtualMachineByUuid(c.client, instanceId)
+	_, err := types.VirtualMachineByUuid(c.client, instanceID)
 	if err != nil {
 		return false
 	}
@@ -122,32 +127,32 @@ func (c *consistencyChecker) vmCompare(pod *api.Pod, instanceId string) bool {
 	return true
 }
 
-func (c *consistencyChecker) vmiCompare(pod *api.Pod, interfaceId string) bool {
-	vmi, err := types.VirtualMachineInterfaceByUuid(c.client, interfaceId)
+func (c *consistencyChecker) vmiCompare(pod *api.Pod, interfaceID string) bool {
+	vmi, err := types.VirtualMachineInterfaceByUuid(c.client, interfaceID)
 	if err != nil {
 		return false
 	}
 
-	var serviceIpNames sort.StringSlice
+	var serviceIPNames sort.StringSlice
 	refs, err := vmi.GetFloatingIpBackRefs()
 	if err == nil {
-		serviceIpMap := make(map[string]bool)
+		serviceIPMap := make(map[string]bool)
 		for _, ref := range refs {
 			name := strings.Join(ref.To, ":")
-			if _, ok := serviceIpMap[name]; !ok {
-				serviceIpMap[name] = true
-				serviceIpNames = append(serviceIpNames, name)
+			if _, ok := serviceIPMap[name]; !ok {
+				serviceIPMap[name] = true
+				serviceIPNames = append(serviceIPNames, name)
 			}
 		}
 	}
-	serviceIpNames.Sort()
+	serviceIPNames.Sort()
 
 	var serviceCacheNames sort.StringSlice
 	services, err := c.serviceStore.GetPodServices(pod)
 	if err == nil {
 		for _, service := range services {
-			serviceName := ServiceName(c.config, service.Labels)
-			serviceNet := fmt.Sprintf(ServiceNetworkFmt, serviceName)
+			serviceName := serviceName(c.config, service.Labels)
+			serviceNet := fmt.Sprintf(serviceNetworkFmt, serviceName)
 			fqn := []string{c.config.DefaultDomain, service.Namespace, serviceNet, serviceNet, service.Name}
 			if service.Spec.ClusterIP != "" {
 				serviceCacheNames = append(serviceCacheNames, strings.Join(fqn, ":"))
@@ -162,9 +167,9 @@ func (c *consistencyChecker) vmiCompare(pod *api.Pod, interfaceId string) bool {
 	}
 	serviceCacheNames.Sort()
 
-	result := CompareSortedLists(
+	result := compareSortedLists(
 		serviceCacheNames,
-		serviceIpNames,
+		serviceIPNames,
 		func(key string) {
 			glog.Errorf("interface %s: missing floating-ip for %s", vmi.GetName(), key)
 		},
@@ -186,7 +191,7 @@ func filterPods(store cache.StoreToPodLister, podList []string) []string {
 			continue
 		}
 		pod := item.(*api.Pod)
-		if IgnorePod(pod) {
+		if ignorePod(pod) {
 			continue
 		}
 		filteredList = append(filteredList, key)
@@ -201,7 +206,7 @@ func (c *consistencyChecker) collectNetworkServices(pod *api.Pod, connections ne
 	network := strings.Join(fqn, ":")
 	serviceList, ok := connections[network]
 	if !ok {
-		serviceList = MakeServiceIdList()
+		serviceList = makeServiceIDList()
 	}
 	buildPodServiceList(pod, c.config, &serviceList)
 	connections[network] = serviceList
@@ -219,14 +224,14 @@ func (c *consistencyChecker) InstanceChecker(connections networkServiceMap) bool
 		return false
 	}
 	var instanceKeys sort.StringSlice
-	instanceIdMap := make(map[string]string)
+	instanceIDMap := make(map[string]string)
 	for _, ref := range elements {
 		key := fmt.Sprintf("%s/%s", ref.Fq_name[len(ref.Fq_name)-2], ref.Fq_name[len(ref.Fq_name)-1])
 		instanceKeys = append(instanceKeys, key)
-		instanceIdMap[key] = ref.Uuid
+		instanceIDMap[key] = ref.Uuid
 	}
 	instanceKeys.Sort()
-	vmCmp := CompareSortedLists(cacheKeys, instanceKeys,
+	vmCmp := compareSortedLists(cacheKeys, instanceKeys,
 		func(key string) {
 			pod, err := c.instanceGetPod(key)
 			if err != nil {
@@ -237,7 +242,7 @@ func (c *consistencyChecker) InstanceChecker(connections networkServiceMap) bool
 			glog.Errorf("pod %s (UID: %s): instance not present in opencontrail api", key, string(pod.UID))
 		},
 		func(key string) {
-			glog.Errorf("virtual-machine %s (%s): not in local cache", key, instanceIdMap[key])
+			glog.Errorf("virtual-machine %s (%s): not in local cache", key, instanceIDMap[key])
 		},
 		func(key string) bool {
 			pod, err := c.instanceGetPod(key)
@@ -246,7 +251,7 @@ func (c *consistencyChecker) InstanceChecker(connections networkServiceMap) bool
 				return false
 			}
 			podMap[key] = pod
-			return c.vmCompare(pod, instanceIdMap[key])
+			return c.vmCompare(pod, instanceIDMap[key])
 		},
 	)
 
@@ -257,20 +262,20 @@ func (c *consistencyChecker) InstanceChecker(connections networkServiceMap) bool
 	}
 
 	var interfaceKeys sort.StringSlice
-	interfaceIdMap := make(map[string]string)
+	interfaceIDMap := make(map[string]string)
 	for _, ref := range elements {
 		key := fmt.Sprintf("%s/%s", ref.Fq_name[len(ref.Fq_name)-2], ref.Fq_name[len(ref.Fq_name)-1])
 		interfaceKeys = append(interfaceKeys, key)
-		interfaceIdMap[key] = ref.Uuid
+		interfaceIDMap[key] = ref.Uuid
 	}
 	interfaceKeys.Sort()
 
-	interfaceCmp := CompareSortedLists(cacheKeys, interfaceKeys,
+	interfaceCmp := compareSortedLists(cacheKeys, interfaceKeys,
 		func(key string) {
 			glog.Errorf("pod %s: interface not present in opencontrail api", key)
 		},
 		func(key string) {
-			glog.Errorf("virtual-machine-interface %s (%s): not in local cache", key, interfaceIdMap[key])
+			glog.Errorf("virtual-machine-interface %s (%s): not in local cache", key, interfaceIDMap[key])
 		},
 		func(key string) bool {
 			pod, ok := podMap[key]
@@ -282,7 +287,7 @@ func (c *consistencyChecker) InstanceChecker(connections networkServiceMap) bool
 					return false
 				}
 			}
-			return c.vmiCompare(pod, interfaceIdMap[key])
+			return c.vmiCompare(pod, interfaceIDMap[key])
 		},
 	)
 
@@ -304,7 +309,7 @@ func (c *consistencyChecker) addServiceNetworks(kubeNetworks *sort.StringSlice) 
 		return
 	}
 	for _, svc := range serviceList.Items {
-		fqn := []string{c.config.DefaultDomain, svc.Namespace, fmt.Sprintf(ServiceNetworkFmt, ServiceName(c.config, svc.Labels))}
+		fqn := []string{c.config.DefaultDomain, svc.Namespace, fmt.Sprintf(serviceNetworkFmt, serviceName(c.config, svc.Labels))}
 		networkName := strings.Join(fqn, ":")
 		if _, ok := serviceNetworkMap[networkName]; !ok {
 			serviceNetworkMap[networkName] = true
@@ -352,13 +357,13 @@ func (c *consistencyChecker) connectionShouldDelete(network *types.VirtualNetwor
 	return false
 }
 
-func (c *consistencyChecker) networkEvalPolicyRefs(network *types.VirtualNetwork, services ServiceIdList, lastIterationMap networkConnectionMap) (bool, error) {
+func (c *consistencyChecker) networkEvalPolicyRefs(network *types.VirtualNetwork, services serviceIDList, lastIterationMap networkConnectionMap) (bool, error) {
 	policyRefs, err := network.GetNetworkPolicyRefs()
 	if err != nil {
 		return false, err
 	}
 	consistent := true
-	serviceDeleteList := make([]string, 0)
+	var serviceDeleteList []string
 	gblNetworkDeleteList := make(map[string]string, 0)
 	networkCSN := strings.Join(network.GetFQName(), ":")
 	for _, ref := range policyRefs {
@@ -453,7 +458,7 @@ func (c *consistencyChecker) NetworkChecker(connections networkServiceMap) bool 
 	}
 	dbNetworks.Sort()
 
-	cmp := CompareSortedLists(kubeNetworks, dbNetworks,
+	cmp := compareSortedLists(kubeNetworks, dbNetworks,
 		func(key string) {
 			glog.Errorf("network %s not present in opencontrail db", key)
 		},
@@ -467,7 +472,7 @@ func (c *consistencyChecker) NetworkChecker(connections networkServiceMap) bool 
 				glog.Error(err)
 				return
 			}
-			c.networkEvalPolicyRefs(network, MakeServiceIdList(), nil)
+			c.networkEvalPolicyRefs(network, makeServiceIDList(), nil)
 		},
 		func(key string) bool {
 			return true

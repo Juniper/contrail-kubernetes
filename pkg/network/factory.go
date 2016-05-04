@@ -20,29 +20,32 @@ import (
 	client "k8s.io/kubernetes/pkg/client/unversioned"
 )
 
-type Allocator func(*client.Client, []string) NetworkController
+type allocator func(*client.Client, []string) Controller
 
 var (
-	allocatorMap map[string]Allocator
+	allocatorMap map[string]allocator
 )
 
-func Register(networkImpl string, allocFn Allocator) {
+// Register allows a Controller implementation to register to the factory
+func Register(networkImpl string, allocFn allocator) {
 	if allocatorMap == nil {
-		allocatorMap = make(map[string]Allocator, 0)
+		allocatorMap = make(map[string]allocator, 0)
 	}
 	allocatorMap[networkImpl] = allocFn
 }
 
-// Placeholder class that constructs a NetworkController
-type NetworkFactory struct {
+// Factory constructs a Controller
+type Factory struct {
 }
 
-func NewNetworkFactory() *NetworkFactory {
-	factory := new(NetworkFactory)
+// NewFactory returns a Factory
+func NewFactory() *Factory {
+	factory := new(Factory)
 	return factory
 }
 
-func (f *NetworkFactory) Create(client *client.Client, args []string) NetworkController {
+// Create allocates a Controller object.
+func (f *Factory) Create(client *client.Client, args []string) Controller {
 	// TODO(prm): read configuration in order to select plugin.
 	if alloc, ok := allocatorMap["opencontrail"]; ok {
 		return alloc(client, args)

@@ -23,7 +23,8 @@ import (
 	"k8s.io/kubernetes/pkg/client/cache"
 )
 
-type NetworkController interface {
+// Controller defines the interface for a network controller
+type Controller interface {
 	Init(global *Config, configFile io.Reader) error
 
 	SetNamespaceStore(store cache.Store)
@@ -35,11 +36,6 @@ type NetworkController interface {
 	AddPod(obj *api.Pod)
 	UpdatePod(oldObj, newObj *api.Pod)
 	DeletePod(obj *api.Pod)
-
-	SetReplicationControllerStore(store cache.Store)
-	AddReplicationController(obj *api.ReplicationController)
-	UpdateReplicationController(oldObj, newObj *api.ReplicationController)
-	DeleteReplicationController(obj *api.ReplicationController)
 
 	SetServiceStore(store cache.Store)
 	AddService(obj *api.Service)

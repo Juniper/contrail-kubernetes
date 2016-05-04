@@ -28,11 +28,12 @@ import (
 	"gopkg.in/gcfg.v1"
 )
 
+// Config represents generic configuration related to the kubernetes cluster
 type Config struct {
-	KubeUrl        string        `gcfg:"master"`
+	KubeURL        string        `gcfg:"master"`
 	KubeConfig     string        `gcfg:"kubeconfig"`
 	ResyncPeriod   time.Duration `gcfg:"resync-interval"`
-	ClusterIpRange string        `gcfg:"service-cluster-ip-range"`
+	ClusterIPRange string        `gcfg:"service-cluster-ip-range"`
 }
 
 type configWrapper struct {
@@ -62,6 +63,7 @@ func readSection(reader io.Reader, section string) *bytes.Buffer {
 	return buffer
 }
 
+// ReadConfiguration reads a configuration file.
 func ReadConfiguration(reader io.Reader, config *Config) error {
 	wrapper := configWrapper{Default: *config}
 	wrapper.Default.ResyncPeriod = 0
@@ -78,8 +80,8 @@ func ReadConfiguration(reader io.Reader, config *Config) error {
 		wrapper.Default.ResyncPeriod = config.ResyncPeriod
 	}
 
-	if clusterIp := wrapper.Default.ClusterIpRange; clusterIp != "" {
-		if _, _, err := net.ParseCIDR(clusterIp); err != nil {
+	if clusterIP := wrapper.Default.ClusterIPRange; clusterIP != "" {
+		if _, _, err := net.ParseCIDR(clusterIP); err != nil {
 			return err
 		}
 	}

@@ -31,16 +31,18 @@ import (
 )
 
 const (
+	// DefaultServiceSubnet is the default IP prefix used for ClusterIP addreses
 	DefaultServiceSubnet = "10.254.0.0/16"
 )
 
+// Config defines the configuration of the opencontrail controller package
 type Config struct {
 	// OpenContrail Default Domain
 	DefaultDomain string `gcfg:"default-domain"`
 
 	// OpenContrail api server address:port
-	ApiAddress string `gcfg:"api-server"`
-	ApiPort    int    `gcfg:"api-port"`
+	APIAddress string `gcfg:"api-server"`
+	APIPort    int    `gcfg:"api-port"`
 
 	// Project used for objects that are not namespace specific
 	DefaultProject string `gcfg:"default-project"`
@@ -72,11 +74,12 @@ type Config struct {
 	NamespaceServices []string `gcfg:"namespace-service"`
 }
 
+// NewConfig creates a Config object and initializes it with default values.
 func NewConfig() *Config {
 	config := &Config{
 		DefaultDomain:        "default-domain",
-		ApiAddress:           "localhost",
-		ApiPort:              8082,
+		APIAddress:           "localhost",
+		APIPort:              8082,
 		DefaultProject:       "default-domain:default-project",
 		PublicNetwork:        "default-domain:default-project:Public",
 		PrivateSubnet:        "10.0.0.0/16",
@@ -89,12 +92,13 @@ func NewConfig() *Config {
 	return config
 }
 
-// DEPRECATED
+// Parse command line arguments.
+// DEPRECATED in favor of a configuration file.
 func (c *Config) Parse(args []string) {
 	fs := flag.NewFlagSet("opencontrail", flag.ExitOnError)
-	fs.StringVar(&c.ApiAddress, "contrail_api", c.ApiAddress,
+	fs.StringVar(&c.APIAddress, "contrail_api", c.APIAddress,
 		"Hostname or address for the OpenContrail API server.")
-	fs.IntVar(&c.ApiPort, "contrail_port", 8082,
+	fs.IntVar(&c.APIPort, "contrail_port", 8082,
 		"OpenContrail API port.")
 	fs.StringVar(&c.PublicNetwork, "public_name", c.PublicNetwork,
 		"External network name.")
@@ -144,6 +148,7 @@ func validateNamespaceService(name string) error {
 	return nil
 }
 
+// Validate checks whether the configuration values are valid.
 func (c *Config) Validate() error {
 	if _, _, err := net.ParseCIDR(c.PrivateSubnet); err != nil {
 		return err
@@ -192,9 +197,10 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// ReadConfiguration reads the configuration parameters from a file.
 func (c *Config) ReadConfiguration(global *network.Config, reader io.Reader) error {
 	if global != nil && c.ServiceSubnet == DefaultServiceSubnet {
-		c.ServiceSubnet = global.ClusterIpRange
+		c.ServiceSubnet = global.ClusterIPRange
 	}
 
 	if reader == nil {

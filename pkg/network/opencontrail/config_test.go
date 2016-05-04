@@ -28,10 +28,10 @@ import (
 func TestParse(t *testing.T) {
 	assert := assert.New(t)
 	config := NewConfig()
-	assert.Equal("localhost", config.ApiAddress)
+	assert.Equal("localhost", config.APIAddress)
 	config.Parse([]string{"--portal_net=172.12.0.0/16"})
 	assert.Equal("172.12.0.0/16", config.ServiceSubnet)
-	assert.Equal("localhost", config.ApiAddress)
+	assert.Equal("localhost", config.APIAddress)
 }
 
 func TestConfigFile(t *testing.T) {
@@ -50,8 +50,8 @@ public-ip-range = 192.168.0.0/24
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.ApiAddress != "master" {
-		t.Errorf("expected master, got %s", config.ApiAddress)
+	if config.APIAddress != "master" {
+		t.Errorf("expected master, got %s", config.APIAddress)
 	}
 	if config.NetworkTag != "k8-app" {
 		t.Errorf("expected k8-app, got %s", config.NetworkTag)
