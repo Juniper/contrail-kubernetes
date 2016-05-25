@@ -8,8 +8,8 @@ index 2fe5d99..0eaf9a2 100644
              "labels":{
 -               "app":"guestbook"
 +               "app":"guestbook",
-+              "name": "frontend",
-+              "uses": "redis"
++              "opencontrail.org/name": "frontend",
++              "opencontrail.org/services": "redis"
              }
           },
           "spec":{
@@ -21,7 +21,7 @@ index 51f835a..1c7ee15 100644
           "metadata":{
              "labels":{
                 "app":"redis",
-+              "name":"redis",
++              "opencontrail.org/name":"redis",
                 "role":"master"
              }
           },
@@ -33,7 +33,7 @@ index 3a7426e..d49f949 100644
        "name":"redis-master",
        "labels":{
           "app":"redis",
-+        "name": "redis",
++        "opencontrail.org/name": "redis",
           "role":"master"
        }
     },
@@ -53,7 +53,7 @@ index 75e3c7e..a47a8a4 100644
           "metadata":{
              "labels":{
                 "app":"redis",
-+              "name":"redis",
++              "opencontrail.org/name":"redis",
                 "role":"slave"
              }
           },
@@ -65,7 +65,7 @@ index 7e8f49a..dbc993e 100644
        "name":"redis-slave",
        "labels":{
           "app":"redis",
-+        "name":"redis",
++        "opencontrail.org/name":"redis",
           "role":"slave"
        }
     },
