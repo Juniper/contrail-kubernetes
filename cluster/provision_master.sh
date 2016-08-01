@@ -118,7 +118,7 @@ function configure-cgroup() {
 function install_pkgs()
 {
   # aufs-tools is required for auplink that is used by docker
-  apt-get update
+  apt-get update --fix-missing
   apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --force-yes aufs-tools libxml2-utils host sipcalc
 }
 

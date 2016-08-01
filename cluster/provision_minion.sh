@@ -130,7 +130,7 @@ function prep_to_install()
         host dnsutils tcpdump
   elif [ "$OS_TYPE" == $UBUNTU ]; then
     # in case of an interrupt during execution of apt-get
-    apt-get update
+    apt-get update --fix-missing
     apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --force-yes libxml2-dev python-lxml sipcalc wget ethtool bridge-utils \
     curl host libxml2-utils \
     dnsutils tcpdump

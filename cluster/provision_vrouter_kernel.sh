@@ -159,7 +159,7 @@ function prep_to_install()
     docdo "yum update"
     docdo "yum install -y git make automake flex bison gcc gcc-c++ boost boost-devel scons kernel-devel-`uname -r`"
   elif [ "$OS_TYPE" == $UBUNTU ]; then
-    docdo "apt-get update"
+    docdo "apt-get update --fix-missing"
     # in case of an interrupt during execution of apt-get
     docdo "dpkg --configure -a"
     docdo "apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r`"
