@@ -610,6 +610,13 @@ function pmtu_discovery()
   sysctl -p
 }
 
+function checksum_offload()
+{
+  # This is to get disable checksum on the GCE VM running opencontrail
+  ethtool --offload eth0 rx off tx off
+  ethtool -K eth0 gso off
+}
+
 function main()
 {
    persist_hostname
@@ -631,6 +638,7 @@ function main()
    provision_virtual_gateway
    add_static_route
    rpf_disable
+   checksum_offload
    cleanup
    log_info_msg "Provisioning of opencontrail-vrouter kernel and opencontrail-vrouter agent and gateway is done."
    touch "$runok"
