@@ -644,7 +644,7 @@ function main()
    setup_vhost
    stop_kube_svcs
    update_vhost_pre_up
-   prereq_vrouter_agent
+   #prereq_vrouter_agent
    vr_agent_conf_image_pull
    ifup_vhost
    routeconfig
