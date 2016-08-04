@@ -77,12 +77,20 @@ function isGceVM()
 function prereq_install_contrail()
 {
   set +e
-  doc=$(which docker)
+  iF=$(dpkg -l |grep docker-engine | awk '{print $1}')
   if [ "$OS_TYPE" == $REDHAT ]; then
      docon=$(rpm -qa | grep docker)
   elif [ "$OS_TYPE" == $UBUNTU ]; then
      docon=$(dpkg -l | grep docker)
   fi
+
+  if [ "$iF" == "iF" ]; then
+     apt-get remove --purge docker-engine
+     rm -rf /var/cache/docker-install/docker-engine*
+     wget --directory-prefix=/var/cache/docker-install http://apt.dockerproject.org/repo/pool/main/d/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
+     dpkg -i /var/cache/docker-install/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
+  fi
+  doc=$(which docker)
 
   if [ -z "$docon" ] && [ -z "$doc" ]; then
      curl -sSL https://get.docker.com/ | sh
@@ -268,7 +276,7 @@ function cleanup()
 
 # Setup contrail-controller components
 function setup_contrail_master() {
-    #prereq_install_contrail
+    prereq_install_contrail
     configure-cgroup
     install_pkgs
     # Pull all contrail images and copy the manifest files
