@@ -292,6 +292,16 @@ function prereq_vrouter_agent()
      docon=$(dpkg -l | grep docker)
   fi
 
+  iF=$(dpkg -l |grep docker-engine | awk '{print $1}')
+
+  if [ "$iF" == "iF" ] || [ "$iF" == "iFR" ]; then
+     apt-get remove --purge docker-engine
+     rm -rf /var/cache/docker-install/docker-engine*
+     wget --directory-prefix=/var/cache/docker-install http://apt.dockerproject.org/repo/pool/main/d/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
+     dpkg -i /var/cache/docker-install/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
+  fi
+  docon=$(dpkg -l | grep docker)
+
   if [ -z "$docon" ]; then
      curl -sSL https://get.docker.com/ | sh
   fi

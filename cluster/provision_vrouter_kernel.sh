@@ -58,7 +58,7 @@ function detect_os()
 {
    OS=`uname`
    OS_TYPE="none"
-   if [ "${OS}" = "Linux" ]; then
+   if [ "${OS}" == "Linux" ]; then
       if [ -f /etc/redhat-release ]; then
          OS_TYPE="redhat"
       elif [ -f /etc/debian_version ]; then
@@ -139,6 +139,16 @@ function prereq_vrouter()
   elif [ "$OS_TYPE" == $UBUNTU ]; then
      docon=$(dpkg -l | grep docker)
   fi
+
+  iF=$(dpkg -l |grep docker-engine | awk '{print $1}')
+
+  if [ "$iF" == "iF" ] || [ "$iF" == "iFR" ]; then
+     apt-get remove --purge docker-engine
+     rm -rf /var/cache/docker-install/docker-engine*
+     wget --directory-prefix=/var/cache/docker-install http://apt.dockerproject.org/repo/pool/main/d/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
+     dpkg -i /var/cache/docker-install/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
+  fi
+  docon=$(dpkg -l | grep docker)
 
   if [ -z "$docon" ]; then
      curl -sSL https://get.docker.com/ | sh
@@ -249,8 +259,14 @@ function cleanup()
   docker rmi $VROUTER_DKMB_IMG
 }
 
+function random_delay()
+{
+  sleep $[ ( $RANDOM % 40 )  + 1 ]s
+}
+
 function main()
 {
+   random_delay
    detect_os
    configure-cgroup
    prereq_vrouter

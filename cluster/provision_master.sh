@@ -84,7 +84,7 @@ function prereq_install_contrail()
      docon=$(dpkg -l | grep docker)
   fi
 
-  if [ "$iF" == "iF" ]; then
+  if [ "$iF" == "iF" ] || [ "$iF" == "iFR" ]; then
      apt-get remove --purge docker-engine
      rm -rf /var/cache/docker-install/docker-engine*
      wget --directory-prefix=/var/cache/docker-install http://apt.dockerproject.org/repo/pool/main/d/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
