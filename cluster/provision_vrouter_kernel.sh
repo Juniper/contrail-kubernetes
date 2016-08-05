@@ -140,9 +140,9 @@ function prereq_vrouter()
      docon=$(dpkg -l | grep docker)
   fi
 
-  iF=$(dpkg -l |grep docker-engine | awk '{print $1}')
+  ii=$(dpkg -l |grep docker-engine | awk '{print $1}')
 
-  if [ "$iF" == "iF" ] || [ "$iF" == "iFR" ]; then
+  if [ "$ii" != "ii" ]; then
      dpkg --remove --force-remove-reinstreq docker-engine
      apt-get remove --purge docker-engine -y
   fi

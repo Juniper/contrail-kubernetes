@@ -77,17 +77,16 @@ function isGceVM()
 function prereq_install_contrail()
 {
   set +e
-  iF=$(dpkg -l |grep docker-engine | awk '{print $1}')
+  ii=$(dpkg -l |grep docker-engine | awk '{print $1}')
   if [[ "$OS_TYPE" == $REDHAT ]]; then
      docon=$(rpm -qa | grep docker)
   elif [[ "$OS_TYPE" == $UBUNTU ]]; then
      docon=$(dpkg -l | grep docker)
   fi
 
-  if [ "$iF" == "iF" ] || [ "$iF" == "iFR" ]; then
+  if [ "$ii" != "ii" ]; then
      dpkg --remove --force-remove-reinstreq docker-engine
      apt-get remove --purge docker-engine -y
-     dpkg -i /var/cache/docker-install/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
   fi
   doc=$(which docker)
 
