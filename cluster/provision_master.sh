@@ -93,9 +93,9 @@ function prereq_install_contrail()
 
   if [ -z "$docon" ] && [ -z "$doc" ]; then
      if [ ! -f /usr/bin/docker ]; then
-         if [ "$OS_TYPE" == $REDHAT ]; then
-            yum update
-         elif [ "$OS_TYPE" == $UBUNTU ]; then
+         if [[ "$OS_TYPE" == $REDHAT ]]; then
+            yum update -y
+         elif [[ "$OS_TYPE" == $UBUNTU ]]; then
             apt-get update --fix-missing
             # assuming this is a GCE setup only and that the package is downloaded and available
             rm -rf /var/cache/docker-install/docker-engine*
