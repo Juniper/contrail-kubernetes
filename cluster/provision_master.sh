@@ -16,6 +16,9 @@ exec 2>&1 &> >(tee -a "$LOG_FILE")
 # https://github.com/Juniper/contrail-kubernetes
 
 OS_TYPE="none"
+REDHAT="redhat"
+UBUNTU="ubuntu"
+
 function detect_os()
 {
    OS=`uname`
@@ -78,15 +81,15 @@ function prereq_install_contrail()
 {
   set +e
   ii=$(dpkg -l |grep docker-engine | awk '{print $1}')
-  if [[ "$OS_TYPE" == $REDHAT ]]; then
-     docon=$(rpm -qa | grep docker)
-  elif [[ "$OS_TYPE" == $UBUNTU ]]; then
-     docon=$(dpkg -l | grep docker)
-  fi
 
   if [ "$ii" != "ii" ]; then
      dpkg --remove --force-remove-reinstreq docker-engine
      apt-get remove --purge docker-engine -y
+  fi
+  if [[ "$OS_TYPE" == $REDHAT ]]; then
+     docon=$(rpm -qa | grep docker)
+  elif [[ "$OS_TYPE" == $UBUNTU ]]; then
+     docon=$(dpkg -l | grep docker)
   fi
   doc=$(which docker)
 
@@ -278,6 +281,7 @@ function cleanup()
 
 # Setup contrail-controller components
 function setup_contrail_master() {
+    detect_os
     prereq_install_contrail
     configure-cgroup
     install_pkgs

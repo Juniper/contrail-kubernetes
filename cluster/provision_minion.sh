@@ -286,17 +286,16 @@ function update_vhost_pre_up()
 
 function prereq_vrouter_agent()
 {
-  if [[ "$OS_TYPE" == $REDHAT ]]; then
-     docon=$(rpm -qa | grep docker)
-  elif [[ "$OS_TYPE" == $UBUNTU ]]; then
-     docon=$(dpkg -l | grep docker)
-  fi
-
   ii=$(dpkg -l |grep docker-engine | awk '{print $1}')
 
   if [ "$ii" != "ii" ]; then
      dpkg --remove --force-remove-reinstreq docker-engine
      apt-get remove --purge docker-engine -y
+  fi
+  if [[ "$OS_TYPE" == $REDHAT ]]; then
+     docon=$(rpm -qa | grep docker)
+  elif [[ "$OS_TYPE" == $UBUNTU ]]; then
+     docon=$(dpkg -l | grep docker)
   fi
   docon=$(dpkg -l | grep docker)
 
