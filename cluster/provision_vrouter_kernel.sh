@@ -155,6 +155,7 @@ function prereq_vrouter()
             apt-get update --fix-missing
             rm -rf /var/cache/docker-install/docker-engine*
             wget --directory-prefix=/var/cache/docker-install http://apt.dockerproject.org/repo/pool/main/d/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
+            apt-get install -y libapparmor1 libltdl7
             dpkg -i /var/cache/docker-install/docker-engine_1.11.2-0~wheezy_amd64.deb
             service docker restart
          fi
@@ -172,7 +173,13 @@ function prep_to_install()
     docdo "apt-get update --fix-missing"
     # in case of an interrupt during execution of apt-get
     docdo "dpkg --configure -a"
-    docdo "apt-get install -y git make automake flex bison g++ gcc make libboost-all-dev scons linux-headers-`uname -r`"
+    docdo "apt-get install -y git make automake"
+    docdo "apt-get update --fix-missing"
+    docdo "apt-get install -y flex bison"
+    docdo "apt-get install -y g++ gcc"
+    docdo "apt-get update --fix-missing"
+    docdo "apt-get install -y libboost-all-dev scons linux-headers-`uname -r`"
+    docdo "apt-get update --fix-missing"
   fi
 }
 
