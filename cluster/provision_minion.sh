@@ -305,7 +305,8 @@ function prereq_vrouter_agent()
             apt-get update --fix-missing
             rm -rf /var/cache/docker-install/docker-engine*
             wget --directory-prefix=/var/cache/docker-install http://apt.dockerproject.org/repo/pool/main/d/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
-            dpkg -i /var/cache/docker-install/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
+            dpkg -i /var/cache/docker-install/docker-engine_1.11.2-0~wheezy_amd64.deb
+            service docker restart
      fi
   fi
 }
