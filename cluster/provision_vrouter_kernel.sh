@@ -134,32 +134,31 @@ function docker_pull()
 
 function prereq_vrouter()
 {
-  if [ "$OS_TYPE" == $REDHAT ]; then
+  if [[ "$OS_TYPE" == $REDHAT ]]; then
      docon=$(rpm -qa | grep docker)
-  elif [ "$OS_TYPE" == $UBUNTU ]; then
+  elif [[ "$OS_TYPE" == $UBUNTU ]]; then
      docon=$(dpkg -l | grep docker)
   fi
 
   iF=$(dpkg -l |grep docker-engine | awk '{print $1}')
 
   if [ "$iF" == "iF" ] || [ "$iF" == "iFR" ]; then
-      dpkg --remove --force-remove-reinstreq docker-engine
+     dpkg --remove --force-remove-reinstreq docker-engine
      apt-get remove --purge docker-engine -y
-     rm -rf /var/cache/docker-install/docker-engine*
-     wget --directory-prefix=/var/cache/docker-install http://apt.dockerproject.org/repo/pool/main/d/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
-     dpkg -i /var/cache/docker-install/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
   fi
   docon=$(dpkg -l | grep docker)
 
   if [ -z "$docon" ]; then
-     curl -sSL https://get.docker.com/ | sh
      if [ ! -f /usr/bin/docker ]; then
-         if [ "$OS_TYPE" == $REDHAT ]; then
+         if [[ "$OS_TYPE" == $REDHAT ]]; then
             yum update
-         elif [ "$OS_TYPE" == $UBUNTU ]; then
+         elif [[ "$OS_TYPE" == $UBUNTU ]]; then
             apt-get update --fix-missing
+            rm -rf /var/cache/docker-install/docker-engine*
+            wget --directory-prefix=/var/cache/docker-install http://apt.dockerproject.org/repo/pool/main/d/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
+            dpkg -i /var/cache/docker-install/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
          fi
-         curl -sSL https://get.docker.com/ | sh
+         #curl -sSL https://get.docker.com/ | sh
      fi
   fi
 }
@@ -270,7 +269,7 @@ function main()
 {
    random_delay
    detect_os
-   configure-cgroup
+   #configure-cgroup
    prereq_vrouter
    launch_docker
    prep_to_install
