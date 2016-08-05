@@ -269,7 +269,7 @@ function main()
 {
    random_delay
    detect_os
-   #configure-cgroup
+   configure-cgroup
    prereq_vrouter
    launch_docker
    prep_to_install
