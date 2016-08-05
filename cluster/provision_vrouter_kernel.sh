@@ -267,7 +267,6 @@ function random_delay()
 
 function main()
 {
-   random_delay
    detect_os
    configure-cgroup
    prereq_vrouter
