@@ -304,7 +304,9 @@ function prereq_vrouter_agent()
   docon=$(dpkg -l | grep docker)
 
   if [ -z "$docon" ]; then
-     curl -sSL https://get.docker.com/ | sh
+     #curl -sSL https://get.docker.com/ | sh
+     # assuming GCE install only 1.11.2
+     dpkg -i /var/cache/docker-install/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
   fi
 }
 

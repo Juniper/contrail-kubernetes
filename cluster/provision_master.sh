@@ -101,7 +101,9 @@ function prereq_install_contrail()
          elif [ "$OS_TYPE" == $UBUNTU ]; then
             apt-get update --fix-missing
          fi
-         curl -sSL https://get.docker.com/ | sh
+         #curl -sSL https://get.docker.com/ | sh
+         # assuming this is a GCE setup only and that the package is downloaded and available
+         dpkg -i /var/cache/docker-install/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
      fi
   fi
   set -e
