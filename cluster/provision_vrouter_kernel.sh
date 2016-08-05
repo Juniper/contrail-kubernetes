@@ -143,7 +143,8 @@ function prereq_vrouter()
   iF=$(dpkg -l |grep docker-engine | awk '{print $1}')
 
   if [ "$iF" == "iF" ] || [ "$iF" == "iFR" ]; then
-     apt-get remove --purge docker-engine
+      dpkg --remove --force-remove-reinstreq docker-engine
+     apt-get remove --purge docker-engine -y
      rm -rf /var/cache/docker-install/docker-engine*
      wget --directory-prefix=/var/cache/docker-install http://apt.dockerproject.org/repo/pool/main/d/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
      dpkg -i /var/cache/docker-install/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
@@ -183,6 +184,7 @@ function build_vrouter()
   docdo "cd ~/vrouter-build/tools && (git clone https://github.com/Juniper/contrail-build build)"
   docdo "cd ~/vrouter-build/tools && (git clone -b $ocver https://github.com/Juniper/contrail-sandesh sandesh)"
   docdo "cp ~/vrouter-build/tools/build/SConstruct ~/vrouter-build"
+  docdo "export SCONSFLAGS='-j 8 -Q debug=1'"
   docdo "cd ~/vrouter-build && USER=opencontrail scons --optimization=production vrouter 2>&1"
 }
 
