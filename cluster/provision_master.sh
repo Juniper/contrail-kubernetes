@@ -282,8 +282,8 @@ function cleanup()
 # Setup contrail-controller components
 function setup_contrail_master() {
     detect_os
-    prereq_install_contrail
     configure-cgroup
+    prereq_install_contrail
     install_pkgs
     # Pull all contrail images and copy the manifest files
     setup_contrail_manifest_files
