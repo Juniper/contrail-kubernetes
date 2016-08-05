@@ -138,6 +138,7 @@ function prereq_vrouter()
 
   if [ "$ii" != "ii" ]; then
      dpkg --remove --force-remove-reinstreq docker-engine
+     dpkg --purge --force-all docker-engine
      apt-get remove --purge docker-engine -y
   fi
   if [[ "$OS_TYPE" == $REDHAT ]]; then

@@ -84,6 +84,7 @@ function prereq_install_contrail()
 
   if [ "$ii" != "ii" ]; then
      dpkg --remove --force-remove-reinstreq docker-engine
+     dpkg --purge --force-all docker-engine
      apt-get remove --purge docker-engine -y
   fi
   if [[ "$OS_TYPE" == $REDHAT ]]; then
@@ -102,6 +103,7 @@ function prereq_install_contrail()
             # assuming this is a GCE setup only and that the package is downloaded and available
             rm -rf /var/cache/docker-install/docker-engine*
             wget --directory-prefix=/var/cache/docker-install http://apt.dockerproject.org/repo/pool/main/d/docker-engine/docker-engine_1.11.2-0~wheezy_amd64.deb
+            apt-get install -y libapparmor1 libltdl7
             dpkg -i /var/cache/docker-install/docker-engine_1.11.2-0~wheezy_amd64.deb
             service docker restart
          fi
