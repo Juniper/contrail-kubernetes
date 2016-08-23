@@ -49,7 +49,7 @@ type Controller struct {
 
 	eventChannel chan notification
 
-	podStore     cache.Store
+	podStore     cache.Indexer
 	serviceStore cache.Store
 
 	instanceMgr  *InstanceManager

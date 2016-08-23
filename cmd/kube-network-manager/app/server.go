@@ -46,7 +46,7 @@ type NetworkManager struct {
 	Client     *client.Client
 	Controller network.NetworkController
 
-	PodStore    cache.Store
+	PodStore    cache.Indexer
 	PodInformer *framework.Controller
 
 	NamespaceStore    cache.Store
@@ -135,7 +135,7 @@ func (m *NetworkManager) init(args []string) {
 func (m *NetworkManager) start(args []string) {
 	m.init(args)
 
-	m.PodStore, m.PodInformer = framework.NewInformer(
+	m.PodStore, m.PodInformer = framework.NewIndexerInformer(
 		cache.NewListWatchFromClient(
 			m.Client,
 			string(api.ResourcePods),
@@ -158,6 +158,7 @@ func (m *NetworkManager) start(args []string) {
 				}
 			},
 		},
+		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
 	)
 
 	m.NamespaceStore, m.NamespaceInformer = framework.NewInformer(

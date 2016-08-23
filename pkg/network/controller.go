@@ -31,7 +31,7 @@ type NetworkController interface {
 	UpdateNamespace(oldObj, newObj *api.Namespace)
 	DeleteNamespace(obj *api.Namespace)
 
-	SetPodStore(store cache.Store)
+	SetPodStore(store cache.Indexer)
 	AddPod(obj *api.Pod)
 	UpdatePod(oldObj, newObj *api.Pod)
 	DeletePod(obj *api.Pod)

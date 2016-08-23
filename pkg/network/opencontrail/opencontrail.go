@@ -105,7 +105,7 @@ func (c *Controller) SetNamespaceStore(store cache.Store) {
 	//	c.NamespaceStore = store
 }
 
-func (c *Controller) SetPodStore(store cache.Store) {
+func (c *Controller) SetPodStore(store cache.Indexer) {
 	c.podStore = store
 }
 
