@@ -48,12 +48,12 @@ type consistencyChecker struct {
 	staleConnectionMap networkConnectionMap
 }
 
-func NewConsistencyChecker(client contrail.ApiClient, config *Config, podStore cache.Store,
+func NewConsistencyChecker(client contrail.ApiClient, config *Config, podStore cache.Indexer,
 	serviceStore cache.Store, networkMgr NetworkManager, serviceMgr ServiceManager) ConsistencyChecker {
 	checker := new(consistencyChecker)
 	checker.client = client
 	checker.config = config
-	checker.podStore = cache.StoreToPodLister{Store: podStore}
+	checker.podStore = cache.StoreToPodLister{Indexer: podStore}
 	checker.serviceStore = cache.StoreToServiceLister{Store: serviceStore}
 	checker.networkMgr = networkMgr
 	checker.serviceMgr = serviceMgr
