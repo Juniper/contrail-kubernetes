@@ -51,7 +51,7 @@ func (m *InstanceManager) LocateInstance(tenant, podName, uid string) *types.Vir
 	}
 
 	instance := new(types.VirtualMachine)
-	instance.SetFQName("project", instanceFQName(m.config.DefaultDomain, tenant, podName))
+	instance.SetName(podName)
 	instance.SetUuid(uid)
 	err = m.client.Create(instance)
 	if err != nil {
@@ -83,7 +83,7 @@ func (m *InstanceManager) LookupInterface(tenant, podName string) *types.Virtual
 
 func (m *InstanceManager) LocateInterface(
 	network *types.VirtualNetwork, instance *types.VirtualMachine) *types.VirtualMachineInterface {
-	tenant := instance.GetFQName()[len(instance.GetFQName())-2]
+	tenant := network.GetFQName()[len(network.GetFQName())-2]
 	fqn := interfaceFQName(m.config.DefaultDomain, tenant, instance.GetName())
 
 	obj, err := m.client.FindByName(

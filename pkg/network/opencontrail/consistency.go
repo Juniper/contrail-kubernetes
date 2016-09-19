@@ -189,7 +189,7 @@ func filterPods(store cache.StoreToPodLister, podList []string) []string {
 		if IgnorePod(pod) {
 			continue
 		}
-		filteredList = append(filteredList, key)
+		filteredList = append(filteredList, pod.Name)
 	}
 
 	return filteredList
@@ -221,7 +221,7 @@ func (c *consistencyChecker) InstanceChecker(connections networkServiceMap) bool
 	var instanceKeys sort.StringSlice
 	instanceIdMap := make(map[string]string)
 	for _, ref := range elements {
-		key := fmt.Sprintf("%s/%s", ref.Fq_name[len(ref.Fq_name)-2], ref.Fq_name[len(ref.Fq_name)-1])
+		key := fmt.Sprintf("%s", ref.Fq_name[0])
 		instanceKeys = append(instanceKeys, key)
 		instanceIdMap[key] = ref.Uuid
 	}
