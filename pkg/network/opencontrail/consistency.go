@@ -259,7 +259,7 @@ func (c *consistencyChecker) InstanceChecker(connections networkServiceMap) bool
 	var interfaceKeys sort.StringSlice
 	interfaceIdMap := make(map[string]string)
 	for _, ref := range elements {
-		key := fmt.Sprintf("%s/%s", ref.Fq_name[len(ref.Fq_name)-2], ref.Fq_name[len(ref.Fq_name)-1])
+		key := fmt.Sprintf("%s", ref.Fq_name[len(ref.Fq_name)-1])
 		interfaceKeys = append(interfaceKeys, key)
 		interfaceIdMap[key] = ref.Uuid
 	}
