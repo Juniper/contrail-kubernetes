@@ -215,7 +215,7 @@ func (c *Controller) ensureNamespace(namespaceName string) {
 }
 
 func (c *Controller) updatePodServiceIp(service *api.Service, pod *api.Pod) {
-	if service.Spec.ClusterIP == "" {
+	if service.Spec.ClusterIP == "" || service.Spec.ClusterIP == "None" {
 		return
 	}
 
@@ -440,7 +440,7 @@ func (c *Controller) addService(service *api.Service) {
 
 	var serviceIp *types.FloatingIp
 	// Allocate this IP address on the service network.
-	if service.Spec.ClusterIP != "" {
+	if service.Spec.ClusterIP != "" && service.Spec.ClusterIP != "None" {
 		serviceNetwork, err := c.serviceMgr.LocateServiceNetwork(service.Namespace, serviceName)
 		if err == nil {
 			serviceIp, err = c.networkMgr.LocateFloatingIp(
@@ -519,7 +519,7 @@ func (c *Controller) updateService(service *api.Service) {
 	}
 
 	var serviceIp *types.FloatingIp = nil
-	if service.Spec.ClusterIP != "" {
+	if service.Spec.ClusterIP != "" && service.Spec.ClusterIP != "None" {
 		serviceNetwork, err := c.serviceMgr.LocateServiceNetwork(service.Namespace, serviceName)
 		if err == nil {
 			serviceIp, err = c.networkMgr.LocateFloatingIp(
