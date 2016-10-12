@@ -35,8 +35,10 @@ const (
 	servicePolicyPrefix = "__svc_"
 	networkPolicyPrefix = "__net_"
 
-	DefaultPodNetworkName     = "default-network"
-	DefaultServiceNetworkName = "default"
+	DefaultPodNetworkName     = "default"
+	DefaultServiceNetworkName = "cluster-network"
+	DefaultPodProjectName     = "default"
+	DefaultServiceProjectName = "default"
 )
 
 // InstanceMetadata contains the information required in the kubernetes minion to
