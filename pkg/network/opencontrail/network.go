@@ -240,12 +240,23 @@ func (m *NetworkManagerImpl) LocateNetwork(project, name, subnet string) (*types
 		return obj.(*types.VirtualNetwork), nil
 	}
 
-	projectID, err := m.client.UuidByName("project", fmt.Sprintf("%s:%s", m.config.DefaultDomain, project))
+	proj, err := m.client.FindByName("project", fmt.Sprintf("%s:%s", m.config.DefaultDomain, project))
 	if err != nil {
 		glog.Infof("GET %s: %v", project, err)
 		return nil, err
 	}
-	uid, err := config.CreateNetworkWithSubnet(m.client, projectID, name, subnet)
+
+	var ipam = new(types.NetworkIpam)
+	ipam.SetParent(proj.(*types.Project))
+	ipam.SetName(fmt.Sprintf("%s-ipam", name))
+	err = m.client.Create(ipam)
+
+	if err != nil {
+		glog.Errorf("Create ipam for network %s:%s failed: %v", project, name, err)
+		return nil, err
+	}
+
+	uid, err := config.CreateNetworkWithIpam(m.client, proj.(*types.Project), name, subnet, ipam)
 	if err != nil {
 		glog.Infof("Create %s: %v", name, err)
 		return nil, err
