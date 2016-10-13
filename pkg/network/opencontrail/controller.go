@@ -237,7 +237,7 @@ func (c *Controller) updatePodServiceIp(service *api.Service, pod *api.Pod) {
 		return
 	}
 	var project = getPodProjectName(pod)
-    c.instanceMgr.AttachFloatingIp(pod.Name, project, serviceIp)
+	c.instanceMgr.AttachFloatingIp(pod.Name, project, serviceIp)
 }
 
 func (c *Controller) updatePodPublicIp(service *api.Service, pod *api.Pod) {
@@ -257,7 +257,7 @@ func (c *Controller) updatePodPublicIp(service *api.Service, pod *api.Pod) {
 	}
 
 	var project = getPodProjectName(pod)
-    c.instanceMgr.AttachFloatingIp(pod.Name, project, publicIp)
+	c.instanceMgr.AttachFloatingIp(pod.Name, project, publicIp)
 }
 
 func decodeAccessTag(tag string) []string {
@@ -303,7 +303,7 @@ func makeListOptSelector(labelMap map[string]string) api.ListOptions {
 func (c *Controller) updatePod(pod *api.Pod) {
 	glog.Infof("Update Pod %s", pod.Name)
 
-    var project = getPodProjectName(pod)
+	var project = getPodProjectName(pod)
 	c.ensureNamespace(project)
 	instance := c.instanceMgr.LocateInstance(project, pod.Name, string(pod.ObjectMeta.UID))
 
@@ -475,10 +475,10 @@ func (c *Controller) addService(service *api.Service) {
 		var project = getPodProjectName(&pod)
 		if serviceIp != nil {
 			// Connect serviceIp to VMI.
-            c.instanceMgr.AttachFloatingIp(pod.Name, project, serviceIp)
+			c.instanceMgr.AttachFloatingIp(pod.Name, project, serviceIp)
 		}
 		if publicIp != nil {
-            c.instanceMgr.AttachFloatingIp(pod.Name, project, publicIp)
+			c.instanceMgr.AttachFloatingIp(pod.Name, project, publicIp)
 		}
 	}
 }
@@ -555,10 +555,10 @@ func (c *Controller) updateService(service *api.Service) {
 		var project = getPodProjectName(&pod)
 		if serviceIp != nil {
 			// Connect serviceIp to VMI.
-            c.instanceMgr.AttachFloatingIp(pod.Name, project, serviceIp)
+			c.instanceMgr.AttachFloatingIp(pod.Name, project, serviceIp)
 		}
 		if publicIp != nil {
-            c.instanceMgr.AttachFloatingIp(pod.Name, project, publicIp)
+			c.instanceMgr.AttachFloatingIp(pod.Name, project, publicIp)
 		}
 	}
 

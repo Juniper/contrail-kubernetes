@@ -232,12 +232,6 @@ func (m *NetworkManagerImpl) LookupNetwork(projectName, networkName string) (*ty
 //
 // It is used to create pod and service networks.
 func (m *NetworkManagerImpl) LocateNetwork(project, name, subnet string) (*types.VirtualNetwork, error) {
-	projectID, err := m.client.UuidByName("project", fmt.Sprintf("%s:%s", m.config.DefaultDomain, project))
-	if err != nil {
-		glog.Infof("GET %s: %v", project, err)
-		return nil, err
-	}
-
 	fqn := []string{m.config.DefaultDomain, project, name}
 	fqname := strings.Join(fqn, ":")
 
@@ -246,8 +240,9 @@ func (m *NetworkManagerImpl) LocateNetwork(project, name, subnet string) (*types
 		return obj.(*types.VirtualNetwork), nil
 	}
 
-	proj, err := m.client.FindByUuid ("project", projectID)
+	proj, err := m.client.FindByName("project", fmt.Sprintf("%s:%s", m.config.DefaultDomain, project))
 	if err != nil {
+		glog.Infof("GET %s: %v", project, err)
 		return nil, err
 	}
 
