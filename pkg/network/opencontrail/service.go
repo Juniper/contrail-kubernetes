@@ -47,6 +47,16 @@ const (
 	ServiceNetworkFmt = "service-%s"
 )
 
+func getServiceProjectName() string {
+	// here we will return a different namespace depending on the isolation mode
+	return DefaultServiceProjectName
+}
+
+func getServiceNetworkName() string {
+	// here we will return a different namespace depending on the isolation mode
+	return DefaultServiceNetworkName
+}
+
 func NewServiceManager(client contrail.ApiClient, config *Config, networkMgr NetworkManager) ServiceManager {
 	serviceMgr := new(ServiceManagerImpl)
 	serviceMgr.client = client
@@ -56,8 +66,9 @@ func NewServiceManager(client contrail.ApiClient, config *Config, networkMgr Net
 }
 
 func (m *ServiceManagerImpl) LocateServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error) {
-	networkName := fmt.Sprintf(ServiceNetworkFmt, serviceName)
-	network, err := m.networkMgr.LocateNetwork(tenant, networkName, m.config.ServiceSubnet)
+	var project = getServiceProjectName()
+	var networkName = getServiceNetworkName()
+	network, err := m.networkMgr.LocateNetwork(project, networkName, m.config.ServiceSubnet)
 	if err != nil {
 		return nil, err
 	}
@@ -66,13 +77,15 @@ func (m *ServiceManagerImpl) LocateServiceNetwork(tenant, serviceName string) (*
 }
 
 func (m *ServiceManagerImpl) LookupServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error) {
-	networkName := fmt.Sprintf(ServiceNetworkFmt, serviceName)
-	return m.networkMgr.LookupNetwork(tenant, networkName)
+	var project = getServiceProjectName()
+	var networkName = getServiceNetworkName()
+	return m.networkMgr.LookupNetwork(project, networkName)
 }
 
 func (m *ServiceManagerImpl) IsEmpty(tenant, serviceName string) (bool, []string) {
 	empty := []string{}
-	network, err := m.LookupServiceNetwork(tenant, serviceName)
+	var project = getServiceProjectName()
+	network, err := m.LookupServiceNetwork(project, serviceName)
 	if err != nil {
 		return true, empty
 	}
@@ -102,7 +115,8 @@ func (m *ServiceManagerImpl) IsEmpty(tenant, serviceName string) (bool, []string
 }
 
 func makeServicePolicyName(config *Config, tenant, serviceName string) []string {
-	return []string{config.DefaultDomain, tenant, servicePolicyPrefix + serviceName}
+	var project = getServiceProjectName()
+	return []string{config.DefaultDomain, project, servicePolicyPrefix + serviceName}
 }
 
 func serviceNameFromPolicyName(policyName string) (string, error) {
@@ -114,8 +128,8 @@ func serviceNameFromPolicyName(policyName string) (string, error) {
 
 func (m *ServiceManagerImpl) locatePolicy(tenant, serviceName string) (*types.NetworkPolicy, error) {
 	var policy *types.NetworkPolicy = nil
-
-	policyName := makeServicePolicyName(m.config, tenant, serviceName)
+	var project = getServiceProjectName()
+	policyName := makeServicePolicyName(m.config, project, serviceName)
 	obj, err := m.client.FindByName("network-policy", strings.Join(policyName, ":"))
 	if err != nil {
 		policy = new(types.NetworkPolicy)
@@ -134,12 +148,13 @@ func (m *ServiceManagerImpl) locatePolicy(tenant, serviceName string) (*types.Ne
 // Attach the network to the service policy.
 // The policy can be created either by the first referer or when the service is created.
 func (m *ServiceManagerImpl) Connect(tenant, serviceName string, network *types.VirtualNetwork) error {
-	policy, err := m.locatePolicy(tenant, serviceName)
+	var project = getServiceProjectName();
+	policy, err := m.locatePolicy(project, serviceName)
 	if err != nil {
 		return err
 	}
 	policyAttach(m.client, network, policy)
-	serviceNet, err := m.LookupServiceNetwork(tenant, serviceName)
+	serviceNet, err := m.LookupServiceNetwork(project, serviceName)
 	if err == nil {
 		policyLocateRule(m.client, policy, network, serviceNet)
 	}
@@ -147,11 +162,12 @@ func (m *ServiceManagerImpl) Connect(tenant, serviceName string, network *types.
 }
 
 func (m *ServiceManagerImpl) Create(tenant, serviceName string) error {
-	network, err := m.LocateServiceNetwork(tenant, serviceName)
+	var project = getServiceProjectName();
+	network, err := m.LocateServiceNetwork(project, serviceName)
 	if err != nil {
 		return err
 	}
-	policy, err := m.locatePolicy(tenant, serviceName)
+	policy, err := m.locatePolicy(project, serviceName)
 	if err != nil {
 		return nil
 	}
@@ -174,11 +190,12 @@ func (m *ServiceManagerImpl) Create(tenant, serviceName string) error {
 }
 
 func (m *ServiceManagerImpl) Delete(tenant, serviceName string) error {
-	policyName := makeServicePolicyName(m.config, tenant, serviceName)
+	var project = getServiceProjectName();
+	policyName := makeServicePolicyName(m.config, project, serviceName)
 
 	// Delete network
-	networkName := fmt.Sprintf(ServiceNetworkFmt, serviceName)
-	network, err := m.networkMgr.LookupNetwork(tenant, networkName)
+	var networkName = getServiceNetworkName();
+	network, err := m.networkMgr.LookupNetwork(project, networkName)
 	if network != nil {
 		policyDetach(m.client, network, strings.Join(policyName, ":"))
 		m.networkMgr.DeleteFloatingIpPool(network, true)
@@ -188,12 +205,12 @@ func (m *ServiceManagerImpl) Delete(tenant, serviceName string) error {
 		// software gateway. When that is the case, the delete is not processed
 		// by the control-node since the downstream compute-node is still subscribed
 		// to the corresponding routing-instance.
-		if !IsClusterService(m.config, tenant, serviceName) {
+		if !IsClusterService(m.config, project, serviceName) {
 			m.networkMgr.DeleteNetwork(network)
 		}
 	}
 
-	policy, err := m.releasePolicyIfEmpty(tenant, serviceName)
+	policy, err := m.releasePolicyIfEmpty(project, serviceName)
 	if policy != nil {
 		// flush all policy rules
 		policy.SetNetworkPolicyEntries(&types.PolicyEntriesType{})
@@ -203,7 +220,8 @@ func (m *ServiceManagerImpl) Delete(tenant, serviceName string) error {
 }
 
 func (m *ServiceManagerImpl) releasePolicyIfEmpty(tenant, serviceName string) (*types.NetworkPolicy, error) {
-	policyName := makeServicePolicyName(m.config, tenant, serviceName)
+	var project = getServiceProjectName();
+	policyName := makeServicePolicyName(m.config, project, serviceName)
 	policy, err := types.NetworkPolicyByName(m.client, strings.Join(policyName, ":"))
 	if err != nil {
 		return nil, nil
@@ -223,10 +241,11 @@ func (m *ServiceManagerImpl) releasePolicyIfEmpty(tenant, serviceName string) (*
 }
 
 func (m *ServiceManagerImpl) Disconnect(tenant, serviceName, netName string) error {
-	policy, err := m.releasePolicyIfEmpty(tenant, serviceName)
+	var project = getServiceProjectName();
+	policy, err := m.releasePolicyIfEmpty(project, serviceName)
 	if policy != nil {
-		netFQN := []string{m.config.DefaultDomain, tenant, netName}
-		serviceFQN := []string{m.config.DefaultDomain, tenant, fmt.Sprintf(ServiceNetworkFmt, serviceName)}
+		netFQN := []string{m.config.DefaultDomain, project, netName}
+		serviceFQN := []string{m.config.DefaultDomain, project, fmt.Sprintf(ServiceNetworkFmt, serviceName)}
 		err = policyDeleteRule(m.client, policy, strings.Join(netFQN, ":"), strings.Join(serviceFQN, ":"))
 		return err
 	}

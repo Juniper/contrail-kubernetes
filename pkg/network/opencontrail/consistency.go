@@ -196,7 +196,7 @@ func filterPods(store cache.StoreToPodLister, podList []string) []string {
 }
 
 func (c *consistencyChecker) collectNetworkServices(pod *api.Pod, connections networkServiceMap) {
-	name := podNetworkName(pod, c.config)
+	name := getPodNetworkName(pod, c.config)
 	fqn := []string{c.config.DefaultDomain, pod.Namespace, name}
 	network := strings.Join(fqn, ":")
 	serviceList, ok := connections[network]

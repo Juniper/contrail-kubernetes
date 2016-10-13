@@ -173,12 +173,12 @@ func (m *InstanceManager) LocateInstanceIp(
 	ipObj.SetInstanceIpMode("active-active")
 	err = m.client.Create(ipObj)
 	if err != nil {
-		glog.Errorf("Create instance-ip %s: %s: %v", nic.GetName(), address, err)
+		glog.Errorf("Create instance-ip %s for %s: %v", address, nic.GetName(), err)
 		return nil
 	}
 	obj, err = m.client.FindByUuid(ipObj.GetType(), ipObj.GetUuid())
 	if err != nil {
-		glog.Errorf("Get instance-ip %s: %v", ipObj.GetUuid(), err)
+		glog.Errorf("Get instance-ip %s for %s: %v", address, ipObj.GetUuid(), err)
 		return nil
 	}
 	return ipObj

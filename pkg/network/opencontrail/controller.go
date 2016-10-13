@@ -169,7 +169,7 @@ func (c *Controller) updateInstanceMetadata(
 	}
 }
 
-func podNetworkName(pod *api.Pod, config *Config) string {
+func getPodNetworkName(pod *api.Pod, config *Config) string {
 	name, ok := pod.Labels[config.NetworkTag]
 	if !ok {
 		name = DefaultPodNetworkName
@@ -177,10 +177,16 @@ func podNetworkName(pod *api.Pod, config *Config) string {
 	return name
 }
 
+func getPodProjectName(pod *api.Pod) string {
+	// here we will return a different project depending on the isolation mode
+	return DefaultPodProjectName
+}
+
 // Retrieve the private network for this Pod.
 func (c *Controller) getPodNetwork(pod *api.Pod) *types.VirtualNetwork {
-	name := podNetworkName(pod, c.config)
-	network, err := c.networkMgr.LocateNetwork(pod.Namespace, name, c.config.PrivateSubnet)
+	var project = getPodProjectName(pod)
+	name := getPodNetworkName(pod, c.config)
+	network, err := c.networkMgr.LocateNetwork(project, name, c.config.PrivateSubnet)
 	if err != nil {
 		return nil
 	}
@@ -230,7 +236,8 @@ func (c *Controller) updatePodServiceIp(service *api.Service, pod *api.Pod) {
 		glog.Error(err)
 		return
 	}
-	c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, serviceIp)
+	var project = getPodProjectName(pod)
+	c.instanceMgr.AttachFloatingIp(pod.Name, project, serviceIp)
 }
 
 func (c *Controller) updatePodPublicIp(service *api.Service, pod *api.Pod) {
@@ -248,7 +255,9 @@ func (c *Controller) updatePodPublicIp(service *api.Service, pod *api.Pod) {
 	if err != nil {
 		return
 	}
-	c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, publicIp)
+
+	var project = getPodProjectName(pod)
+	c.instanceMgr.AttachFloatingIp(pod.Name, project, publicIp)
 }
 
 func decodeAccessTag(tag string) []string {
@@ -294,8 +303,9 @@ func makeListOptSelector(labelMap map[string]string) api.ListOptions {
 func (c *Controller) updatePod(pod *api.Pod) {
 	glog.Infof("Update Pod %s", pod.Name)
 
-	c.ensureNamespace(pod.Namespace)
-	instance := c.instanceMgr.LocateInstance(pod.Namespace, pod.Name, string(pod.ObjectMeta.UID))
+	var project = getPodProjectName(pod)
+	c.ensureNamespace(project)
+	instance := c.instanceMgr.LocateInstance(project, pod.Name, string(pod.ObjectMeta.UID))
 
 	network := c.getPodNetwork(pod)
 	if network == nil {
@@ -347,7 +357,7 @@ func (c *Controller) deletePod(pod *api.Pod) {
 	c.instanceMgr.ReleaseInterface(pod.Namespace, pod.Name)
 	c.instanceMgr.DeleteInstance(string(pod.ObjectMeta.UID))
 
-	networkName := podNetworkName(pod, c.config)
+	networkName := getPodNetworkName(pod, c.config)
 	deleted, err := c.networkMgr.ReleaseNetworkIfEmpty(pod.Namespace, networkName)
 	if err != nil {
 		glog.Infof("Release network %s: %v", networkName, err)
@@ -462,12 +472,13 @@ func (c *Controller) addService(service *api.Service) {
 	}
 
 	for _, pod := range pods.Items {
+		var project = getPodProjectName(&pod)
 		if serviceIp != nil {
 			// Connect serviceIp to VMI.
-			c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, serviceIp)
+			c.instanceMgr.AttachFloatingIp(pod.Name, project, serviceIp)
 		}
 		if publicIp != nil {
-			c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, publicIp)
+			c.instanceMgr.AttachFloatingIp(pod.Name, project, publicIp)
 		}
 	}
 }
@@ -541,12 +552,13 @@ func (c *Controller) updateService(service *api.Service) {
 	podIdMap := make(map[string]*api.Pod)
 	for _, pod := range pods.Items {
 		podIdMap[string(pod.UID)] = &pod
+		var project = getPodProjectName(&pod)
 		if serviceIp != nil {
 			// Connect serviceIp to VMI.
-			c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, serviceIp)
+			c.instanceMgr.AttachFloatingIp(pod.Name, project, serviceIp)
 		}
 		if publicIp != nil {
-			c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, publicIp)
+			c.instanceMgr.AttachFloatingIp(pod.Name, project, publicIp)
 		}
 	}
 

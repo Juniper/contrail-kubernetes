@@ -60,6 +60,7 @@ func (m *NamespaceManager) LocateNamespace(name, uid string) *types.Project {
 	err = m.client.Create(project)
 	if err != nil {
 		glog.Errorf("Create project %s: %v", name, err)
+		return nil
 	}
 	return project
 }
