@@ -60,6 +60,9 @@ type Controller struct {
 
 	consistencyPeriod time.Duration
 	consistencyWorker ConsistencyChecker
+
+	virtualRouterUpdatePeriod time.Duration
+	virtualRouterMgr          *VirtualRouterManager
 }
 
 type eventType string
@@ -347,11 +350,24 @@ func (c *Controller) updatePod(pod *api.Pod) {
 			c.updatePodPublicIp(service, pod)
 		}
 	}
+	result := c.virtualRouterMgr.addPodRefToVirtualRouter(pod, instance)
+	if result {
+		glog.Infof("pod(%s) added to vRouter(%s)", pod.Name, pod.Status.HostIP)
+		return
+	}
 }
 
 // DeletePod
 func (c *Controller) deletePod(pod *api.Pod) {
 	glog.Infof("Delete Pod %s", pod.Name)
+
+	instance := c.instanceMgr.LocateInstance(pod.Namespace, pod.Name, string(pod.ObjectMeta.UID))
+	if instance != nil {
+		result := c.virtualRouterMgr.removePodRefFromVirtualRouter(pod, instance)
+		if result {
+			glog.Infof("pod(%s) removed from vRouter(%s)", pod.Name, pod.Status.HostIP)
+		}
+	}
 
 	c.instanceMgr.ReleaseInstanceIp(pod.Namespace, pod.Name, string(pod.ObjectMeta.UID))
 	c.instanceMgr.ReleaseInterface(pod.Namespace, pod.Name)

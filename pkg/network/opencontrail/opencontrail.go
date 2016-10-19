@@ -83,6 +83,13 @@ func (c *Controller) initComponents(client contrail.ApiClient) {
 	c.networkMgr = NewNetworkManager(client, c.config)
 	c.serviceMgr = NewServiceManager(client, c.config, c.networkMgr)
 	c.namespaceMgr = NewNamespaceManager(client, c.config)
+
+	virtualRouterMgr, err := NewVirtualRouterManager(client, c.config)
+	if err != nil {
+		glog.Errorf("NewVirtualRouterManager failed: %v", err)
+		return
+	}
+        c.virtualRouterMgr = virtualRouterMgr
 }
 
 func (c *Controller) Init(global *network.Config, reader io.Reader) error {
