@@ -83,6 +83,7 @@ func (vrMgr *VirtualRouterManager) addPodRefToVirtualRouter(
 		return false
 	}
 
+	glog.Infof("pod(%s) added to vRouter(%s)", pod.Name, pod.Status.HostIP)
 	return true
 }
 
@@ -92,7 +93,7 @@ func (vrMgr *VirtualRouterManager) removePodRefFromVirtualRouter(
 
 	if pod.Status.HostIP == "" {
 		glog.Warningf("HostIP is empty during pod(%s) delete", pod.Name)
-		return true
+		return false;
 	}
 
 	// Given HostIP, find virtual-router.

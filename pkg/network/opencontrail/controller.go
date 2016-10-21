@@ -352,7 +352,6 @@ func (c *Controller) updatePod(pod *api.Pod) {
 	}
 	result := c.virtualRouterMgr.addPodRefToVirtualRouter(pod, instance)
 	if result {
-		glog.Infof("pod(%s) added to vRouter(%s)", pod.Name, pod.Status.HostIP)
 		return
 	}
 }
