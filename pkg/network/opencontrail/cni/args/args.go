@@ -18,12 +18,11 @@ limitations under the License.
 package args
 
 import (
-	"../ipc"
+	"../agent"
 	"encoding/json"
 	"fmt"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
-	"log"
 	"net"
 	"strings"
 )
@@ -39,6 +38,8 @@ const pollTimeout = "100ms"
 const pollRetries = 10
 const vrouterIp = "127.0.0.1"
 const vrouterPort = 9091
+const logDir = "/var/log/contrail/cni"
+const logLevel = "0"
 
 /* Example configuration for Contrail
     {
@@ -52,13 +53,23 @@ const vrouterPort = 9091
             },
             "mode" : "k8s"
             "mtu" : 1500
-			"dir" : "/var/contrail/vm"
+			"dir" : "/var/contrail/vm",
+			"log" : {
+				"dir" : "/var/log/contrail/cni",
+				"level" : "2"
+			},
         },
 
         "name": "contrail",
         "type": "contrail"
     }
 */
+
+// Logging arguments
+type LoggingArgs struct {
+	Dir   string `json:"dir"`
+	Level string `json:"level"`
+}
 
 // Definitions to get VRouter related parameters from json data
 type VRouterArgs struct {
@@ -74,6 +85,7 @@ type ContrailArgs struct {
 	Mode        string      `json:"mode"`
 	Mtu         int         `json:"mtu"`
 	Dir         string      `json:"dir"`
+	Logging     LoggingArgs `json:"log"`
 }
 
 // Kubernetes specific arguments
@@ -117,28 +129,32 @@ func Get(args *skel.CmdArgs) (*CniArgs, error) {
 	// Set defaults
 	vrouterArgs := VRouterArgs{Ip: vrouterIp, Port: vrouterPort,
 		PollTimeout: pollTimeout, PollRetries: pollRetries}
-	contrailArgs := ContrailArgs{VRouterArgs: vrouterArgs, Dir: k8sDir}
+	logArgs := LoggingArgs{Dir: logDir, Level: logLevel}
+	contrailArgs := ContrailArgs{VRouterArgs: vrouterArgs, Dir: k8sDir,
+		Logging: logArgs}
 	cniArgs := &CniArgs{ContrailArgs: contrailArgs}
 
 	// Parse json data
 	if err := json.Unmarshal(args.StdinData, cniArgs); err != nil {
-		log.Printf("Invalid JSon string <%s>\n", args.StdinData)
-		return nil, fmt.Errorf("failed to load netconf: %v", err)
+		msg := fmt.Sprintf("Invalid JSon string. Error %v : Message %s\n",
+			err, args.StdinData)
+		return nil, fmt.Errorf(msg)
 	}
 
 	cniArgs.ContainerID = args.ContainerID
 	cniArgs.Netns = args.Netns
 	cniArgs.IfName = args.IfName
-	// Get Kubernetes parameters
+	// Kubernetes specific parameters are passed in environment variable.
+	// Get Kubernetes specific parameters from environment variable
 	cniArgs.K8SArgs.getK8sArgs(args)
 	return cniArgs, nil
 }
 
 // Convert cniArgs from VRouter format to CNI format
-func VRouterResultToCniResult(ipc *ipc.Result) *types.Result {
-	mask := net.CIDRMask(ipc.Plen, 32)
-	ipv4 := types.IPConfig{IP: net.IPNet{IP: net.ParseIP(ipc.Ip),
-		Mask: mask}, Gateway: net.ParseIP(ipc.Gw)}
+func VRouterResultToCniResult(agent *agent.Result) *types.Result {
+	mask := net.CIDRMask(agent.Plen, 32)
+	ipv4 := types.IPConfig{IP: net.IPNet{IP: net.ParseIP(agent.Ip),
+		Mask: mask}, Gateway: net.ParseIP(agent.Gw)}
 	result := &types.Result{IP4: &ipv4}
 
 	_, defaultNet, err := net.ParseCIDR("0.0.0.0/0")
@@ -148,6 +164,6 @@ func VRouterResultToCniResult(ipc *ipc.Result) *types.Result {
 	result.IP4.Routes = append(result.IP4.Routes,
 		types.Route{Dst: *defaultNet, GW: result.IP4.Gateway})
 
-	result.DNS.Nameservers = append(result.DNS.Nameservers, ipc.Dns)
+	result.DNS.Nameservers = append(result.DNS.Nameservers, agent.Dns)
 	return result
 }

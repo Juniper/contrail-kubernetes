@@ -6,18 +6,19 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 )
 
 type vmResp struct {
 	Vm   string `json:"vm"`
-	Ip   string `json:"ip"`
+	Ip   string `json:"ip-address"`
 	Plen int    `json:"plen"`
-	Gw   string `json:"gw"`
-	Dns  string `json:"dns"`
+	Gw   string `json:"gateway"`
+	Dns  string `json:"dns-server"`
+	Mac  string `json:"mac-address"`
 }
 
 type statusResp struct {
@@ -27,37 +28,37 @@ type statusResp struct {
 var addr int = 3
 
 func vmServer(w http.ResponseWriter, req *http.Request) {
-	if req.Method == "GET" {
-		log.Println("GET request")
+	switch req.Method {
+	case "GET":
+		fmt.Println("GET request")
 		ip := "1.1.1." + strconv.Itoa(addr)
 		addr += 1
 		resp := vmResp{Vm: "VM", Ip: ip, Plen: 24, Gw: "1.1.1.1",
-			Dns: "1.1.1.2"}
+			Dns: "1.1.1.2", Mac: "00:00:00:00:00:01"}
 		msg, _ := json.Marshal(resp)
 		io.WriteString(w, string(msg))
 		return
-	}
 
-	if req.Method == "POST" {
-		log.Println("POST request")
+	case "POST":
+		fmt.Println("POST request")
 		resp := statusResp{Status: "OK"}
 		msg, _ := json.Marshal(resp)
 		io.WriteString(w, string(msg))
 		return
-	}
 
-	if req.Method == "DELETE" {
-		log.Println("DELETE request")
+	case "DELETE":
+		fmt.Println("DELETE request")
 		resp := statusResp{Status: "OK"}
 		msg, _ := json.Marshal(resp)
 		io.WriteString(w, string(msg))
 		return
+	default:
+		fmt.Println("Unkown command")
 	}
-
-	io.WriteString(w, "Hello World\n")
 }
 
 func main() {
-	http.HandleFunc("/vm/", vmServer)
-	http.ListenAndServe(":9090", nil)
+	http.HandleFunc("/port/", vmServer)
+	http.HandleFunc("/port", vmServer)
+	http.ListenAndServe(":9060", nil)
 }

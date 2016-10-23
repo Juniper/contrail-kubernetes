@@ -10,7 +10,7 @@ import (
  * Main
  ****************************************************************************/
 func main() {
-	// Let the CNI skeletal code handle basic demux based on env variables
+	// Let CNI skeletal code handle demux based on env variables
 	skel.PluginMain(cni.CmdAdd, cni.CmdDel,
 		version.PluginSupports(cni.CniVersion))
 }
