@@ -131,8 +131,9 @@ func CmdAdd(skelArgs *skel.CmdArgs) error {
 	}
 	defer netns.Close()
 
-	connection, err := ipc.Init(cniArgs.ContainerID, cniArgs.ContrailArgs.Dir,
-		cniArgs.ContrailArgs.VRouterArgs.Ip, cniArgs.ContrailArgs.VRouterArgs.Port)
+	connection, err := ipc.Init(cniArgs.K8SArgs.PodName,
+		cniArgs.ContrailArgs.Dir, cniArgs.ContrailArgs.VRouterArgs.Ip,
+		cniArgs.ContrailArgs.VRouterArgs.Port)
 	if err != nil {
 		return err
 	}
@@ -151,6 +152,13 @@ func CmdAdd(skelArgs *skel.CmdArgs) error {
 	// The container-part is added to the nets provided to CNI
 	hostIfName, err := processContainerAdd(netns, cniArgs, ipcResult.Mac,
 		typesResult)
+	if err != nil {
+		return err
+	}
+
+	connection, err = ipc.Init("",
+		cniArgs.ContrailArgs.Dir, cniArgs.ContrailArgs.VRouterArgs.Ip,
+		cniArgs.ContrailArgs.VRouterArgs.Port)
 	if err != nil {
 		return err
 	}
@@ -198,7 +206,7 @@ func processContainerDel(netns ns.NetNS, cniArgs *args.CniArgs) error {
 // VRouter DEL handler
 func processVRouterDel(ipc *ipc.Connection, cniArgs *args.CniArgs) error {
 	// Let VRouter handle DEL command
-	return ipc.DelVm(cniArgs.ContainerID)
+	return ipc.DelVm(cniArgs.K8SArgs.PodName)
 }
 
 // DEL command handler
@@ -227,8 +235,8 @@ func CmdDel(skelArgs *skel.CmdArgs) error {
 	}
 	defer netns.Close()
 
-	connection, err := ipc.Init(cniArgs.ContainerID, cniArgs.ContrailArgs.Dir,
-		cniArgs.ContrailArgs.VRouterArgs.Ip,
+	connection, err := ipc.Init(cniArgs.K8SArgs.PodName,
+		cniArgs.ContrailArgs.Dir, cniArgs.ContrailArgs.VRouterArgs.Ip,
 		cniArgs.ContrailArgs.VRouterArgs.Port)
 	if err != nil {
 		// Error in opening namespace. Treat as fatal error

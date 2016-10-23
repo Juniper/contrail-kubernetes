@@ -29,7 +29,7 @@ import (
 )
 
 func makeFileName(dir, vm string) string {
-	return dir + "/" + vm
+	return dir + "/label-" + vm
 }
 
 /****************************************************************************
@@ -66,21 +66,21 @@ func (conn *Connection) doOp(op string, msg []byte) (*http.Response, error) {
 // RPC Message definition
 type contrailAddRpc struct {
 	Time            string `json:"time"`
-	Vm              string `json:"vm"`
-	Mac             string `json:"mac"`
-	HostIfName      string `json:"hostIfName"`
-	ContainerIfName string `json:"containerIfName"`
-	PodName         string `json:"podName"`
-	Namespace       string `json:"nameSpace"`
+	Vm              string `json:"vm-label"`
+	VmId            string `json:"vm-id"`
+	Nw              string `json:"network-label"`
+	HostIfName      string `json:"ifname"`
+	ContainerIfName string `json:"vm-ifname"`
+	Namespace       string `json:"namespace"`
 }
 
 // Make JSON for RPC
 func makeAddRpc(podName, nameSpace, containerId, hostIfName,
 	containerIfName string) *contrailAddRpc {
 	t := time.Now()
-	rpc := contrailAddRpc{Time: t.String(), Vm: containerId,
+	rpc := contrailAddRpc{Time: t.String(), Vm: podName, VmId: containerId,
 		HostIfName: hostIfName, ContainerIfName: containerIfName,
-		PodName: podName, Namespace: nameSpace}
+		Namespace: nameSpace}
 	return &rpc
 }
 
@@ -157,18 +157,19 @@ func (conn *Connection) AddVm(podName, nameSpace, containerId, hostIfName,
  ****************************************************************************/
 // RPC Message definition
 type contrailDelRpc struct {
-	vm string `json:"vm"`
+	Vm string `json:"vm-label"`
+	Nw string `json:"network-label"`
 }
 
 // Make RPC call
-func makeDelRpc(containerId string) *contrailDelRpc {
-	rpc := contrailDelRpc{vm: containerId}
+func makeDelRpc(podName string) *contrailDelRpc {
+	rpc := contrailDelRpc{Vm: podName}
 	return &rpc
 }
 
 // Del VM config file
 func (conn *Connection) delVmToFile(rpc *contrailDelRpc) error {
-	fname := makeFileName(conn.dir, rpc.vm)
+	fname := makeFileName(conn.dir, rpc.Vm)
 	_, err := os.Stat(fname)
 	// File not present... noting to do
 	if err != nil {
@@ -208,9 +209,9 @@ func (conn *Connection) delVmToRpc(rpc *contrailDelRpc) error {
 	return nil
 }
 
-func (conn *Connection) DelVm(containerId string) error {
+func (conn *Connection) DelVm(podName string) error {
 	// Make RPC structure
-	rpc := makeDelRpc(containerId)
+	rpc := makeDelRpc(podName)
 
 	// Remove the configuraion file stored for persistency
 	if err := conn.delVmToFile(rpc); err != nil {
@@ -230,11 +231,11 @@ func (conn *Connection) DelVm(containerId string) error {
  ****************************************************************************/
 type Result struct {
 	Vm   string `json:"vm"`
-	Ip   string `json:"ip"`
+	Ip   string `json:"ip-address"`
 	Plen int    `json:"plen"`
-	Gw   string `json:"gw"`
-	Dns  string `json:"dns"`
-	Mac  string `json:"mac"`
+	Gw   string `json:"gateway"`
+	Dns  string `json:"dns-server"`
+	Mac  string `json:"mac-address"`
 }
 
 type contrailVmRpcReq struct {
@@ -315,7 +316,11 @@ func Init(vm, dir, server string, port int) (*Connection, error) {
 	}
 
 	// Init connection structure
-	url := "http://" + server + ":" + strconv.Itoa(port) + "/container/" + vm
+	url := "http://" + server + ":" + strconv.Itoa(port) + "/port"
+	if vm != "" {
+		url = url + "/" + vm
+	}
+
 	conn := Connection{url: url, dir: dir, client: nil}
 	return &conn, nil
 }
