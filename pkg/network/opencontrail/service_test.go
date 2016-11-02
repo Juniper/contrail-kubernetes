@@ -61,7 +61,7 @@ func TestServiceDeleteConnections(t *testing.T) {
 			t.Error(err)
 			continue
 		}
-		err = serviceMgr.Connect(namespace, svcName, network)
+		err = serviceMgr.Connect(network, namespace, svcName)
 		if err != nil {
 			t.Error(err)
 		}

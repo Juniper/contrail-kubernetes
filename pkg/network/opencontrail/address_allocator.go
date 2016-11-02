@@ -39,7 +39,7 @@ type AddressAllocatorImpl struct {
 }
 
 const (
-	AddressAllocationNetwork = "default-domain:default-project:addr-alloc"
+	AddressAllocationNetwork = "default-domain:default:addr-alloc"
 )
 
 func NewAddressAllocator(client contrail.ApiClient, config *Config) AddressAllocator {

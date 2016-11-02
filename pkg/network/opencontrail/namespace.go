@@ -21,6 +21,8 @@ import (
 
 	"github.com/golang/glog"
 
+	kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
+
 	"github.com/Juniper/contrail-go-api"
 	"github.com/Juniper/contrail-go-api/types"
 )
@@ -28,12 +30,26 @@ import (
 type NamespaceManager struct {
 	client contrail.ApiClient
 	config *Config
+	kube kubeclient.Interface
 }
 
-func NewNamespaceManager(client contrail.ApiClient, config *Config) *NamespaceManager {
+func NewNamespaceManager(client contrail.ApiClient, config *Config, kube kubeclient.Interface) *NamespaceManager {
 	manager := new(NamespaceManager)
 	manager.client = client
 	manager.config = config
+	manager.kube = kube
+
+	// create default namespace
+	namespace, err := kube.Namespaces().Get(DefaultServiceProjectName)
+	if err != nil {
+		glog.Errorf("Get namespace %s: %v", DefaultServiceProjectName, err)
+		return manager
+	}
+	project := manager.LocateNamespace(namespace.Name, string(namespace.ObjectMeta.UID))
+
+	if project == nil {
+		glog.Fatalf("Cannot create project %, is Contrail running?", DefaultServiceProjectName)
+	}
 	return manager
 }
 

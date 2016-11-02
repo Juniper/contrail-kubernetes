@@ -37,8 +37,8 @@ import (
 
 // The OpenContrail controller maps kubernetes objects into networking
 // properties such that:
-// - Each Pod/Replication controller is assigned a unique network
-// - Labels are used to connectsvirtual networks
+// - Each Pod/Replication controller is assigned to a network, depending on the isolation mode
+// - Labels are used to connect virtual networks
 // - Services allocate floating-ip addresses.
 
 type Controller struct {
@@ -51,6 +51,7 @@ type Controller struct {
 
 	podStore     cache.Indexer
 	serviceStore cache.Store
+	namespaceStore cache.Store
 
 	instanceMgr  *InstanceManager
 	networkMgr   NetworkManager
@@ -118,7 +119,7 @@ func (c *Controller) Run(shutdown chan struct{}) {
 			case evSync:
 			}
 		case <-timerChan:
-			c.consistencyWorker.Check()
+//			c.consistencyWorker.Check()
 		case <-shutdown:
 			return
 		}
@@ -177,29 +178,14 @@ func getPodNetworkName(pod *api.Pod, config *Config) string {
 	return name
 }
 
-func getPodProjectName(pod *api.Pod) string {
-	// here we will return a different project depending on the isolation mode
-	return DefaultPodProjectName
-}
-
 // Retrieve the private network for this Pod.
-func (c *Controller) getPodNetwork(pod *api.Pod) *types.VirtualNetwork {
-	var project = getPodProjectName(pod)
-	name := getPodNetworkName(pod, c.config)
-	network, err := c.networkMgr.LocateNetwork(project, name, c.config.PrivateSubnet)
+func (c *Controller) GetPodNetwork(pod *api.Pod) *types.VirtualNetwork {
+	// network will depend on the isolation mode
+	network, err := c.networkMgr.LookupNetwork(DefaultServiceProjectName, DefaultPodNetworkName)
 	if err != nil {
-		return nil
+		glog.Errorf("Cannot get pod-network")
 	}
 	return network
-}
-
-func ServiceName(config *Config, labels map[string]string) string {
-	name, ok := labels[config.NetworkTag]
-	if !ok {
-		return DefaultServiceNetworkName
-	}
-
-	return name
 }
 
 // Include the namespace in the resource name so one can deploy the same service in different namespaces.
@@ -225,10 +211,9 @@ func (c *Controller) updatePodServiceIp(service *api.Service, pod *api.Pod) {
 		return
 	}
 
-	serviceName := ServiceName(c.config, service.Labels)
-	serviceNetwork, err := c.serviceMgr.LocateServiceNetwork(service.Namespace, serviceName)
-	if err != nil {
-		glog.Error(err)
+	serviceNetwork := c.serviceMgr.GetServiceNetwork(service)
+	if serviceNetwork == nil {
+		glog.Errorf("Service network not found")
 		return
 	}
 	serviceIp, err := c.networkMgr.LocateFloatingIp(serviceNetwork, service.Name, service.Spec.ClusterIP)
@@ -236,8 +221,7 @@ func (c *Controller) updatePodServiceIp(service *api.Service, pod *api.Pod) {
 		glog.Error(err)
 		return
 	}
-	var project = getPodProjectName(pod)
-	c.instanceMgr.AttachFloatingIp(pod.Name, project, serviceIp)
+	c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, serviceIp)
 }
 
 func (c *Controller) updatePodPublicIp(service *api.Service, pod *api.Pod) {
@@ -256,8 +240,7 @@ func (c *Controller) updatePodPublicIp(service *api.Service, pod *api.Pod) {
 		return
 	}
 
-	var project = getPodProjectName(pod)
-	c.instanceMgr.AttachFloatingIp(pod.Name, project, publicIp)
+	c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, publicIp)
 }
 
 func decodeAccessTag(tag string) []string {
@@ -303,33 +286,36 @@ func makeListOptSelector(labelMap map[string]string) api.ListOptions {
 func (c *Controller) updatePod(pod *api.Pod) {
 	glog.Infof("Update Pod %s", pod.Name)
 
-	var project = getPodProjectName(pod)
-	c.ensureNamespace(project)
-	instance := c.instanceMgr.LocateInstance(project, pod.Name, string(pod.ObjectMeta.UID))
+	c.ensureNamespace(pod.Namespace)
+	instance := c.instanceMgr.LocateInstance(pod.Namespace, pod.Name, string(pod.ObjectMeta.UID))
 
-	network := c.getPodNetwork(pod)
-	if network == nil {
+	podNetwork := c.GetPodNetwork(pod)
+	if podNetwork == nil {
+		glog.Errorf("Pod network not found")
 		return
 	}
-	c.globalNetworkConnectionUpdate(network)
-	nic := c.instanceMgr.LocateInterface(network, instance)
+
+	c.globalNetworkConnectionUpdate(podNetwork)
+	nic := c.instanceMgr.LocateInterface(pod.Namespace, podNetwork, instance)
 	if nic == nil {
 		return
 	}
-	address := c.instanceMgr.LocateInstanceIp(network, string(pod.ObjectMeta.UID), nic)
+	address := c.instanceMgr.LocateInstanceIp(podNetwork, string(pod.ObjectMeta.UID), nic)
 	if address == nil {
 		return
 	}
-	gateway, err := c.networkMgr.GetGatewayAddress(network)
+	gateway, err := c.networkMgr.GetGatewayAddress(podNetwork)
 	if err != nil {
 		return
 	}
 	c.updateInstanceMetadata(pod, nic, address.GetInstanceIpAddress(), gateway)
 
+	c.serviceMgr.ConnectNetworks(podNetwork, c.networkMgr.GetClusterNetwork())
+
 	serviceList := MakeServiceIdList()
 	buildPodServiceList(pod, c.config, &serviceList)
 	for _, srv := range serviceList {
-		c.serviceMgr.Connect(srv.Namespace, srv.Service, network)
+		c.serviceMgr.Connect(podNetwork, srv.Namespace, srv.Service)
 	}
 
 	for _, item := range c.serviceStore.List() {
@@ -357,20 +343,25 @@ func (c *Controller) deletePod(pod *api.Pod) {
 	c.instanceMgr.ReleaseInterface(pod.Namespace, pod.Name)
 	c.instanceMgr.DeleteInstance(string(pod.ObjectMeta.UID))
 
-	networkName := getPodNetworkName(pod, c.config)
-	deleted, err := c.networkMgr.ReleaseNetworkIfEmpty(pod.Namespace, networkName)
+	podNetwork := c.GetPodNetwork(pod)
+	if podNetwork == nil {
+		glog.Errorf("Pod network not found")
+		return
+	}
+
+	deleted, err := c.networkMgr.ReleaseNetworkIfEmpty(podNetwork)
 	if err != nil {
-		glog.Infof("Release network %s: %v", networkName, err)
+		glog.Errorf("Release network %s: %v", podNetwork.GetName(), err)
 	}
 
 	if deleted {
 		serviceList := MakeServiceIdList()
 		buildPodServiceList(pod, c.config, &serviceList)
 		for _, srv := range serviceList {
-			c.serviceMgr.Disconnect(srv.Namespace, srv.Service, networkName)
+			c.serviceMgr.Disconnect(podNetwork, srv.Namespace, srv.Service)
 		}
 
-		networkFQN := []string{c.config.DefaultDomain, pod.Namespace, networkName}
+		networkFQN := []string{c.config.DefaultDomain, pod.Namespace, podNetwork.GetName()}
 		if networkAccessGlobalNetworks(c.config, networkFQN) {
 			for _, gbl := range c.config.GlobalNetworks {
 				err = c.networkMgr.Disconnect(networkFQN, gbl)
@@ -430,9 +421,10 @@ func (c *Controller) globalNetworkConnectionUpdate(network *types.VirtualNetwork
 // to the backends.
 func (c *Controller) addService(service *api.Service) {
 	glog.Infof("Add Service %s", service.Name)
+
 	c.ensureNamespace(service.Namespace)
-	serviceName := ServiceName(c.config, service.Labels)
-	err := c.serviceMgr.Create(service.Namespace, serviceName)
+
+	err := c.serviceMgr.Create(service)
 	if err != nil {
 		return
 	}
@@ -448,20 +440,20 @@ func (c *Controller) addService(service *api.Service) {
 		return
 	}
 
+	serviceNetwork := c.serviceMgr.GetServiceNetwork(service)
+	if serviceNetwork == nil {
+		glog.Errorf("Service network not found")
+		return
+	}
 	var serviceIp *types.FloatingIp
 	// Allocate this IP address on the service network.
 	if service.Spec.ClusterIP != "" {
-		serviceNetwork, err := c.serviceMgr.LocateServiceNetwork(service.Namespace, serviceName)
-		if err == nil {
-			serviceIp, err = c.networkMgr.LocateFloatingIp(
-				serviceNetwork, service.Name, service.Spec.ClusterIP)
-			if err != nil {
-				glog.Error(err)
-			} else {
-				glog.V(3).Infof("Created floating-ip %s for %s/%s", service.Spec.ClusterIP, service.Namespace, service.Name)
-			}
-		} else {
+		serviceIp, err = c.networkMgr.LocateFloatingIp(
+			serviceNetwork, service.Name, service.Spec.ClusterIP)
+		if err != nil {
 			glog.Error(err)
+		} else {
+			glog.V(3).Infof("Created floating-ip %s for %s/%s", service.Spec.ClusterIP, service.Namespace, service.Name)
 		}
 	}
 
@@ -472,13 +464,12 @@ func (c *Controller) addService(service *api.Service) {
 	}
 
 	for _, pod := range pods.Items {
-		var project = getPodProjectName(&pod)
 		if serviceIp != nil {
 			// Connect serviceIp to VMI.
-			c.instanceMgr.AttachFloatingIp(pod.Name, project, serviceIp)
+			c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, serviceIp)
 		}
 		if publicIp != nil {
-			c.instanceMgr.AttachFloatingIp(pod.Name, project, publicIp)
+			c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, publicIp)
 		}
 	}
 }
@@ -517,8 +508,10 @@ func (c *Controller) purgeStaleServiceRefs(fip *types.FloatingIp, refs contrail.
 
 func (c *Controller) updateService(service *api.Service) {
 	glog.Infof("Update Service %s", service.Name)
-	serviceName := ServiceName(c.config, service.Labels)
-	err := c.serviceMgr.Create(service.Namespace, serviceName)
+
+	c.ensureNamespace(service.Namespace)
+
+	err := c.serviceMgr.Create(service)
 	if err != nil {
 		return
 	}
@@ -530,17 +523,17 @@ func (c *Controller) updateService(service *api.Service) {
 	}
 
 	var serviceIp *types.FloatingIp = nil
+	serviceNetwork := c.serviceMgr.GetServiceNetwork(service)
+	if serviceNetwork == nil {
+		glog.Errorf("Service network not found")
+		return
+	}
 	if service.Spec.ClusterIP != "" {
-		serviceNetwork, err := c.serviceMgr.LocateServiceNetwork(service.Namespace, serviceName)
-		if err == nil {
-			serviceIp, err = c.networkMgr.LocateFloatingIp(
-				serviceNetwork, service.Name, service.Spec.ClusterIP)
-		}
+		serviceIp, err = c.networkMgr.LocateFloatingIp(
+			serviceNetwork, service.Name, service.Spec.ClusterIP)
+
 	} else {
-		serviceNetwork, err := c.serviceMgr.LookupServiceNetwork(service.Namespace, serviceName)
-		if err == nil {
-			c.networkMgr.DeleteFloatingIp(serviceNetwork, service.Name)
-		}
+		c.networkMgr.DeleteFloatingIp(serviceNetwork, service.Name)
 	}
 
 	publicIp, err := c.updateServicePublicIP(service)
@@ -552,13 +545,12 @@ func (c *Controller) updateService(service *api.Service) {
 	podIdMap := make(map[string]*api.Pod)
 	for _, pod := range pods.Items {
 		podIdMap[string(pod.UID)] = &pod
-		var project = getPodProjectName(&pod)
 		if serviceIp != nil {
 			// Connect serviceIp to VMI.
-			c.instanceMgr.AttachFloatingIp(pod.Name, project, serviceIp)
+			c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, serviceIp)
 		}
 		if publicIp != nil {
-			c.instanceMgr.AttachFloatingIp(pod.Name, project, publicIp)
+			c.instanceMgr.AttachFloatingIp(pod.Name, pod.Namespace, publicIp)
 		}
 	}
 
@@ -580,28 +572,21 @@ func (c *Controller) updateService(service *api.Service) {
 
 func (c *Controller) deleteService(service *api.Service) {
 	glog.Infof("Delete Service %s", service.Name)
-	serviceName := ServiceName(c.config, service.Labels)
-	serviceNetwork, err := c.serviceMgr.LookupServiceNetwork(service.Namespace, serviceName)
-	if err == nil {
-		c.networkMgr.DeleteFloatingIp(serviceNetwork, service.Name)
+
+	serviceNetwork := c.serviceMgr.GetServiceNetwork(service)
+	if serviceNetwork == nil {
+		glog.Errorf("Service network not found")
+		return
 	}
+
+	c.networkMgr.DeleteFloatingIp(serviceNetwork, service.Name)
+
 	if service.Spec.ExternalIPs != nil || service.Spec.Type == api.ServiceTypeLoadBalancer {
 		resourceName := publicIpResourceName(service)
 		c.networkMgr.DeleteFloatingIp(c.networkMgr.GetPublicNetwork(), resourceName)
 	}
 
-	empty, remaining := c.serviceMgr.IsEmpty(service.Namespace, serviceName)
-	if empty {
-		c.serviceMgr.Delete(service.Namespace, serviceName)
-	} else {
-		for _, name := range remaining {
-			key := fmt.Sprintf("%s/%s", service.Namespace, name)
-			_, exists, _ := c.serviceStore.GetByKey(key)
-			if !exists {
-				glog.Warningf("Service network %s has floating-ip addresses for service %s (NOT in cache)", serviceName, name)
-			}
-		}
-	}
+	c.serviceMgr.Delete(service)
 }
 
 func (c *Controller) addNamespace(namespace *api.Namespace) {

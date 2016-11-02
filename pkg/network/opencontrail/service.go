@@ -22,18 +22,21 @@ import (
 
 	"github.com/golang/glog"
 
+	kubeclient "k8s.io/kubernetes/pkg/client/unversioned"
+	"k8s.io/kubernetes/pkg/api"
+
 	"github.com/Juniper/contrail-go-api"
 	"github.com/Juniper/contrail-go-api/types"
 )
 
 type ServiceManager interface {
-	Create(tenant, serviceName string) error
-	Delete(tenant, serviceName string) error
-	Connect(tenant, serviceName string, network *types.VirtualNetwork) error
-	Disconnect(tenant, serviceName, netname string) error
-	LocateServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error)
-	LookupServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error)
-	IsEmpty(tenant, serviceName string) (bool, []string)
+	Create(service *api.Service) error
+	Delete(service *api.Service) error
+	GetServiceNetwork(service *api.Service) (*types.VirtualNetwork)
+	GetServiceName(service *api.Service) string
+    ConnectNetworks(podNetwork, serviceNetwork *types.VirtualNetwork) error
+	Connect(network *types.VirtualNetwork, tenant, serviceName string) error
+	Disconnect(podNetwork *types.VirtualNetwork, project, serviceName string) error
 	DeleteConnections(*types.VirtualNetwork, []string) error
 }
 
@@ -41,52 +44,43 @@ type ServiceManagerImpl struct {
 	client     contrail.ApiClient
 	config     *Config
 	networkMgr NetworkManager
+	kube kubeclient.Interface
 }
 
 const (
 	ServiceNetworkFmt = "service-%s"
 )
 
-func getServiceProjectName() string {
-	// here we will return a different namespace depending on the isolation mode
-	return DefaultServiceProjectName
-}
+func NewServiceManager(client contrail.ApiClient, config *Config, networkMgr NetworkManager,
+		kube kubeclient.Interface) ServiceManager {
 
-func getServiceNetworkName() string {
-	// here we will return a different namespace depending on the isolation mode
-	return DefaultServiceNetworkName
-}
-
-func NewServiceManager(client contrail.ApiClient, config *Config, networkMgr NetworkManager) ServiceManager {
 	serviceMgr := new(ServiceManagerImpl)
 	serviceMgr.client = client
 	serviceMgr.config = config
 	serviceMgr.networkMgr = networkMgr
+	serviceMgr.kube = kube
 	return serviceMgr
 }
 
-func (m *ServiceManagerImpl) LocateServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error) {
-	var project = getServiceProjectName()
-	var networkName = getServiceNetworkName()
-	network, err := m.networkMgr.LocateNetwork(project, networkName, m.config.ServiceSubnet)
-	if err != nil {
-		return nil, err
+func (m *ServiceManagerImpl) GetServiceName(service *api.Service) string {
+	name, ok := service.Labels[m.config.NetworkTag]
+	if !ok {
+		return DefaultServiceNetworkName
 	}
-	m.networkMgr.LocateFloatingIpPool(network)
-	return network, nil
+
+	return name
 }
 
-func (m *ServiceManagerImpl) LookupServiceNetwork(tenant, serviceName string) (*types.VirtualNetwork, error) {
-	var project = getServiceProjectName()
-	var networkName = getServiceNetworkName()
-	return m.networkMgr.LookupNetwork(project, networkName)
+func (m *ServiceManagerImpl) GetServiceNetwork(service *api.Service) (*types.VirtualNetwork) {
+	// returned network will depend on the namespace isolation mode
+	// for now only cluster-network is supported
+	return m.networkMgr.GetClusterNetwork()
 }
 
-func (m *ServiceManagerImpl) IsEmpty(tenant, serviceName string) (bool, []string) {
+func (m *ServiceManagerImpl) IsEmpty(service *api.Service) (bool, []string) {
 	empty := []string{}
-	var project = getServiceProjectName()
-	network, err := m.LookupServiceNetwork(project, serviceName)
-	if err != nil {
+	network :=  m.GetServiceNetwork(service)
+	if network == nil {
 		return true, empty
 	}
 	pool, err := m.networkMgr.LookupFloatingIpPool(network)
@@ -114,9 +108,9 @@ func (m *ServiceManagerImpl) IsEmpty(tenant, serviceName string) (bool, []string
 	return false, existing
 }
 
-func makeServicePolicyName(config *Config, tenant, serviceName string) []string {
-	var project = getServiceProjectName()
-	return []string{config.DefaultDomain, project, servicePolicyPrefix + serviceName}
+func makeServicePolicyName(config *Config, serviceNetwork *types.VirtualNetwork) []string {
+	project := serviceNetwork.GetFQName()[1]
+	return []string{config.DefaultDomain, project, servicePolicyPrefix + serviceNetwork.GetName()}
 }
 
 func serviceNameFromPolicyName(policyName string) (string, error) {
@@ -126,48 +120,36 @@ func serviceNameFromPolicyName(policyName string) (string, error) {
 	return "", fmt.Errorf("%s is not a service policy", policyName)
 }
 
-func (m *ServiceManagerImpl) locatePolicy(tenant, serviceName string) (*types.NetworkPolicy, error) {
-	var policy *types.NetworkPolicy = nil
-	var project = getServiceProjectName()
-	policyName := makeServicePolicyName(m.config, project, serviceName)
-	obj, err := m.client.FindByName("network-policy", strings.Join(policyName, ":"))
+func (m *ServiceManagerImpl) ConnectNetworks(podNetwork, serviceNetwork *types.VirtualNetwork) error {
+	policyName := makeServicePolicyName(m.config, serviceNetwork)
+	policy, err := locatePolicy(m.client, policyName)
 	if err != nil {
-		policy = new(types.NetworkPolicy)
-		policy.SetFQName("project", policyName)
-		err = m.client.Create(policy)
-		if err != nil {
-			glog.Errorf("Create policy %s: %v", strings.Join(policyName, ":"), err)
-			return nil, err
-		}
-	} else {
-		policy = obj.(*types.NetworkPolicy)
+		return err
 	}
-	return policy, nil
+	policyAttach(m.client, podNetwork, policy)
+
+	policyLocateRule(m.client, policy, podNetwork, serviceNetwork)
+
+	return nil
 }
 
 // Attach the network to the service policy.
 // The policy can be created either by the first referer or when the service is created.
-func (m *ServiceManagerImpl) Connect(tenant, serviceName string, network *types.VirtualNetwork) error {
-	var project = getServiceProjectName();
-	policy, err := m.locatePolicy(project, serviceName)
+func (m *ServiceManagerImpl) Connect(podNetwork *types.VirtualNetwork, project, serviceName string) error {
+
+	svc, err := m.kube.Services(project).Get(serviceName)
 	if err != nil {
+		glog.Warningf("Error retrievng service %s/%s: %s", project, serviceName, err)
 		return err
 	}
-	policyAttach(m.client, network, policy)
-	serviceNet, err := m.LookupServiceNetwork(project, serviceName)
-	if err == nil {
-		policyLocateRule(m.client, policy, network, serviceNet)
-	}
-	return nil
+	return m.ConnectNetworks(podNetwork, m.GetServiceNetwork(svc))
 }
 
-func (m *ServiceManagerImpl) Create(tenant, serviceName string) error {
-	var project = getServiceProjectName();
-	network, err := m.LocateServiceNetwork(project, serviceName)
-	if err != nil {
-		return err
-	}
-	policy, err := m.locatePolicy(project, serviceName)
+func (m *ServiceManagerImpl) Create(service *api.Service) error {
+	serviceNetwork := m.GetServiceNetwork(service)
+	policyName := makeServicePolicyName(m.config, serviceNetwork)
+	policy, err := locatePolicy(m.client, policyName)
+
 	if err != nil {
 		return nil
 	}
@@ -175,42 +157,53 @@ func (m *ServiceManagerImpl) Create(tenant, serviceName string) error {
 	refs, err := policy.GetVirtualNetworkBackRefs()
 	if err == nil {
 		for _, ref := range refs {
-			if ref.Uuid == network.GetUuid() {
+			if ref.Uuid == serviceNetwork.GetUuid() {
 				continue
 			}
 			lhs, err := types.VirtualNetworkByUuid(m.client, ref.Uuid)
 			if err != nil {
 				continue
 			}
-			policyLocateRule(m.client, policy, lhs, network)
+			policyLocateRule(m.client, policy, lhs, serviceNetwork)
 		}
 	}
-	policyAttach(m.client, network, policy)
+	policyAttach(m.client, serviceNetwork, policy)
 	return nil
 }
 
-func (m *ServiceManagerImpl) Delete(tenant, serviceName string) error {
-	var project = getServiceProjectName();
-	policyName := makeServicePolicyName(m.config, project, serviceName)
+func (m *ServiceManagerImpl) Delete(service *api.Service) error {
+	serviceName := m.GetServiceName(service)
 
-	// Delete network
-	var networkName = getServiceNetworkName();
-	network, err := m.networkMgr.LookupNetwork(project, networkName)
-	if network != nil {
-		policyDetach(m.client, network, strings.Join(policyName, ":"))
-		m.networkMgr.DeleteFloatingIpPool(network, true)
+	serviceNetwork := m.GetServiceNetwork(service)
 
-		// Do not delete cluster-service networks.
-		// Often the cluster-service network is statically configured on a
-		// software gateway. When that is the case, the delete is not processed
-		// by the control-node since the downstream compute-node is still subscribed
-		// to the corresponding routing-instance.
-		if !IsClusterService(m.config, project, serviceName) {
-			m.networkMgr.DeleteNetwork(network)
+	empty, remaining := m.IsEmpty(service)
+	if !empty {
+		for _, name := range remaining {
+			_, err := m.kube.Services(service.Namespace).Get(name)
+			if err != nil {
+				glog.Warningf("Service network %s has floating-ip addresses for service %s (NOT in cache)",
+					serviceName, name)
+			}
 		}
+		return nil
 	}
 
-	policy, err := m.releasePolicyIfEmpty(project, serviceName)
+	policyName := makeServicePolicyName(m.config, serviceNetwork)
+
+
+	policyDetach(m.client, serviceNetwork, strings.Join(policyName, ":"))
+	m.networkMgr.DeleteFloatingIpPool(serviceNetwork, true)
+
+	// Do not delete cluster-service networks.
+	// Often the cluster-service network is statically configured on a
+	// software gateway. When that is the case, the delete is not processed
+	// by the control-node since the downstream compute-node is still subscribed
+	// to the corresponding routing-instance.
+	if (serviceNetwork != m.networkMgr.GetClusterNetwork()) && (!IsClusterService(m.config, service.Namespace, serviceName)) {
+		m.networkMgr.DeleteNetwork(serviceNetwork)
+	}
+
+	policy, err := m.releasePolicyIfEmpty(serviceNetwork)
 	if policy != nil {
 		// flush all policy rules
 		policy.SetNetworkPolicyEntries(&types.PolicyEntriesType{})
@@ -219,9 +212,8 @@ func (m *ServiceManagerImpl) Delete(tenant, serviceName string) error {
 	return err
 }
 
-func (m *ServiceManagerImpl) releasePolicyIfEmpty(tenant, serviceName string) (*types.NetworkPolicy, error) {
-	var project = getServiceProjectName();
-	policyName := makeServicePolicyName(m.config, project, serviceName)
+func (m *ServiceManagerImpl) releasePolicyIfEmpty(network *types.VirtualNetwork) (*types.NetworkPolicy, error) {
+	policyName := makeServicePolicyName(m.config, network)
 	policy, err := types.NetworkPolicyByName(m.client, strings.Join(policyName, ":"))
 	if err != nil {
 		return nil, nil
@@ -234,17 +226,21 @@ func (m *ServiceManagerImpl) releasePolicyIfEmpty(tenant, serviceName string) (*
 			return nil, nil
 		}
 	} else if err != nil {
-		glog.Errorf("Release policy %s: %v", serviceName, err)
+		glog.Errorf("Release policy %s: %v", network, err)
 	}
 
 	return policy, err
 }
 
-func (m *ServiceManagerImpl) Disconnect(tenant, serviceName, netName string) error {
-	var project = getServiceProjectName();
-	policy, err := m.releasePolicyIfEmpty(project, serviceName)
+func (m *ServiceManagerImpl) Disconnect(podNetwork *types.VirtualNetwork, project, serviceName string) error {
+	svc, err := m.kube.Services(project).Get(serviceName)
+	if err != nil {
+		glog.Warningf("Error retrieving service %s/%s: %s", project, serviceName, err)
+		return err
+	}
+	policy, err := m.releasePolicyIfEmpty(m.GetServiceNetwork(svc))
 	if policy != nil {
-		netFQN := []string{m.config.DefaultDomain, project, netName}
+		netFQN := []string{m.config.DefaultDomain, project, podNetwork.GetName()}
 		serviceFQN := []string{m.config.DefaultDomain, project, fmt.Sprintf(ServiceNetworkFmt, serviceName)}
 		err = policyDeleteRule(m.client, policy, strings.Join(netFQN, ":"), strings.Join(serviceFQN, ":"))
 		return err
