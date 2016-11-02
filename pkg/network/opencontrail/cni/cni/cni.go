@@ -187,6 +187,13 @@ func CmdAdd(skelArgs *skel.CmdArgs) error {
 		return err
 	}
 
+	connection, err = ipc.Init("",
+		cniArgs.ContrailArgs.Dir, cniArgs.ContrailArgs.VRouterArgs.Ip,
+		cniArgs.ContrailArgs.VRouterArgs.Port)
+	if err != nil {
+		return err
+	}
+
 	// Send add message to vrouter
 	var warn error
 	err, warn = processVRouterAdd(connection, cniArgs, hostIfName)
