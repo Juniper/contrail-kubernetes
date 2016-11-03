@@ -118,8 +118,8 @@ func processContainerAdd(netns ns.NetNS, cniArgs *args.CniArgs, mac string,
 func processVRouterAdd(agent *agent.Connection, cniArgs *args.CniArgs,
 	hostIfName string) (error, error) {
 	// Send AddVm IPC to contrail-vrouter agent
-	return agent.AddVm(cniArgs.K8SArgs.PodName, cniArgs.Netns,
-		cniArgs.ContainerID, hostIfName, cniArgs.IfName)
+	return agent.AddVm(cniArgs.K8SArgs.PodUuid, cniArgs.K8SArgs.PodName,
+		cniArgs.Netns, cniArgs.ContainerID, hostIfName, cniArgs.IfName)
 }
 
 // Get VMI parameters from VRouter
@@ -155,7 +155,7 @@ func CmdAdd(skelArgs *skel.CmdArgs) error {
 	defer netns.Close()
 
 	// Initialize connection to VRouter
-	connection, err := agent.Init(cniArgs.K8SArgs.PodName,
+	connection, err := agent.Init(cniArgs.K8SArgs.PodUuid,
 		cniArgs.ContrailArgs.Dir, cniArgs.ContrailArgs.VRouterArgs.Ip,
 		cniArgs.ContrailArgs.VRouterArgs.Port)
 	if err != nil {
@@ -170,7 +170,7 @@ func CmdAdd(skelArgs *skel.CmdArgs) error {
 	result, err := getVmiFromVRouter(connection, cniArgs)
 	if err != nil {
 		glog.Error(fmt.Sprintf("Error querying vmi <%s> from VRouter : %s",
-			cniArgs.K8SArgs.PodName, err.Error()))
+			cniArgs.K8SArgs.PodUuid, err.Error()))
 		return err
 	}
 
@@ -183,14 +183,7 @@ func CmdAdd(skelArgs *skel.CmdArgs) error {
 		typesResult)
 	if err != nil {
 		glog.Error(fmt.Sprintf("Error modifying container <%s> : %s",
-			cniArgs.K8SArgs.PodName, err.Error()))
-		return err
-	}
-
-	connection, err = ipc.Init("",
-		cniArgs.ContrailArgs.Dir, cniArgs.ContrailArgs.VRouterArgs.Ip,
-		cniArgs.ContrailArgs.VRouterArgs.Port)
-	if err != nil {
+			cniArgs.K8SArgs.PodUuid, err.Error()))
 		return err
 	}
 
@@ -248,7 +241,7 @@ func processContainerDel(netns ns.NetNS, cniArgs *args.CniArgs) error {
 // VRouter DEL handler
 func processVRouterDel(agent *agent.Connection, cniArgs *args.CniArgs) error {
 	// Let VRouter handle DEL command
-	return agent.DelVm(cniArgs.K8SArgs.PodName)
+	return agent.DelVm(cniArgs.K8SArgs.PodUuid)
 }
 
 // DEL command handler
@@ -276,7 +269,7 @@ func CmdDel(skelArgs *skel.CmdArgs) error {
 		}
 	}
 
-	connection, err := agent.Init(cniArgs.K8SArgs.PodName,
+	connection, err := agent.Init(cniArgs.K8SArgs.PodUuid,
 		cniArgs.ContrailArgs.Dir, cniArgs.ContrailArgs.VRouterArgs.Ip,
 		cniArgs.ContrailArgs.VRouterArgs.Port)
 	if err != nil {

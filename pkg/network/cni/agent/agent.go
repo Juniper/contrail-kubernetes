@@ -33,21 +33,21 @@ import (
 type Connection struct {
 	server     string
 	port       int
-	vm         string
+	podUuid    string
 	dir        string // config files are stored here for persistency
 	httpClient *http.Client
 }
 
 // Make filename to store config
 func (conn *Connection) makeFileName() string {
-	return conn.dir + "/label-" + conn.vm
+	return conn.dir + "/label-" + conn.podUuid
 }
 
 // Make URL for operation
 func (conn *Connection) makeUrl(addVm bool) string {
 	url := "http://" + conn.server + ":" + strconv.Itoa(conn.port) + "/port"
 	if addVm {
-		url = url + "/" + conn.vm
+		url = url + "/" + conn.podUuid
 	}
 	return url
 }
@@ -77,6 +77,7 @@ func (conn *Connection) doOp(op string, addVm bool,
 type contrailAddMsg struct {
 	Time            string `json:"time"`
 	Vm              string `json:"vm-label"`
+	VmUuid          string `json:"vm-uuid"`
 	VmId            string `json:"vm-id"`
 	Nw              string `json:"network-label"`
 	HostIfName      string `json:"ifname"`
@@ -85,12 +86,12 @@ type contrailAddMsg struct {
 }
 
 // Make JSON for Add Message
-func makeAddMsg(podName, nameSpace, containerId, hostIfName,
+func makeAddMsg(podUuid, podName, nameSpace, containerId, hostIfName,
 	containerIfName string) *contrailAddMsg {
 	t := time.Now()
-	addMsg := contrailAddMsg{Time: t.String(), Vm: podName, VmId: containerId,
-		HostIfName: hostIfName, ContainerIfName: containerIfName,
-		Namespace: nameSpace}
+	addMsg := contrailAddMsg{Time: t.String(), Vm: podName, VmUuid: podUuid,
+		VmId: containerId, HostIfName: hostIfName, Nw: "",
+		ContainerIfName: containerIfName, Namespace: nameSpace}
 	return &addMsg
 }
 
@@ -98,7 +99,7 @@ func makeAddMsg(podName, nameSpace, containerId, hostIfName,
 func (conn *Connection) addVmToFile(addMsg *contrailAddMsg) error {
 	_, err := os.Stat(conn.dir)
 	if err != nil {
-		return fmt.Errorf("Error reading VM config directory %s. Error %s",
+		return fmt.Errorf("Error reading VM config file %s. Error %s",
 			conn.dir, err)
 	}
 
@@ -136,10 +137,10 @@ func (conn *Connection) addVmToAgent(addMsg *contrailAddMsg) error {
 }
 
 /* Process add of a VM. Writes config file and send message to agent */
-func (conn *Connection) AddVm(podName, nameSpace, containerId, hostIfName,
-	containerIfName string) (error, error) {
+func (conn *Connection) AddVm(podUuid, podName, nameSpace, containerId,
+	hostIfName, containerIfName string) (error, error) {
 	// Make Add Message structure
-	addMsg := makeAddMsg(podName, nameSpace, containerId, hostIfName,
+	addMsg := makeAddMsg(podUuid, podName, nameSpace, containerId, hostIfName,
 		containerIfName)
 
 	// Store config to file for persistency
@@ -165,13 +166,13 @@ func (conn *Connection) AddVm(podName, nameSpace, containerId, hostIfName,
  ****************************************************************************/
 // Del Message definition
 type contrailDelMsg struct {
-	Vm string `json:"vm-label"`
-	Nw string `json:"network-label"`
+	VmUuid string `json:"vm-uuid"`
+	Nw     string `json:"network-label"`
 }
 
 // Make Del Message call
-func makeDelMsg(podName string) *contrailDelMsg {
-	delMsg := contrailDelMsg{Vm: podName}
+func makeDelMsg(podUuid string) *contrailDelMsg {
+	delMsg := contrailDelMsg{VmUuid: podUuid}
 	return &delMsg
 }
 
@@ -215,9 +216,9 @@ func (conn *Connection) delVmToAgent(delMsg *contrailDelMsg) error {
 /* Process delete VM. The method ignores intermediate errors and does best
  * effort cleanup
  */
-func (conn *Connection) DelVm(podName string) error {
+func (conn *Connection) DelVm(podUuid string) error {
 	// Make del message structure
-	delMsg := makeDelMsg(podName)
+	delMsg := makeDelMsg(podUuid)
 
 	var ret error
 	// Remove the configuraion file stored for persistency
@@ -237,20 +238,21 @@ func (conn *Connection) DelVm(podName string) error {
  * POLL message handling
  ****************************************************************************/
 type Result struct {
-	Vm   string `json:"vm"`
-	Ip   string `json:"ip-address"`
-	Plen int    `json:"plen"`
-	Gw   string `json:"gateway"`
-	Dns  string `json:"dns-server"`
-	Mac  string `json:"mac-address"`
+	VmUuid string `json:"vm-uuid"`
+	Nw     string `json:"network-label"`
+	Ip     string `json:"ip-address"`
+	Plen   int    `json:"plen"`
+	Gw     string `json:"gateway"`
+	Dns    string `json:"dns-server"`
+	Mac    string `json:"mac-address"`
 }
 
 type contrailGetMsg struct {
-	vm string `json:"vm"`
+	VmUuid string `json:"vm-uuid"`
 }
 
-func initPollVmReq(instanceId string) *contrailGetMsg {
-	return &contrailGetMsg{vm: instanceId}
+func initPollVmReq(podUuid string) *contrailGetMsg {
+	return &contrailGetMsg{VmUuid: podUuid}
 }
 
 func (conn *Connection) pollVmOnce(instanceId string) (*Result, error) {
@@ -316,14 +318,14 @@ func (conn *Connection) Close() error {
 	return nil
 }
 
-func Init(vm, dir, server string, port int) (*Connection, error) {
+func Init(podUuid, dir, server string, port int) (*Connection, error) {
 	// Verify directory
 	if dir == "" {
 		return nil, fmt.Errorf("Agent Error : Directory name not specified")
 	}
 
 	httpClient := new(http.Client)
-	conn := Connection{server: server, port: port, vm: vm, dir: dir,
+	conn := Connection{server: server, port: port, podUuid: podUuid, dir: dir,
 		httpClient: httpClient}
 	return &conn, nil
 }

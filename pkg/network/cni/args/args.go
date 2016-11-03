@@ -19,11 +19,14 @@ package args
 
 import (
 	"../agent"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
+	"github.com/docker/docker/client"
 	"net"
+	"os"
 	"strings"
 )
 
@@ -90,8 +93,9 @@ type ContrailArgs struct {
 
 // Kubernetes specific arguments
 type K8SArgs struct {
-	NameSpace string
+	PodUuid   string
 	PodName   string
+	NameSpace string
 }
 
 // Definition of json data in STDIN
@@ -122,6 +126,33 @@ func (k8sArgs *K8SArgs) getK8sArgs(args *skel.CmdArgs) {
 			}
 		}
 	}
+}
+
+// Get Pod-UUID from docker client
+func (k8sArgs *K8SArgs) getPodUuid() error {
+	os.Setenv("DOCKER_API_VERSION", "1.22")
+	cli, err := client.NewEnvClient()
+	if err != nil {
+		return err
+	}
+
+	container, err := cli.ContainerInspect(context.Background(),
+		k8sArgs.PodName)
+	if err != nil {
+		return err
+	}
+
+	if container.Config == nil {
+		return fmt.Errorf("Could not find UUID for POD %s", k8sArgs.PodName)
+	}
+
+	var ok bool
+	k8sArgs.PodUuid, ok = container.Config.Labels["io.kubernetes.pod.uid"]
+	if ok == false {
+		return fmt.Errorf("Could not find UUID for POD %s", k8sArgs.PodName)
+	}
+
+	return nil
 }
 
 // Fetch all parameters. Includes parameters from STDIN and Environemnt vars
