@@ -35,7 +35,7 @@ const (
 	servicePolicyPrefix = "__svc_"
 	networkPolicyPrefix = "__net_"
 
-	DefaultPodNetworkName     = "pod-network"
+	DefaultPodNetworkName     = "cluster-network"
 	DefaultServiceDomainName = "default-domain"
 	DefaultServiceProjectName = "default"
 	DefaultServiceNetworkName = "cluster-network"

@@ -245,13 +245,58 @@ func (m *NetworkManagerImpl) initializePublicNetwork() {
 }
 
 func (m *NetworkManagerImpl) initializeClusterNetwork() {
-	var network, err = m.LocateNetwork(ClusterServiceNetworkName,
-		m.config.ServiceSubnet)
+	obj, err := m.client.FindByName("virtual-network", ClusterServiceNetworkName)
 	if err != nil {
-		glog.Errorf("Cannot initialize Cluster Network: %s", err)
-		return
+		fqn := strings.Split(ClusterServiceNetworkName, ":")
+		project := strings.Join(fqn[0:len(fqn) - 1], ":")
+		name := fqn[len(fqn) - 1]
+
+		proj, err := m.client.FindByName("project", project)
+		if err != nil {
+			glog.Infof("GET %s: %v", project, err)
+			return
+		}
+
+		var ipams[] *types.NetworkIpam = make([]*types.NetworkIpam, 2)
+
+		ipams[0] = new(types.NetworkIpam)
+		ipams[0].SetParent(proj.(*types.Project))
+		ipams[0].SetName(fmt.Sprintf("%s-svc-ipam", name))
+		err = m.client.Create(ipams[0])
+
+		if err != nil {
+			glog.Errorf("Create svc ipam for network %s:%s failed: %v", project, name, err)
+			return
+		}
+
+		ipams[1] = new(types.NetworkIpam)
+		ipams[1].SetParent(proj.(*types.Project))
+		ipams[1].SetName(fmt.Sprintf("%s-pod-ipam", name))
+		err = m.client.Create(ipams[1])
+
+		if err != nil {
+			glog.Errorf("Create pod ipam for network %s:%s failed: %v", project, name, err)
+			return
+		}
+
+		var subnets[] string = make([]string, 2)
+		subnets[0] = m.config.ServiceSubnet
+		subnets[1] = m.config.PrivateSubnet
+		uid, err := config.CreateNetworkWithIpam(m.client, proj.(*types.Project), name, subnets, ipams)
+		if err != nil {
+			glog.Infof("Create %s: %v", name, err)
+			return
+		}
+
+		obj, err = m.client.FindByUuid("virtual-network", uid)
+		if err != nil {
+			glog.Infof("GET %s: %v", name, err)
+			return
+		}
+		glog.Infof("Create network %s", ClusterServiceNetworkName)
 	}
-	m.clusterNetwork = network
+
+	m.clusterNetwork = obj.(*types.VirtualNetwork)
 	m.LocateFloatingIpPool(m.clusterNetwork)
 }
 
@@ -296,17 +341,22 @@ func (m *NetworkManagerImpl) LocateNetwork(fqname, subnet string) (*types.Virtua
 		return nil, err
 	}
 
-	var ipam = new(types.NetworkIpam)
-	ipam.SetParent(proj.(*types.Project))
-	ipam.SetName(fmt.Sprintf("%s-ipam", name))
-	err = m.client.Create(ipam)
+	var ipams[] *types.NetworkIpam = make([]*types.NetworkIpam, 1)
+
+	ipams[0] = new(types.NetworkIpam)
+	ipams[0].SetParent(proj.(*types.Project))
+	ipams[0].SetName(fmt.Sprintf("%s-ipam", name))
+	err = m.client.Create(ipams[0])
 
 	if err != nil {
 		glog.Errorf("Create ipam for network %s:%s failed: %v", project, name, err)
 		return nil, err
 	}
 
-	uid, err := config.CreateNetworkWithIpam(m.client, proj.(*types.Project), name, subnet, ipam)
+	var subnets[] string = make([]string, 1)
+	subnets[0] = subnet
+
+	uid, err := config.CreateNetworkWithIpam(m.client, proj.(*types.Project), name, subnets, ipams)
 	if err != nil {
 		glog.Infof("Create %s: %v", name, err)
 		return nil, err

@@ -183,7 +183,7 @@ func (c *Controller) GetPodNetwork(pod *api.Pod) *types.VirtualNetwork {
 	// network will depend on the isolation mode
 	network, err := c.networkMgr.LookupNetwork(DefaultServiceProjectName, DefaultPodNetworkName)
 	if err != nil {
-		glog.Errorf("Cannot get pod-network")
+		glog.Errorf("Cannot get cluster-network")
 	}
 	return network
 }
@@ -310,13 +310,14 @@ func (c *Controller) updatePod(pod *api.Pod) {
 	}
 	c.updateInstanceMetadata(pod, nic, address.GetInstanceIpAddress(), gateway)
 
+	/*
 	c.serviceMgr.ConnectNetworks(podNetwork, c.networkMgr.GetClusterNetwork())
 
 	serviceList := MakeServiceIdList()
 	buildPodServiceList(pod, c.config, &serviceList)
 	for _, srv := range serviceList {
 		c.serviceMgr.Connect(podNetwork, srv.Namespace, srv.Service)
-	}
+	}*/
 
 	for _, item := range c.serviceStore.List() {
 		service := item.(*api.Service)
