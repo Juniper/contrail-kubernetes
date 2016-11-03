@@ -38,9 +38,9 @@ const (
 	DefaultPodNetworkName     = "cluster-network"
 	DefaultServiceDomainName = "default-domain"
 	DefaultServiceProjectName = "default"
-	DefaultServiceNetworkName = "cluster-network"
+	ClusterNetworkName = "cluster-network"
 	ClusterServiceNetworkName = DefaultServiceDomainName + ":" + DefaultServiceProjectName +
-		":" + DefaultServiceNetworkName
+		":" + ClusterNetworkName
 )
 
 // InstanceMetadata contains the information required in the kubernetes minion to

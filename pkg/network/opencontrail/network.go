@@ -63,7 +63,7 @@ func NewNetworkManager(client contrail.ApiClient, config *Config) NetworkManager
 	}
 
 	manager.initializeClusterNetwork()
-	manager.initializePodNetwork()
+
 	return manager
 }
 
@@ -284,13 +284,13 @@ func (m *NetworkManagerImpl) initializeClusterNetwork() {
 		subnets[1] = m.config.PrivateSubnet
 		uid, err := config.CreateNetworkWithIpam(m.client, proj.(*types.Project), name, subnets, ipams)
 		if err != nil {
-			glog.Infof("Create %s: %v", name, err)
+			glog.Errorf("Create %s: %v", name, err)
 			return
 		}
 
 		obj, err = m.client.FindByUuid("virtual-network", uid)
 		if err != nil {
-			glog.Infof("GET %s: %v", name, err)
+			glog.Errorf("GET %s: %v", name, err)
 			return
 		}
 		glog.Infof("Create network %s", ClusterServiceNetworkName)
@@ -298,17 +298,6 @@ func (m *NetworkManagerImpl) initializeClusterNetwork() {
 
 	m.clusterNetwork = obj.(*types.VirtualNetwork)
 	m.LocateFloatingIpPool(m.clusterNetwork)
-}
-
-func (m *NetworkManagerImpl) initializePodNetwork() {
-	networkName := strings.Join([]string{DefaultServiceDomainName,
-		DefaultServiceProjectName, DefaultPodNetworkName}, ":")
-	var _, err = m.LocateNetwork(networkName,
-		m.config.PrivateSubnet)
-	if err != nil {
-		glog.Errorf("Cannot initialize Pod Network: %s", err)
-		return
-	}
 }
 
 func (m *NetworkManagerImpl) LookupNetwork(projectName, networkName string) (*types.VirtualNetwork, error) {

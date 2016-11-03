@@ -65,7 +65,7 @@ func NewServiceManager(client contrail.ApiClient, config *Config, networkMgr Net
 func (m *ServiceManagerImpl) GetServiceName(service *api.Service) string {
 	name, ok := service.Labels[m.config.NetworkTag]
 	if !ok {
-		return DefaultServiceNetworkName
+		return ClusterNetworkName
 	}
 
 	return name

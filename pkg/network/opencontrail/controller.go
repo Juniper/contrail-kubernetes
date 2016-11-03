@@ -173,7 +173,7 @@ func (c *Controller) updateInstanceMetadata(
 func getPodNetworkName(pod *api.Pod, config *Config) string {
 	name, ok := pod.Labels[config.NetworkTag]
 	if !ok {
-		name = DefaultPodNetworkName
+		name = ClusterNetworkName
 	}
 	return name
 }
@@ -181,7 +181,7 @@ func getPodNetworkName(pod *api.Pod, config *Config) string {
 // Retrieve the private network for this Pod.
 func (c *Controller) GetPodNetwork(pod *api.Pod) *types.VirtualNetwork {
 	// network will depend on the isolation mode
-	network, err := c.networkMgr.LookupNetwork(DefaultServiceProjectName, DefaultPodNetworkName)
+	network, err := c.networkMgr.LookupNetwork(DefaultServiceProjectName, ClusterNetworkName)
 	if err != nil {
 		glog.Errorf("Cannot get cluster-network")
 	}
@@ -310,6 +310,7 @@ func (c *Controller) updatePod(pod *api.Pod) {
 	}
 	c.updateInstanceMetadata(pod, nic, address.GetInstanceIpAddress(), gateway)
 
+	//TODO Policies not needed for now
 	/*
 	c.serviceMgr.ConnectNetworks(podNetwork, c.networkMgr.GetClusterNetwork())
 
