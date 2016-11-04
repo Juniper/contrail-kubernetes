@@ -35,10 +35,12 @@ const (
 	servicePolicyPrefix = "__svc_"
 	networkPolicyPrefix = "__net_"
 
-	DefaultPodNetworkName     = "default"
-	DefaultServiceNetworkName = "cluster-network"
-	DefaultPodProjectName     = "default"
+	DefaultPodNetworkName     = "cluster-network"
+	DefaultServiceDomainName = "default-domain"
 	DefaultServiceProjectName = "default"
+	ClusterNetworkName = "cluster-network"
+	ClusterServiceNetworkName = DefaultServiceDomainName + ":" + DefaultServiceProjectName +
+		":" + ClusterNetworkName
 )
 
 // InstanceMetadata contains the information required in the kubernetes minion to
@@ -78,18 +80,18 @@ func NewController(kube *kubeclient.Client, args []string) network.NetworkContro
 
 func (c *Controller) initComponents(client contrail.ApiClient) {
 	c.client = client
+	c.namespaceMgr = NewNamespaceManager(client, c.config, c.kube)
 	c.allocator = NewAddressAllocator(client, c.config)
 	c.instanceMgr = NewInstanceManager(client, c.config, c.allocator)
 	c.networkMgr = NewNetworkManager(client, c.config)
-	c.serviceMgr = NewServiceManager(client, c.config, c.networkMgr)
-	c.namespaceMgr = NewNamespaceManager(client, c.config)
+	c.serviceMgr = NewServiceManager(client, c.config, c.networkMgr, c.kube)
 
 	virtualRouterMgr, err := NewVirtualRouterManager(client, c.config)
 	if err != nil {
 		glog.Errorf("NewVirtualRouterManager failed: %v", err)
 		return
 	}
-        c.virtualRouterMgr = virtualRouterMgr
+	c.virtualRouterMgr = virtualRouterMgr
 }
 
 func (c *Controller) Init(global *network.Config, reader io.Reader) error {

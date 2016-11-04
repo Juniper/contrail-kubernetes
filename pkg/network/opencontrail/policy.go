@@ -25,6 +25,23 @@ import (
 	"github.com/Juniper/contrail-go-api/types"
 )
 
+func locatePolicy(client contrail.ApiClient, policyName[] string) (*types.NetworkPolicy, error) {
+	var policy *types.NetworkPolicy = nil
+	obj, err := client.FindByName("network-policy", strings.Join(policyName, ":"))
+	if err != nil {
+		policy = new(types.NetworkPolicy)
+		policy.SetFQName("project", policyName)
+		err = client.Create(policy)
+		if err != nil {
+			glog.Errorf("Create policy %s: %v", strings.Join(policyName, ":"), err)
+			return nil, err
+		}
+	} else {
+		policy = obj.(*types.NetworkPolicy)
+	}
+	return policy, nil
+}
+
 func policyLocateRule(client contrail.ApiClient, policy *types.NetworkPolicy, lhs, rhs *types.VirtualNetwork) error {
 	return policyLocateRuleByFQN(client, policy, lhs.GetFQName(), rhs.GetFQName())
 }
