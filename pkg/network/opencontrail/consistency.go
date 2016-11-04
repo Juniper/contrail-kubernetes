@@ -146,7 +146,7 @@ func (c *consistencyChecker) vmiCompare(pod *api.Pod, interfaceId string) bool {
 	services, err := c.serviceStore.GetPodServices(pod)
 	if err == nil {
 		for _, service := range services {
-			serviceName := ServiceName(c.config, service.Labels)
+			serviceName := c.serviceMgr.GetServiceName(&service)
 			serviceNet := fmt.Sprintf(ServiceNetworkFmt, serviceName)
 			fqn := []string{c.config.DefaultDomain, service.Namespace, serviceNet, serviceNet, service.Name}
 			if service.Spec.ClusterIP != "" {
@@ -304,7 +304,8 @@ func (c *consistencyChecker) addServiceNetworks(kubeNetworks *sort.StringSlice) 
 		return
 	}
 	for _, svc := range serviceList.Items {
-		fqn := []string{c.config.DefaultDomain, svc.Namespace, fmt.Sprintf(ServiceNetworkFmt, ServiceName(c.config, svc.Labels))}
+		fqn := []string{c.config.DefaultDomain, svc.Namespace, fmt.Sprintf(ServiceNetworkFmt,
+			c.serviceMgr.GetServiceName(&svc))}
 		networkName := strings.Join(fqn, ":")
 		if _, ok := serviceNetworkMap[networkName]; !ok {
 			serviceNetworkMap[networkName] = true

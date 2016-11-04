@@ -43,7 +43,7 @@ type Config struct {
 	ApiPort    int    `gcfg:"api-port"`
 
 	// Project used for objects that are not namespace specific
-	DefaultProject string `gcfg:"default-project"`
+	DefaultProject string `gcfg:"default"`
 	// Network identifier for the external network
 	PublicNetwork string `gcfg:"public-network"`
 	// IP address range configured on the external network
@@ -77,14 +77,13 @@ func NewConfig() *Config {
 		DefaultDomain:        "default-domain",
 		ApiAddress:           "localhost",
 		ApiPort:              8082,
-		DefaultProject:       "default-domain:default-project",
-		PublicNetwork:        "default-domain:default-project:Public",
+		DefaultProject:       "default-domain:default",
+		PublicNetwork:        "default-domain:default:Public",
 		PrivateSubnet:        "10.0.0.0/16",
 		ServiceSubnet:        DefaultServiceSubnet,
 		NetworkTag:           "opencontrail.org/name",
 		NetworkAccessTag:     "opencontrail.org/services",
 		GlobalConnectInclude: ".*",
-		NamespaceServices:    []string{DefaultServiceNetworkName},
 	}
 	return config
 }

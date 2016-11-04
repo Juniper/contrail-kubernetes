@@ -81,10 +81,9 @@ func (m *InstanceManager) LookupInterface(tenant, podName string) *types.Virtual
 	return obj.(*types.VirtualMachineInterface)
 }
 
-func (m *InstanceManager) LocateInterface(
+func (m *InstanceManager) LocateInterface(project string,
 	network *types.VirtualNetwork, instance *types.VirtualMachine) *types.VirtualMachineInterface {
-	tenant := network.GetFQName()[len(network.GetFQName())-2]
-	fqn := interfaceFQName(m.config.DefaultDomain, tenant, instance.GetName())
+	fqn := interfaceFQName(m.config.DefaultDomain, project, instance.GetName())
 
 	obj, err := m.client.FindByName(
 		"virtual-machine-interface", strings.Join(fqn, ":"))
@@ -114,8 +113,8 @@ func (m *InstanceManager) LocateInterface(
 	return obj.(*types.VirtualMachineInterface)
 }
 
-func (m *InstanceManager) ReleaseInterface(tenant, podName string) {
-	fqn := interfaceFQName(m.config.DefaultDomain, tenant, podName)
+func (m *InstanceManager) ReleaseInterface(project, podName string) {
+	fqn := interfaceFQName(m.config.DefaultDomain, project, podName)
 	obj, err := m.client.FindByName("virtual-machine-interface", strings.Join(fqn, ":"))
 	if err != nil {
 		glog.Errorf("Get vmi %s: %v", strings.Join(fqn, ":"), err)
@@ -151,8 +150,8 @@ func makeInstanceIpName(tenant, nicName string) string {
 
 func (m *InstanceManager) LocateInstanceIp(
 	network *types.VirtualNetwork, instanceUID string, nic *types.VirtualMachineInterface) *types.InstanceIp {
-	tenant := nic.GetFQName()[len(nic.GetFQName())-2]
-	name := makeInstanceIpName(tenant, nic.GetName())
+	vmiFqname := nic.GetFQName()[len(nic.GetFQName())-2]
+	name := makeInstanceIpName(vmiFqname, nic.GetName())
 	obj, err := m.client.FindByName("instance-ip", name)
 	if err == nil {
 		// TODO(prm): ensure that attributes are as expected
@@ -206,7 +205,8 @@ func (m *InstanceManager) AttachFloatingIp(
 	obj, err := m.client.FindByName(
 		"virtual-machine-interface", strings.Join(fqn, ":"))
 	if err != nil {
-		glog.Errorf("GET vmi %s: %v", podName, err)
+		// this is not an error, the pod may have not been created
+		// the floating IP will be created when pod create notif is received
 		return
 	}
 

@@ -33,12 +33,13 @@ type NetworkManager interface {
 	LookupFloatingIpPool(network *types.VirtualNetwork) (*types.FloatingIpPool, error)
 	DeleteFloatingIpPool(network *types.VirtualNetwork, cascade bool) error
 	LookupNetwork(projectName, networkName string) (*types.VirtualNetwork, error)
-	LocateNetwork(project, name, subnet string) (*types.VirtualNetwork, error)
+	LocateNetwork(fqname, subnet string) (*types.VirtualNetwork, error)
 	DeleteNetwork(*types.VirtualNetwork) error
-	ReleaseNetworkIfEmpty(namespace, name string) (bool, error)
+	ReleaseNetworkIfEmpty(network *types.VirtualNetwork) (bool, error)
 	LocateFloatingIp(network *types.VirtualNetwork, resourceName, address string) (*types.FloatingIp, error)
 	DeleteFloatingIp(network *types.VirtualNetwork, resourceName string) error
 	GetPublicNetwork() *types.VirtualNetwork
+	GetClusterNetwork() *types.VirtualNetwork
 	GetGatewayAddress(network *types.VirtualNetwork) (string, error)
 	Connect(network *types.VirtualNetwork, targetCSN string) error
 	Disconnect(networkFQN []string, targetCSN string) error
@@ -49,20 +50,29 @@ type NetworkManagerImpl struct {
 	client        contrail.ApiClient
 	config        *Config
 	publicNetwork *types.VirtualNetwork
+	clusterNetwork *types.VirtualNetwork
 }
 
 func NewNetworkManager(client contrail.ApiClient, config *Config) NetworkManager {
 	manager := new(NetworkManagerImpl)
 	manager.client = client
 	manager.config = config
+
 	if config.PublicSubnet != "" {
 		manager.initializePublicNetwork()
 	}
+
+	manager.initializeClusterNetwork()
+
 	return manager
 }
 
 func (m *NetworkManagerImpl) GetPublicNetwork() *types.VirtualNetwork {
 	return m.publicNetwork
+}
+
+func (m *NetworkManagerImpl) GetClusterNetwork() *types.VirtualNetwork {
+	return m.clusterNetwork
 }
 
 func makePoolName(network *types.VirtualNetwork) string {
@@ -183,25 +193,26 @@ func (m *NetworkManagerImpl) updateSubnetConfig(network *types.VirtualNetwork, p
 	return nil
 }
 
-func (m *NetworkManagerImpl) initializePublicNetwork() {
+func (m *NetworkManagerImpl) initializeNetwork(netFqn, subnet string) (*types.VirtualNetwork) {
 	var network *types.VirtualNetwork
-	obj, err := m.client.FindByName("virtual-network", m.config.PublicNetwork)
+	obj, err := m.client.FindByName("virtual-network", netFqn)
 	if err != nil {
-		fqn := strings.Split(m.config.PublicNetwork, ":")
-		parent := strings.Join(fqn[0:len(fqn)-1], ":")
-		projectId, err := m.client.UuidByName("project", parent)
+		fqn := strings.Split(netFqn, ":")
+		project := strings.Join(fqn[0:len(fqn)-1], ":")
+		name := fqn[len(fqn)-1]
+
+		projectId, err := m.client.UuidByName("project", project)
 		if err != nil {
-			glog.Fatalf("%s: %v", parent, err)
+			glog.Fatalf("%s: %v", project, err)
 		}
 		var networkID string
-		networkName := fqn[len(fqn)-1]
 		networkID, err = config.CreateNetworkWithSubnet(
-			m.client, projectId, networkName, m.config.PublicSubnet)
+			m.client, projectId, name, subnet)
 		if err != nil {
-			glog.Fatalf("%s: %v", parent, err)
+			glog.Fatalf("%s: %v", project, err)
 		}
 
-		glog.Infof("Created network %s", m.config.PublicNetwork)
+		glog.Infof("Created network %s",name)
 
 		obj, err := m.client.FindByUuid("virtual-network", networkID)
 		if err != nil {
@@ -210,12 +221,83 @@ func (m *NetworkManagerImpl) initializePublicNetwork() {
 		network = obj.(*types.VirtualNetwork)
 	} else {
 		network = obj.(*types.VirtualNetwork)
-		m.updateSubnetConfig(network, m.config.PublicSubnet)
+		m.updateSubnetConfig(network, subnet)
 	}
 
-	m.publicNetwork = network
-
 	m.LocateFloatingIpPool(network)
+
+	return network
+}
+
+
+func (m *NetworkManagerImpl) initializePublicNetwork() {
+	/*fqn := strings.Split(m.config.PublicNetwork, ":")
+	parent := strings.Join(fqn[0:len(fqn)-1], ":")
+	networkName := fqn[len(fqn)-1]*/
+
+	var network, err = m.LocateNetwork(m.config.PublicNetwork, m.config.PublicSubnet)
+	if err != nil {
+		glog.Errorf("Cannot initialize Public Network: %s", err)
+		return
+	}
+	m.publicNetwork = network
+	m.LocateFloatingIpPool(m.publicNetwork)
+}
+
+func (m *NetworkManagerImpl) initializeClusterNetwork() {
+	obj, err := m.client.FindByName("virtual-network", ClusterServiceNetworkName)
+	if err != nil {
+		fqn := strings.Split(ClusterServiceNetworkName, ":")
+		project := strings.Join(fqn[0:len(fqn) - 1], ":")
+		name := fqn[len(fqn) - 1]
+
+		proj, err := m.client.FindByName("project", project)
+		if err != nil {
+			glog.Infof("GET %s: %v", project, err)
+			return
+		}
+
+		var ipams[] *types.NetworkIpam = make([]*types.NetworkIpam, 2)
+
+		ipams[0] = new(types.NetworkIpam)
+		ipams[0].SetParent(proj.(*types.Project))
+		ipams[0].SetName(fmt.Sprintf("%s-svc-ipam", name))
+		err = m.client.Create(ipams[0])
+
+		if err != nil {
+			glog.Errorf("Create svc ipam for network %s:%s failed: %v", project, name, err)
+			return
+		}
+
+		ipams[1] = new(types.NetworkIpam)
+		ipams[1].SetParent(proj.(*types.Project))
+		ipams[1].SetName(fmt.Sprintf("%s-pod-ipam", name))
+		err = m.client.Create(ipams[1])
+
+		if err != nil {
+			glog.Errorf("Create pod ipam for network %s:%s failed: %v", project, name, err)
+			return
+		}
+
+		var subnets[] string = make([]string, 2)
+		subnets[0] = m.config.ServiceSubnet
+		subnets[1] = m.config.PrivateSubnet
+		uid, err := config.CreateNetworkWithIpam(m.client, proj.(*types.Project), name, subnets, ipams)
+		if err != nil {
+			glog.Errorf("Create %s: %v", name, err)
+			return
+		}
+
+		obj, err = m.client.FindByUuid("virtual-network", uid)
+		if err != nil {
+			glog.Errorf("GET %s: %v", name, err)
+			return
+		}
+		glog.Infof("Create network %s", ClusterServiceNetworkName)
+	}
+
+	m.clusterNetwork = obj.(*types.VirtualNetwork)
+	m.LocateFloatingIpPool(m.clusterNetwork)
 }
 
 func (m *NetworkManagerImpl) LookupNetwork(projectName, networkName string) (*types.VirtualNetwork, error) {
@@ -231,32 +313,39 @@ func (m *NetworkManagerImpl) LookupNetwork(projectName, networkName string) (*ty
 // LocateNetwork creates a private network.
 //
 // It is used to create pod and service networks.
-func (m *NetworkManagerImpl) LocateNetwork(project, name, subnet string) (*types.VirtualNetwork, error) {
-	fqn := []string{m.config.DefaultDomain, project, name}
-	fqname := strings.Join(fqn, ":")
+func (m *NetworkManagerImpl) LocateNetwork(fqname, subnet string) (*types.VirtualNetwork, error) {
 
 	obj, err := m.client.FindByName("virtual-network", fqname)
 	if err == nil {
 		return obj.(*types.VirtualNetwork), nil
 	}
 
-	proj, err := m.client.FindByName("project", fmt.Sprintf("%s:%s", m.config.DefaultDomain, project))
+	fqn := strings.Split(fqname, ":")
+	project := strings.Join(fqn[0:len(fqn)-1], ":")
+	name := fqn[len(fqn)-1]
+
+	proj, err := m.client.FindByName("project", project)
 	if err != nil {
 		glog.Infof("GET %s: %v", project, err)
 		return nil, err
 	}
 
-	var ipam = new(types.NetworkIpam)
-	ipam.SetParent(proj.(*types.Project))
-	ipam.SetName(fmt.Sprintf("%s-ipam", name))
-	err = m.client.Create(ipam)
+	var ipams[] *types.NetworkIpam = make([]*types.NetworkIpam, 1)
+
+	ipams[0] = new(types.NetworkIpam)
+	ipams[0].SetParent(proj.(*types.Project))
+	ipams[0].SetName(fmt.Sprintf("%s-ipam", name))
+	err = m.client.Create(ipams[0])
 
 	if err != nil {
 		glog.Errorf("Create ipam for network %s:%s failed: %v", project, name, err)
 		return nil, err
 	}
 
-	uid, err := config.CreateNetworkWithIpam(m.client, proj.(*types.Project), name, subnet, ipam)
+	var subnets[] string = make([]string, 1)
+	subnets[0] = subnet
+
+	uid, err := config.CreateNetworkWithIpam(m.client, proj.(*types.Project), name, subnets, ipams)
 	if err != nil {
 		glog.Infof("Create %s: %v", name, err)
 		return nil, err
@@ -271,26 +360,23 @@ func (m *NetworkManagerImpl) LocateNetwork(project, name, subnet string) (*types
 	return obj.(*types.VirtualNetwork), nil
 }
 
-func (m *NetworkManagerImpl) ReleaseNetworkIfEmpty(namespace, name string) (bool, error) {
-	fqn := []string{m.config.DefaultDomain, namespace, name}
-	obj, err := m.client.FindByName("virtual-network", strings.Join(fqn, ":"))
-	if err != nil {
-		glog.Errorf("Get virtual-network %s: %v", name, err)
-		return false, err
+func (m *NetworkManagerImpl) ReleaseNetworkIfEmpty(network *types.VirtualNetwork) (bool, error) {
+	if network == m.clusterNetwork || network == m.publicNetwork {
+		return false, nil
 	}
-	network := obj.(*types.VirtualNetwork)
+
 	refs, err := network.GetVirtualMachineInterfaceBackRefs()
 	if err != nil {
-		glog.Errorf("Get network vmi references %s: %v", name, err)
+		glog.Errorf("Get network vmi references %s: %v", network.GetName(), err)
 		return false, err
 	}
 	if len(refs) == 0 {
 		err = m.client.Delete(network)
 		if err != nil {
-			glog.Errorf("Delete virtual-network %s: %v", name, err)
+			glog.Errorf("Delete virtual-network %s: %v", network.GetName(), err)
 			return false, err
 		}
-		glog.V(3).Infof("Delete network %s", name)
+		glog.V(3).Infof("Delete network %s", network.GetName())
 		return true, nil
 	}
 	return false, nil

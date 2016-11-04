@@ -2258,7 +2258,7 @@ func TestNamespaceServicesDefault(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	policyName := makeServicePolicyName(config, "testns", DefaultServiceNetworkName)
+	policyName := makeServicePolicyName(config, "testns", ClusterNetworkName)
 	policy, err := types.NetworkPolicyByName(client, strings.Join(policyName, ":"))
 	require.NoError(t, err)
 
